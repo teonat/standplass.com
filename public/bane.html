@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baneskyting – Standplass</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/themes.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="site-logo">STANDPLASS</a>
+      <nav aria-label="Hovedmeny">
+        <div class="nav-dropdown">
+          <button type="button" class="nav-dropdown-btn" aria-expanded="false" aria-controls="nav-resultater-menu">Resultater ▾</button>
+          <div class="nav-dropdown-menu" id="nav-resultater-menu" hidden>
+            <a href="/felt">Feltskyting</a>
+            <a href="/bane">Baneskyting</a>
+          </div>
+        </div>
+      </nav>
+      <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
+    </div>
+  </header>
+  <main id="bane-root">
+    <h1>Baneskyting</h1>
+    <div class="ranking-filters" id="bane-filters">
+      <div class="filter-group">
+        <label for="bane-year">År</label>
+        <select id="bane-year"></select>
+      </div>
+      <div class="filter-group">
+        <label>Klubb</label>
+        <ul class="tag-list" id="bane-club-tags" aria-label="Valgte klubber" aria-live="polite"></ul>
+        <div class="autocomplete-wrap" id="bane-club-wrap">
+          <input type="text" id="bane-club-input" class="filter-input" autocomplete="off"
+                 aria-autocomplete="list" aria-controls="bane-club-list" aria-expanded="false"
+                 placeholder="Søk klubb…">
+          <button type="button" class="combo-clear" id="bane-club-clear" aria-label="Fjern alle klubber">×</button>
+          <ul class="autocomplete-list" id="bane-club-list" role="listbox" aria-label="Klubber" hidden></ul>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>Øvelse</label>
+        <div class="checkbox-dropdown">
+          <button type="button" id="bane-disc-btn" class="checkbox-dropdown-btn" aria-expanded="false" aria-controls="bane-disc-panel">Alle øvelser</button>
+          <div class="checkbox-dropdown-panel" id="bane-disc-panel" hidden role="group">
+            <button type="button" id="bane-disc-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>
+            <ul id="bane-disc-list" class="checkbox-dropdown-list" aria-label="Velg øvelser"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label for="bane-name">Skytter</label>
+        <div class="autocomplete-wrap" id="bane-name-wrap">
+          <input type="text" id="bane-name" class="filter-input" autocomplete="off"
+                 aria-autocomplete="list" aria-controls="bane-name-list" aria-expanded="false"
+                 placeholder="Søk navn…">
+          <button type="button" class="combo-clear" id="bane-name-clear" aria-label="Fjern navnefilter">×</button>
+          <ul class="autocomplete-list" id="bane-name-list" role="listbox" aria-label="Navn" hidden></ul>
+        </div>
+      </div>
+    </div>
+    <div class="program-toggle" id="bane-tab-toggle" role="group" aria-label="Velg visning">
+      <button type="button" class="program-btn program-btn--active" data-tab="alle" aria-pressed="true">Alle</button>
+      <button type="button" class="program-btn" data-tab="klasse" aria-pressed="false"
+              title="Stevner der resultater teller for klasseopprykk og -nedrykk">Klasseførende</button>
+      <button type="button" class="program-btn" data-tab="ikke" aria-pressed="false">Ikke klasseførende</button>
+    </div>
+    <div class="program-toggle" id="bane-group-toggle" role="group" aria-label="Gruppering">
+      <button type="button" class="program-btn program-btn--active" data-group="klasse" aria-pressed="true">Per klasse</button>
+      <button type="button" class="program-btn" data-group="ovelse" aria-pressed="false">Per øvelse</button>
+      <button type="button" class="program-btn" data-group="poeng" aria-pressed="false">Poengsum</button>
+    </div>
+    <table class="ranking-table">
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Navn</th>
+          <th scope="col">Klubb</th>
+          <th scope="col">Øvelse</th>
+          <th scope="col">Klasse</th>
+          <th scope="col">Poeng</th>
+          <th scope="col">Ranking</th>
+        </tr>
+      </thead>
+      <tbody id="bane-rows"></tbody>
+    </table>
+    <button id="bane-load-more" type="button">Last flere</button>
+    <!-- role/aria-labelledby replace what native <dialog> gave the source
+         (nsf-ui.js:1125). No aria-modal: there is no focus trap, so claiming
+         one would lie to screen readers. -->
+    <div id="bane-person-modal" role="dialog" aria-labelledby="bane-person-modal-title" hidden></div>
+    <div id="bane-embed-builder"></div>
+  </main>
+  <script>
+  (function () {
+      'use strict';
+      if (window.self === window.top) { return; }
+
+      document.body.classList.add('standplass-embed-mode');
+
+      function postHeight() {
+          window.parent.postMessage({
+              source: 'standplass-embed',
+              type: 'resize',
+              height: document.documentElement.scrollHeight
+          }, '*');
+      }
+
+      window.addEventListener('message', function (event) {
+          if (!event.data || event.data.source !== 'standplass-embed') { return; }
+          if (event.data.type === 'set-mode' && event.data.mode) {
+              document.documentElement.setAttribute('data-mode', event.data.mode);
+          }
+      });
+
+      window.parent.postMessage({ source: 'standplass-embed', type: 'ready' }, '*');
+      postHeight();
+      new ResizeObserver(postHeight).observe(document.body);
+  })();
+  </script>
+  <script src="/js/site-chrome.js"></script>
+  <script src="/js/format.js"></script>
+  <script src="/js/data-fetch-cache.js"></script>
+  <script src="/js/table-renderer.js"></script>
+  <script src="/js/pagination.js"></script>
+  <script src="/js/person-modal.js"></script>
+  <script src="/js/filter-widgets.js"></script>
+  <script src="/js/embed-builder.js"></script>
+  <script src="/js/stevner-page.js"></script>
+  <script>StandplassStevnerPage.init({ view: 'bane', dataBase: '/data/bane', idPrefix: 'bane' });</script>
+</body>
+</html>

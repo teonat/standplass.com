@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standplass</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/themes.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="site-logo">STANDPLASS</a>
+      <nav aria-label="Hovedmeny">
+        <div class="nav-dropdown">
+          <button type="button" class="nav-dropdown-btn" aria-expanded="false" aria-controls="nav-resultater-menu">Resultater ▾</button>
+          <div class="nav-dropdown-menu" id="nav-resultater-menu" hidden>
+            <a href="/felt">Feltskyting</a>
+            <a href="/bane">Baneskyting</a>
+          </div>
+        </div>
+      </nav>
+      <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <h1>Resultatene,<br>der de trengs.</h1>
+          <p>Åpne konkurranseresultater for norske skytterklubber — feltskyting og baneskyting, oppdatert daglig fra skyting.no.</p>
+          <div class="hero-cta">
+            <a href="/felt" class="btn btn-primary">Se feltresultater</a>
+            <a href="/bane" class="btn">Se baneresultater</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/js/site-chrome.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+/* public/themes.css */
+
+/* ── Mode axis: dark ─────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) { /* JS-free fallback, mirrors source's own pattern */
+  :root:not([data-mode="light"]) {
+    --surface-page:  #17151a;
+    --surface-card:  #211f24;
+    --surface-dark:  #2a272c;
+    --text:          #ece7dc;
+    --text-muted:    #a39d8c;
+    --border-faint:  rgba(255, 255, 255, 0.06);
+    --border:        rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --surface-base:  rgba(255, 255, 255, 0.03);
+    --surface-hover: rgba(255, 255, 255, 0.05);
+  }
+}
+
+[data-mode="dark"] { /* explicit user/consumer choice */
+  --surface-page:  #17151a;
+  --surface-card:  #211f24;
+  --surface-dark:  #2a272c;
+  --text:          #ece7dc;
+  --text-muted:    #a39d8c;
+  --border-faint:  rgba(255, 255, 255, 0.06);
+  --border:        rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --surface-base:  rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Brand axis: kss ─────────────────────────────────────────────── */
+/* Never overridden by mode — an embedded view using this preset in dark
+   mode still shows navy/gold, exactly like a club site's own light/dark
+   toggle never changes its brand colors. */
+[data-club="kss"] {
+  --brand-primary:       #1a1a2e;
+  --brand-primary-light: #16213e;
+  --brand-accent:        #e8b923;
+  --brand-accent-dark:   #c9a01e;
+  --brand-accent-hover:         rgba(232,185,35,0.07);
+  --brand-accent-tint:          rgba(232,185,35,0.10);
+  --brand-accent-bg-subtle:     rgba(232,185,35,0.15);
+  --brand-accent-badge:         rgba(232,185,35,0.25);
+  --brand-accent-border:        rgba(232,185,35,0.23);
+  --brand-accent-border-accent: rgba(232,185,35,0.29);
+  --brand-accent-glow:          rgba(232,185,35,0.38);
+  --brand-accent-border-active: rgba(232,185,35,0.45);
+  --brand-accent-border-cta:    rgba(232,185,35,0.50);
+  --font-family: 'Inter', system-ui, sans-serif;
+}
