@@ -1,5 +1,5 @@
 /* public/styles.css */
-:root {
+:root, :host {
   /* Brand axis — standplass's own identity. A [data-club="..."] override
      (themes.css) replaces this whole group; it never changes with mode. */
   --brand-primary:       #1b1d22;

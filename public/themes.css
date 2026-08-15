@@ -2,7 +2,7 @@
 
 /* ── Mode axis: dark ─────────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) { /* JS-free fallback, mirrors source's own pattern */
-  :root:not([data-mode="light"]) {
+  :root:not([data-mode="light"]), :host:not([data-mode="light"]) {
     --surface-page:  #17151a;
     --surface-card:  #211f24;
     --surface-dark:  #2a272c;

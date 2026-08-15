@@ -123,10 +123,16 @@ var StandplassEmbed = (function () {
     var dependenciesPromise = null;
     function ensureDependencies() {
         if (!dependenciesPromise) {
+            // Root-relative on standplass.com itself (prod or a local mirror
+            // served under that hostname) so a dev server / preview
+            // deployment loads its own local JS instead of silently pulling
+            // production scripts; absolute for every other hostname, since
+            // that's a real 3rd-party embed with no local copy of these files.
+            var prefix = location.hostname === 'standplass.com' ? '' : 'https://standplass.com';
             dependenciesPromise = Promise.all(DEPENDENCY_PATHS.map(function (path) {
                 return new Promise(function (resolve, reject) {
                     var script = document.createElement('script');
-                    script.src = 'https://standplass.com' + path;
+                    script.src = prefix + path;
                     script.onload = resolve;
                     script.onerror = reject;
                     document.head.appendChild(script);
@@ -182,6 +188,11 @@ var StandplassEmbed = (function () {
                 document.getElementById(idPrefix + '-embed-snippet').textContent =
                     StandplassEmbedBuilder.buildSnippet(view, window.location.search);
             });
+        }).catch(function () {
+            // A blocked/failed dependency script (adblocker, CDN blip,
+            // corporate proxy) would otherwise leave the container in its
+            // pre-init state forever with no clue why -- surface it instead.
+            container.innerHTML = '<p>' + esc('Kunne ikke laste nødvendige ressurser.') + '</p>';
         });
     }
 
@@ -308,6 +319,13 @@ var StandplassEmbed = (function () {
                         urlState: urlState,
                         fetcher: getSharedFetcher()
                     });
+                }).catch(function () {
+                    // Same reasoning as mountDirect's .catch: without this,
+                    // a blocked/failed dependency script leaves the wrapper
+                    // permanently `visibility: hidden` with only a silent
+                    // unhandled rejection in the host's console.
+                    wrapper.style.visibility = '';
+                    wrapper.innerHTML = '<p>' + esc('Kunne ikke laste nødvendige ressurser.') + '</p>';
                 });
             }
         }
