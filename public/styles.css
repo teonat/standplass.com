@@ -48,17 +48,18 @@ body {
   font-family: var(--font-family);
 }
 
-h1, h2, h3 {
-  font-family: var(--font-display);
+/* A shadow root has no <body>, so the rule above never reaches an embed —
+   the host element carries the same page-level surface/text/font. Matches
+   nothing outside a shadow tree, so felt.html/bane.html are unaffected. */
+:host {
+  display: block;
+  background: var(--surface-page);
+  color: var(--text);
+  font-family: var(--font-family);
 }
 
-/* Embedded in a consumer page: drop standplass's own title, nav, and the
-   "opprett iframe" builder — the consumer wants the table, nothing else. */
-.standplass-embed-mode h1,
-.standplass-embed-mode .site-header,
-.standplass-embed-mode #felt-embed-builder,
-.standplass-embed-mode #bane-embed-builder {
-  display: none;
+h1, h2, h3 {
+  font-family: var(--font-display);
 }
 
 /* ── Shared site header: logo, Resultater dropdown nav, mode toggle ── */

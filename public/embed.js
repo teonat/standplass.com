@@ -210,12 +210,16 @@ var StandplassEmbed = (function () {
     // here, not a rare fallback for an optimization this project doesn't
     // need yet (there are no current embedders to share CSSOM-parse cost
     // across).
-    function attachStyles(shadowRoot) {
+    // `absolute` works exactly like ensureDependencies()'s parameter above and
+    // for the same reason -- the two must agree about where this page's assets
+    // live, so neither sniffs it.
+    function attachStyles(shadowRoot, absolute) {
+        var prefix = absolute ? 'https://standplass.com' : '';
         return Promise.all(['/styles.css', '/themes.css'].map(function (path) {
             return new Promise(function (resolve) {
                 var link = document.createElement('link');
                 link.rel = 'stylesheet';
-                link.href = 'https://standplass.com' + path;
+                link.href = prefix + path;
                 // Resolve even on error -- a missing/broken stylesheet
                 // shouldn't block the widget from ever rendering, just
                 // leave it unstyled.
@@ -294,7 +298,7 @@ var StandplassEmbed = (function () {
                 wrapper.style.visibility = 'hidden';
                 shadowRoot.appendChild(wrapper);
 
-                Promise.all([attachStyles(shadowRoot), ensureDependencies(true)]).then(function () {
+                Promise.all([attachStyles(shadowRoot, true), ensureDependencies(true)]).then(function () {
                     wrapper.style.visibility = '';
 
                     var mode = StandplassModeResolve.resolveMode({
@@ -302,6 +306,11 @@ var StandplassEmbed = (function () {
                         prefersDark: window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : null
                     });
                     wrapper.setAttribute('data-mode', mode);
+                    // Also on the host: themes.css's dark media query selects
+                    // :host:not([data-mode="light"]), which only ever sees the
+                    // host element -- without this, mode="light" is silently
+                    // ignored whenever the visitor's OS prefers dark.
+                    el.setAttribute('data-mode', mode);
 
                     var urlState = StandplassUrlState.createController({ namespace: idPrefix, syncUrl: syncUrl });
                     var klubbAttr = el.getAttribute('klubb');

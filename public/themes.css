@@ -2,7 +2,10 @@
 
 /* ── Mode axis: dark ─────────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) { /* JS-free fallback, mirrors source's own pattern */
-  :root:not([data-mode="light"]), :host:not([data-mode="light"]) {
+  /* :host(:not(...)), not :host:not(...): a shadow host is "featureless" and
+     matches nothing but the :host() family, so the compound form never
+     matches anything. */
+  :root:not([data-mode="light"]), :host(:not([data-mode="light"])) {
     --surface-page:  #17151a;
     --surface-card:  #211f24;
     --surface-dark:  #2a272c;
@@ -16,7 +19,10 @@
   }
 }
 
-[data-mode="dark"] { /* explicit user/consumer choice */
+/* :host() as well as the plain attribute selector: inside a shadow root a
+   normal selector can never match the host element, and the host is where
+   the embed's own background/text come from (styles.css's :host rule). */
+[data-mode="dark"], :host([data-mode="dark"]) { /* explicit user/consumer choice */
   --surface-page:  #17151a;
   --surface-card:  #211f24;
   --surface-dark:  #2a272c;
