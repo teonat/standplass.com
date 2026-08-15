@@ -28,15 +28,14 @@
     // An attribute already on <html> can only come from an embed host's
     // set-mode message (felt.html/bane.html's inline handler), which is a
     // fresher choice than anything below it — don't clobber it.
-    var mode = document.documentElement.getAttribute('data-mode');
-    if (!mode) { mode = new URLSearchParams(window.location.search).get('mode'); }
-    if (!mode) {
-        try { mode = localStorage.getItem('standplass_mode'); } catch (e) { mode = null; }
-    }
-    if (!mode) {
-        mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
-            ? 'dark' : 'light';
-    }
+    var storedMode;
+    try { storedMode = localStorage.getItem('standplass_mode'); } catch (e) { storedMode = null; }
+    var mode = StandplassModeResolve.resolveMode({
+        attrMode: document.documentElement.getAttribute('data-mode'),
+        explicitMode: new URLSearchParams(window.location.search).get('mode'),
+        stored: storedMode,
+        prefersDark: window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : null
+    });
     document.documentElement.setAttribute('data-mode', mode);
 
     var modeBtn = document.getElementById('site-mode-toggle');

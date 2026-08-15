@@ -76,6 +76,8 @@ global.window = {
     }
 };
 
+global.StandplassModeResolve = require('../public/js/mode-resolve.js');
+
 var src = fs.readFileSync(path.join(__dirname, '../public/js/site-chrome.js'), 'utf8');
 new Function(src)();
 
