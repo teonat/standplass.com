@@ -25,9 +25,10 @@
     // themes.css's prefers-color-scheme fallback would otherwise paint the
     // page dark with no attribute set, and the toggle's own read of
     // data-mode would then think it was light and waste the first click.
-    // An attribute already on <html> can only come from an embed host's
-    // set-mode message (felt.html/bane.html's inline handler), which is a
-    // fresher choice than anything below it — don't clobber it.
+    // An already-set attribute is a defensive re-entry guard -- nothing
+    // currently sets data-mode before this runs, since this phase deletes
+    // the old postMessage set-mode handshake, but re-resolving should never
+    // clobber a value something set on purpose.
     var storedMode;
     try { storedMode = localStorage.getItem('standplass_mode'); } catch (e) { storedMode = null; }
     var mode = StandplassModeResolve.resolveMode({
