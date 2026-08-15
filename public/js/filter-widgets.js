@@ -287,7 +287,12 @@ var StandplassFilterWidgets = (function () {
         });
 
         var wrapper = cfg.btn.parentElement;
-        document.addEventListener('click', function (e) {
+        // getRootNode(), not document: click is composed, so a document-level
+        // listener sees e.target retargeted to the shadow host and
+        // wrapper.contains() is then always false -- closing the panel on
+        // every click, including the one that opened it. Inside a shadow tree
+        // events aren't retargeted, and outside one this is document.
+        cfg.btn.getRootNode().addEventListener('click', function (e) {
             if (!wrapper.contains(e.target)) {
                 closePanel();
             }
