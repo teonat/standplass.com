@@ -111,12 +111,6 @@ assert.strictEqual(documentEl.getAttribute('data-mode'), 'light');
 assert.strictEqual(modeBtn.getAttribute('aria-pressed'), 'false');
 assert.strictEqual(localStorage.getItem('standplass_mode'), 'light');
 
-// Defensively pushes mode to an embed on the same page, if present.
-var setModeCalls = [];
-window.StandplassEmbed = { setMode: function (m) { setModeCalls.push(m); } };
-modeBtn.fire('click', {});
-assert.deepStrictEqual(setModeCalls, ['dark']);
-
 // ── Mode resolution (?mode= → localStorage → OS preference) ──────────────
 // Re-run the IIFE against a fresh documentElement/button per scenario. The
 // key regression guarded here: with the OS in dark mode and no stored choice,

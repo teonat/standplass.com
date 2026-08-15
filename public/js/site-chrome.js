@@ -19,8 +19,8 @@
     }
 
     // Mode resolution runs on every page, before the toggle is wired: an
-    // explicit ?mode= wins (the embed contract — see embed.js setMode()),
-    // then this browser's stored choice, then the OS preference. The result
+    // explicit ?mode= wins, then this browser's stored choice, then the
+    // OS preference. The result
     // is *always* written to data-mode, including the OS-preference branch:
     // themes.css's prefers-color-scheme fallback would otherwise paint the
     // page dark with no attribute set, and the toggle's own read of
@@ -47,7 +47,6 @@
             document.documentElement.setAttribute('data-mode', current);
             modeBtn.setAttribute('aria-pressed', String(current === 'dark'));
             try { localStorage.setItem('standplass_mode', current); } catch (e) { /* ignore */ }
-            if (window.StandplassEmbed) { window.StandplassEmbed.setMode(current); }
         });
     }
 })();
