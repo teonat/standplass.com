@@ -544,13 +544,6 @@ var StandplassStevnerPage = (function () {
         if (personState) {
             openPersonModal(personState.personId, personState.year || activeYear);
         }
-
-        // ── Embed builder ────────────────────────────────────────────────
-        id('-embed-builder').innerHTML = '<button type="button" id="' + config.idPrefix
-            + '-create-embed">Opprett iframe</button><pre id="' + config.idPrefix + '-embed-snippet"></pre>';
-        id('-create-embed').addEventListener('click', function () {
-            id('-embed-snippet').textContent = StandplassEmbedBuilder.buildSnippet(view, urlState.getSearch());
-        });
     }
 
     return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows, columns: columns };

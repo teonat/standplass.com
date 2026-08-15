@@ -110,7 +110,212 @@ var StandplassEmbed = (function () {
         return SAFE_ID_PREFIX.test(rawIdPrefix) ? rawIdPrefix : view;
     }
 
-    return { VIEWS: VIEWS, buildMarkup: buildMarkup, esc: esc, safeIdPrefix: safeIdPrefix };
+    // Everything stevner-page.js needs, loaded once at runtime by whichever
+    // adapter mounts first (mountDirect or the custom element) -- these load
+    // in parallel, since none of them reference each other at top-level
+    // script-evaluation time, only later, inside function bodies (init())
+    // that don't run until every one of these has already loaded.
+    var DEPENDENCY_PATHS = [
+        '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js',
+        '/js/pagination.js', '/js/person-modal.js', '/js/filter-widgets.js',
+        '/js/url-state.js', '/js/mode-resolve.js', '/js/embed-builder.js', '/js/stevner-page.js'
+    ];
+    var dependenciesPromise = null;
+    function ensureDependencies() {
+        if (!dependenciesPromise) {
+            dependenciesPromise = Promise.all(DEPENDENCY_PATHS.map(function (path) {
+                return new Promise(function (resolve, reject) {
+                    var script = document.createElement('script');
+                    script.src = 'https://standplass.com' + path;
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }));
+        }
+        return dependenciesPromise;
+    }
+
+    // Shared by both adapters and every instance of either -- see
+    // stevner-page.js's own fetcher wiring (config.fetcher) for why this
+    // must be a singleton rather than one per instance. Only ever called
+    // after ensureDependencies() resolves, since StandplassData is one of
+    // the scripts it loads.
+    var sharedFetcher = null;
+    function getSharedFetcher() {
+        if (!sharedFetcher) { sharedFetcher = StandplassData.createFetcher(window.fetch.bind(window)); }
+        return sharedFetcher;
+    }
+
+    // Used by standplass's own pages (felt.html/bane.html). No shadow DOM --
+    // there is nothing to isolate from on your own site. URL sync is always
+    // on here, matching normal browsing behavior.
+    function mountDirect(config) {
+        var view = config.view;
+        var idPrefix = config.idPrefix;
+        var container = document.getElementById(idPrefix + '-root');
+        if (!VIEWS[view]) {
+            container.innerHTML = '<p>Ukjent visning: "' + esc(view) + '". Gyldige verdier: '
+                + Object.keys(VIEWS).join(', ') + '.</p>';
+            return;
+        }
+        var params = new URLSearchParams(window.location.search);
+        var club = params.get('club');
+        if (club) { document.documentElement.setAttribute('data-club', club); }
+        // Mode is resolved by site-chrome.js, which runs before this file
+        // on every direct-mount page.
+
+        container.innerHTML = buildMarkup(idPrefix, view);
+        ensureDependencies().then(function () {
+            StandplassStevnerPage.init({
+                view: view,
+                dataBase: VIEWS[view].dataBase,
+                idPrefix: idPrefix,
+                root: document,
+                urlState: StandplassUrlState.createController({ namespace: null }),
+                fetcher: getSharedFetcher()
+            });
+
+            document.getElementById(idPrefix + '-embed-builder').innerHTML =
+                '<button type="button" id="' + idPrefix + '-create-embed">Opprett innebygging</button><pre id="' + idPrefix + '-embed-snippet"></pre>';
+            document.getElementById(idPrefix + '-create-embed').addEventListener('click', function () {
+                document.getElementById(idPrefix + '-embed-snippet').textContent =
+                    StandplassEmbedBuilder.buildSnippet(view, window.location.search);
+            });
+        });
+    }
+
+    // <link>, not adoptedStyleSheets: a fetch()-based CSSStyleSheet approach
+    // needs CORS on styles.css/themes.css (this project's CORS rule only
+    // covers /data/*, see Task 8) and has no error-handling path if that
+    // fetch fails -- on a real 3rd-party page it would silently hang the
+    // whole widget. <link> needs no CORS to render, degrades the same way
+    // any normal cross-origin stylesheet load does, and is the only path
+    // here, not a rare fallback for an optimization this project doesn't
+    // need yet (there are no current embedders to share CSSOM-parse cost
+    // across).
+    function attachStyles(shadowRoot) {
+        return Promise.all(['/styles.css', '/themes.css'].map(function (path) {
+            return new Promise(function (resolve) {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://standplass.com' + path;
+                // Resolve even on error -- a missing/broken stylesheet
+                // shouldn't block the widget from ever rendering, just
+                // leave it unstyled.
+                link.onload = resolve;
+                link.onerror = resolve;
+                shadowRoot.appendChild(link);
+            });
+        }));
+    }
+
+    // Tracks which sync-url namespaces are already in use on this page, so a
+    // second same-view instance without a unique id (which would silently
+    // collide on the same URL param -- see url-state.js) gets a diagnostic
+    // instead of a silent, confusing collision.
+    var seenSyncedNamespaces = {};
+
+    // Subclassing a built-in element (HTMLElement) requires real ES6 class
+    // syntax -- there is no correct ES5 prototype-chain workaround for this,
+    // unlike the rest of this codebase's var/function IIFE convention. Guard
+    // the whole definition: a bare `class X extends HTMLElement` throws
+    // immediately (HTMLElement doesn't exist) the moment this file is
+    // require()'d under Node for embed.test.js, before customElements.define
+    // is even reached, so this must not run outside a real browser.
+    if (typeof HTMLElement !== 'undefined' && typeof customElements !== 'undefined') {
+        class StandplassResultsElement extends HTMLElement {
+            connectedCallback() {
+                var el = this;
+                // A host framework detaching/reattaching this element fires
+                // connectedCallback again -- attachShadow() throws if a
+                // shadow root already exists, so bail out rather than retry.
+                if (el.shadowRoot) { return; }
+
+                var view = el.getAttribute('view');
+
+                if (!VIEWS[view]) {
+                    var shadow = el.attachShadow({ mode: 'open' });
+                    shadow.innerHTML = '<p>Ukjent visning for &lt;standplass-results&gt;: "'
+                        + esc(view || '(mangler)') + '". Gyldige verdier: ' + Object.keys(VIEWS).join(', ') + '.</p>';
+                    return;
+                }
+
+                // A host-supplied id="" flows straight into buildMarkup's
+                // HTML attribute interpolation -- reject anything unsafe
+                // rather than trust it (see Task 6's safeIdPrefix).
+                var idPrefix = safeIdPrefix(el.id || view, view);
+                var syncUrl = el.hasAttribute('sync-url');
+                if (syncUrl) {
+                    if (seenSyncedNamespaces[idPrefix]) {
+                        console.warn('standplass-results: another instance is already using the URL-sync '
+                            + 'namespace "' + idPrefix + '" -- set a unique id="" attribute on each '
+                            + '<standplass-results view="' + view + '"> to avoid them overwriting each '
+                            + 'other\'s URL state.');
+                    }
+                    seenSyncedNamespaces[idPrefix] = true;
+                }
+
+                var shadowRoot = el.attachShadow({ mode: 'open' });
+                var wrapper = document.createElement('div');
+                // A landmark + label: this content is no longer isolated from
+                // the host page's own heading outline the way an iframe was,
+                // so the shared <h1> would otherwise surface directly in the
+                // host's own heading navigation with nothing to explain it.
+                wrapper.setAttribute('role', 'region');
+                wrapper.setAttribute('aria-label', VIEWS[view].title);
+
+                var club = el.getAttribute('club');
+                if (club) { wrapper.setAttribute('data-club', club); }
+
+                wrapper.innerHTML = buildMarkup(idPrefix, view);
+                // Hidden until styles are attached below -- unlike today's
+                // iframe (which blocks on its own document's stylesheet load
+                // before painting anything), Shadow DOM content is visible
+                // synchronously the instant it's appended, which would
+                // otherwise guarantee a flash of unstyled content on every
+                // embed load.
+                wrapper.style.visibility = 'hidden';
+                shadowRoot.appendChild(wrapper);
+
+                Promise.all([attachStyles(shadowRoot), ensureDependencies()]).then(function () {
+                    wrapper.style.visibility = '';
+
+                    var mode = StandplassModeResolve.resolveMode({
+                        explicitMode: el.getAttribute('mode'),
+                        prefersDark: window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : null
+                    });
+                    wrapper.setAttribute('data-mode', mode);
+
+                    var urlState = StandplassUrlState.createController({ namespace: idPrefix, syncUrl: syncUrl });
+                    var klubbAttr = el.getAttribute('klubb');
+                    if (klubbAttr) {
+                        // Read-modify-write, matching every other
+                        // urlState.setSearch() call site in stevner-page.js --
+                        // passing only `klubb` here would otherwise wipe out
+                        // any person/year already on the URL (e.g. a
+                        // bookmarked deep link into this embed's person
+                        // modal) before init() gets a chance to read it.
+                        var qs = new URLSearchParams(urlState.getSearch());
+                        qs.set('klubb', klubbAttr);
+                        urlState.setSearch('?' + qs.toString());
+                    }
+                    StandplassStevnerPage.init({
+                        view: view,
+                        dataBase: 'https://standplass.com' + VIEWS[view].dataBase,
+                        idPrefix: idPrefix,
+                        root: shadowRoot,
+                        urlState: urlState,
+                        fetcher: getSharedFetcher()
+                    });
+                });
+            }
+        }
+
+        customElements.define('standplass-results', StandplassResultsElement);
+    }
+
+    return { VIEWS: VIEWS, buildMarkup: buildMarkup, esc: esc, safeIdPrefix: safeIdPrefix, mountDirect: mountDirect };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
