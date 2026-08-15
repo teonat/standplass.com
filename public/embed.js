@@ -121,14 +121,19 @@ var StandplassEmbed = (function () {
         '/js/url-state.js', '/js/mode-resolve.js', '/js/embed-builder.js', '/js/stevner-page.js'
     ];
     var dependenciesPromise = null;
-    function ensureDependencies() {
+    // `absolute` is set by the caller, not sniffed from location.hostname --
+    // hostname can't tell "a dev server serving this same public/ directory"
+    // (any hostname, including localhost) apart from "a genuine 3rd-party
+    // page with no local copy of these files" (also any hostname). The two
+    // call sites below already know unambiguously which situation they're
+    // in, so they say so directly: mountDirect always passes nothing
+    // (root-relative -- it only ever runs shipped alongside these files),
+    // the custom element always passes true (absolute -- it only ever runs
+    // via <script src="https://standplass.com/embed.js"> on someone else's
+    // page).
+    function ensureDependencies(absolute) {
         if (!dependenciesPromise) {
-            // Root-relative on standplass.com itself (prod or a local mirror
-            // served under that hostname) so a dev server / preview
-            // deployment loads its own local JS instead of silently pulling
-            // production scripts; absolute for every other hostname, since
-            // that's a real 3rd-party embed with no local copy of these files.
-            var prefix = location.hostname === 'standplass.com' ? '' : 'https://standplass.com';
+            var prefix = absolute ? 'https://standplass.com' : '';
             dependenciesPromise = Promise.all(DEPENDENCY_PATHS.map(function (path) {
                 return new Promise(function (resolve, reject) {
                     var script = document.createElement('script');
@@ -289,7 +294,7 @@ var StandplassEmbed = (function () {
                 wrapper.style.visibility = 'hidden';
                 shadowRoot.appendChild(wrapper);
 
-                Promise.all([attachStyles(shadowRoot), ensureDependencies()]).then(function () {
+                Promise.all([attachStyles(shadowRoot), ensureDependencies(true)]).then(function () {
                     wrapper.style.visibility = '';
 
                     var mode = StandplassModeResolve.resolveMode({
