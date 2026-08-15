@@ -116,24 +116,38 @@ var StandplassStevnerPage = (function () {
         { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
     ];
 
+    // Shared across every init() call on the page (both adapters, any number
+    // of instances) so that with two open person modals on one page, Escape
+    // closes only the most-recently-opened one instead of every instance's
+    // modal at once -- see the keydown wiring change in Step 6 below.
+    var activeModalCloser = null;
+    var escapeHandlerWired = false;
+    function wireGlobalEscapeHandler() {
+        if (escapeHandlerWired) { return; }
+        escapeHandlerWired = true;
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && activeModalCloser) { activeModalCloser(); }
+        });
+    }
+
     function init(config) {
         var dataBase = config.dataBase;
         var view = config.view;
-        var id = function (suffix) { return document.getElementById(config.idPrefix + suffix); };
+        var root = config.root || document;
+        var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
         var CURRENT_YEAR = new Date().getUTCFullYear();
 
-        var params = new URLSearchParams(window.location.search);
-        var club = params.get('club');
-        if (club) {
-            document.documentElement.setAttribute('data-club', club);
-        }
-        // Mode (?mode= → localStorage → OS preference) is resolved by
-        // site-chrome.js, which runs before this file on every page.
+        var urlState = config.urlState;
+        var params = new URLSearchParams(urlState.getSearch());
         var klubb = params.get('klubb');
         var yearParam = parseInt(params.get('year'), 10);
         var activeYear = isNaN(yearParam) ? CURRENT_YEAR : yearParam;
 
-        var fetcher = StandplassData.createFetcher(window.fetch.bind(window));
+        // A single fetcher is shared by every init() call on the page (both
+        // adapters), not created per-instance -- otherwise two instances of
+        // the same view+year (e.g. two <standplass-results> on one host
+        // page) would each fetch the identical data.json independently.
+        var fetcher = config.fetcher;
         var FW = StandplassFilterWidgets;
         var FIRST_YEAR = 2021;
 
@@ -245,9 +259,9 @@ var StandplassStevnerPage = (function () {
         yearEl.value = String(activeYear);
         yearEl.addEventListener('change', function () {
             activeYear = parseInt(yearEl.value, 10);
-            var qs = new URLSearchParams(window.location.search);
+            var qs = new URLSearchParams(urlState.getSearch());
             qs.set('year', String(activeYear));
-            history.replaceState(null, '', '?' + qs.toString());
+            urlState.setSearch('?' + qs.toString());
             loadYear(activeYear);
         });
 
@@ -292,10 +306,9 @@ var StandplassStevnerPage = (function () {
             // no club, otherwise the stale slug filter would keep applying on
             // top of the new selection.
             klubbUnmatched = false;
-            var qs = new URLSearchParams(window.location.search);
+            var qs = new URLSearchParams(urlState.getSearch());
             if (activeClubs.length === 1) { qs.set('klubb', activeClubs[0]); } else { qs.delete('klubb'); }
-            var s = qs.toString();
-            history.replaceState(null, '', s ? '?' + s : window.location.pathname);
+            urlState.setSearch('?' + qs.toString());
         }
 
         var clubCombo = FW.makeTagComboHandlers({
@@ -434,10 +447,14 @@ var StandplassStevnerPage = (function () {
         var modalOpener = null;
 
         function closePersonModal() {
+            // Only this instance's own still-open modal clears the shared
+            // pointer -- if a second instance's modal opened since, closing
+            // this one must not null out that instance's active reference.
+            if (activeModalCloser === closePersonModal) { activeModalCloser = null; }
             modalEl.hidden = true;
             modalEl.innerHTML = '';
-            var qs = StandplassPersonModal.clearPersonFromUrl(window.location.search);
-            history.replaceState(null, '', qs || window.location.pathname);
+            var qs = StandplassPersonModal.clearPersonFromUrl(urlState.getSearch());
+            urlState.setSearch(qs);
             // A row the filters have since re-rendered away is detached, and
             // focus() on a detached node is a harmless no-op.
             if (modalOpener) { modalOpener.focus(); modalOpener = null; }
@@ -454,6 +471,7 @@ var StandplassStevnerPage = (function () {
                 + '<div class="comp-modal-body">' + body + '</div>'
                 + '</div>';
             modalEl.hidden = false;
+            activeModalCloser = closePersonModal;
             id('-person-modal-close').addEventListener('click', closePersonModal);
             id('-person-modal-close').focus();
         }
@@ -502,9 +520,7 @@ var StandplassStevnerPage = (function () {
             drawChart();
         });
 
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !modalEl.hidden) { closePersonModal(); }
-        });
+        wireGlobalEscapeHandler();
 
         function openPersonModal(personId, year) {
             fetcher.fetchYear(dataBase, year || activeYear).then(function (yearData) {
@@ -520,11 +536,11 @@ var StandplassStevnerPage = (function () {
             if (!btn) { return; }
             var personId = btn.dataset.personId;
             modalOpener = btn;
-            history.replaceState(null, '', StandplassPersonModal.buildPersonUrl(window.location.search, personId, activeYear));
+            urlState.setSearch(StandplassPersonModal.buildPersonUrl(urlState.getSearch(), personId, activeYear));
             openPersonModal(personId, activeYear);
         });
 
-        var personState = StandplassPersonModal.parsePersonFromUrl(window.location.search);
+        var personState = StandplassPersonModal.parsePersonFromUrl(urlState.getSearch());
         if (personState) {
             openPersonModal(personState.personId, personState.year || activeYear);
         }
@@ -533,7 +549,7 @@ var StandplassStevnerPage = (function () {
         id('-embed-builder').innerHTML = '<button type="button" id="' + config.idPrefix
             + '-create-embed">Opprett iframe</button><pre id="' + config.idPrefix + '-embed-snippet"></pre>';
         id('-create-embed').addEventListener('click', function () {
-            id('-embed-snippet').textContent = StandplassEmbedBuilder.buildSnippet(view, window.location.search);
+            id('-embed-snippet').textContent = StandplassEmbedBuilder.buildSnippet(view, urlState.getSearch());
         });
     }
 
