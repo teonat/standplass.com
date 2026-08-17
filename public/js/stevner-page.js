@@ -178,6 +178,39 @@ var StandplassStevnerPage = (function () {
         { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
     ];
 
+    function statusBadge(applicableForClassification) {
+        return applicableForClassification
+            ? '<span class="comp-modal-badge comp-modal-badge--yes" title="Resultater teller for klasseopprykk og -nedrykk">Klasseførende</span>'
+            : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>';
+    }
+
+    function renderCard(card, showClassBadge) {
+        var titleHtml = esc(card.title || 'Ukjent stevne') + (card.status === 3 ? ' (Avlyst)' : '');
+        var links = (card.resultFileUrl ? '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> ' : '')
+            + (card.deepLink ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>' : '');
+        var meta = [card.startDate ? String(card.startDate).slice(0, 10) : '', card.facilityName, card.organizationName]
+            .filter(Boolean).map(esc).join(' · ');
+        var groupsHtml = card.groups.map(function (g) {
+            var headerRow = card.groups.length > 1
+                ? '<tr class="stevner-disc-group"><th scope="colgroup" colspan="' + columns.length + '">' + esc(g.label) + '</th></tr>'
+                : '';
+            return headerRow + StandplassTable.renderRows(columns, g.rows);
+        }).join('');
+        return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
+            + '<div class="ranking-card-header">'
+            + '<p class="ranking-card-title"><button type="button" class="stevner-comp-btn link-btn" data-comp-id="' + esc(card.id) + '">' + titleHtml + '</button>'
+            + (showClassBadge ? ' ' + statusBadge(card.applicableForClassification) : '') + '</p>'
+            + '<p class="stevner-comp-meta">' + meta + (links ? ' · ' + links : '') + '</p>'
+            + '</div>'
+            + '<table class="ranking-table"><thead><tr>'
+            + '<th scope="col">#</th><th scope="col">Navn</th>'
+            + '<th scope="col" class="stevner-tablet-hide">Klubb</th>'
+            + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
+            + '<th scope="col">Poeng</th><th scope="col" class="stevner-tablet-hide">Ranking</th>'
+            + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
+            + '</div>';
+    }
+
     // Shared across every init() call on the page (both adapters, any number
     // of instances) so that with two open person modals on one page, Escape
     // closes only the most-recently-opened one instead of every instance's
@@ -225,7 +258,8 @@ var StandplassStevnerPage = (function () {
         var masterClubs = {};                      // accumulates across loaded years (stevner.js:353-373)
         var masterDiscs = {};
         var allRows = [];                          // every row of activeYear
-        var visibleRows = [];                      // after filters, sorted
+        var currentCompetitions = [];               // raw competitions of activeYear, feeds card pagination
+        var visibleCards = [];                      // after filters, built into cards
         // ?klubb= is a slug; it is resolved against real club names once data is
         // loaded so it shows as a removable chip. If it matches nothing we keep
         // filtering by the slug, so an embed never silently widens to a
@@ -234,9 +268,9 @@ var StandplassStevnerPage = (function () {
         var klubbUnmatched = false;
 
         var pagination = StandplassPagination.createController({
-            pageSize: 50,
+            pageSize: 20, // matches the source's competition-count-based paging (a later task's concern to tune further; 20 is the right value now)
             fetchPage: function (offset, limit) {
-                return Promise.resolve(visibleRows.slice(offset, offset + limit));
+                return Promise.resolve(visibleCards.slice(offset, offset + limit));
             }
         });
 
@@ -245,9 +279,11 @@ var StandplassStevnerPage = (function () {
 
         function render() {
             if (!pagination.state.items.length) {
-                rowsEl.innerHTML = '<tr><td colspan="' + columns.length + '">Ingen resultater.</td></tr>';
+                rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
-                StandplassTable.mount(rowsEl, columns, pagination.state.items);
+                rowsEl.innerHTML = pagination.state.items.map(function (card) {
+                    return renderCard(card, activeTab === 'alle');
+                }).join('');
             }
             loadMoreBtn.hidden = pagination.state.done;
         }
@@ -258,7 +294,7 @@ var StandplassStevnerPage = (function () {
         function showLoadError() {
             pagination.state.loading = false;
             loadMoreBtn.hidden = true;
-            rowsEl.innerHTML = '<tr><td colspan="' + columns.length + '">Kunne ikke laste resultater.</td></tr>';
+            rowsEl.innerHTML = '<p class="ranking-empty">Kunne ikke laste resultater.</p>';
         }
 
         function load() {
@@ -267,25 +303,16 @@ var StandplassStevnerPage = (function () {
 
         loadMoreBtn.addEventListener('click', load);
 
-        // ── Filter predicates (resultatliste-stevner.js:687-719, rewritten
-        // for one flat row list instead of nested competition objects) ────
-        function filterRows() {
-            var q = nameQuery.toLowerCase();
-            return allRows.filter(function (r) {
-                if (activeTab === 'klasse' && !r.applicableForClassification) { return false; }
-                if (activeTab === 'ikke' && r.applicableForClassification) { return false; }
-                if (activeDiscs.length && activeDiscs.indexOf(r.discipline) < 0) { return false; }
-                if (activeClubs.length && activeClubs.indexOf(r.club) < 0) { return false; }
-                if (klubbUnmatched && !matchesClub(r.club, klubb)) { return false; }
-                if (q && !(r.name && r.name.toLowerCase().indexOf(q) >= 0)) { return false; }
-                return true;
-            }).sort(COMPARATORS[activeGroupMode]);
+        function currentFilters() {
+            return { activeTab: activeTab, activeDiscs: activeDiscs, activeClubs: activeClubs,
+                klubbUnmatched: klubbUnmatched, klubb: klubb, nameQuery: nameQuery, groupMode: activeGroupMode };
         }
 
-        // Every filter change re-filters from scratch and restarts pagination,
-        // mirroring the source's render() resetting _shown to PAGE_SIZE.
+        // Every filter change re-builds cards from scratch and restarts
+        // pagination, mirroring the source's render() resetting _shown to
+        // PAGE_SIZE.
         function applyFilters() {
-            visibleRows = filterRows();
+            visibleCards = buildCompetitionCards(currentCompetitions, currentFilters());
             pagination.reset();
             return load();
         }
@@ -293,6 +320,7 @@ var StandplassStevnerPage = (function () {
         function loadYear(year) {
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                 allRows = flattenRows(yearData);
+                currentCompetitions = yearData.competitions || [];
                 allRows.forEach(function (r) {
                     if (r.club) { masterClubs[r.club] = true; }
                     if (r.discipline) { masterDiscs[r.discipline] = true; }

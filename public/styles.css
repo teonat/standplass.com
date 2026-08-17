@@ -261,7 +261,7 @@ h1, h2, h3 {
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
-.stevner-disc-group td {
+.stevner-disc-group th {
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -269,6 +269,7 @@ h1, h2, h3 {
     color: var(--text-muted);
     padding: 0.5rem 0.5rem 0.2rem;
     background: var(--surface-base);
+    text-align: left;
 }
 
 /* ── Ranking filters ──────────────────────────────────── */
