@@ -642,6 +642,18 @@ h1, h2, h3 {
 /* ── Ranking meta / section / status / blank state ────── */
 .ranking-section { background: var(--surface-page); padding: 3rem 1.5rem 5rem; }
 
+.container { max-width: 960px; margin: 0 auto; }
+.section-label { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-accent); margin: 0 0 0.25rem; }
+.section-lead { color: var(--text-muted); max-width: 60ch; margin: 0.5rem 0 1.5rem; }
+
+/* Reuses this repo's existing 700px breakpoint (already used elsewhere in
+   this file, e.g. above) rather than porting the source's 900px -- this
+   repo already treats 700px as its one tablet/mobile line. */
+.stevner-tablet-hide { display: table-cell; }
+@media (max-width: 700px) {
+    .stevner-tablet-hide { display: none; }
+}
+
 .ranking-meta {
     font-size: 0.8125rem;
     color: var(--text-muted);

@@ -7,14 +7,14 @@ assert.strictEqual(StandplassEmbed.VIEWS.felt.dataBase, '/data/felt');
 assert.strictEqual(StandplassEmbed.VIEWS.bane.dataBase, '/data/bane');
 
 var markup = StandplassEmbed.buildMarkup('felt', 'felt');
-assert.ok(markup.indexOf('<h1>Feltskyting</h1>') !== -1);
+assert.ok(markup.indexOf('<h1 class="section-title">Feltskyting</h1>') !== -1);
 assert.ok(markup.indexOf('id="felt-year"') !== -1, 'ids must be parameterized by idPrefix');
 assert.ok(markup.indexOf('id="felt-rows"') !== -1);
 assert.ok(markup.indexOf('id="felt-person-modal"') !== -1);
 assert.ok(markup.indexOf('id="felt-embed-builder"') !== -1);
 
 var baneMarkup = StandplassEmbed.buildMarkup('bane', 'bane');
-assert.ok(baneMarkup.indexOf('<h1>Baneskyting</h1>') !== -1);
+assert.ok(baneMarkup.indexOf('<h1 class="section-title">Baneskyting</h1>') !== -1);
 assert.ok(baneMarkup.indexOf('id="bane-rows"') !== -1);
 
 // A second felt instance with a different idPrefix (multiple embeds of the

@@ -20,8 +20,10 @@ var StandplassEmbed = (function () {
     // ids, as long as each is given a distinct idPrefix.
     function buildMarkup(idPrefix, view) {
         var title = VIEWS[view].title;
-        return ''
-            + '<h1>' + title + '</h1>'
+        return '<div class="container">'
+            + '<p class="section-label">Resultater</p>'
+            + '<h1 class="section-title">' + title + '</h1>'
+            + '<p class="section-lead">Resultater hentet fra skyting.no. Standplass er ikke tilknyttet noen enkelt klubb — denne siden viser alle klubbers resultater.</p>'
             + '<div class="ranking-filters" id="' + idPrefix + '-filters">'
             + '  <div class="filter-group">'
             + '    <label for="' + idPrefix + '-year">År</label>'
@@ -77,7 +79,8 @@ var StandplassEmbed = (function () {
             // aria-modal, since there is no focus trap and claiming one
             // would lie to screen readers.
             + '<div id="' + idPrefix + '-person-modal" role="dialog" aria-labelledby="' + idPrefix + '-person-modal-title" hidden></div>'
-            + '<div id="' + idPrefix + '-embed-builder"></div>';
+            + '<div id="' + idPrefix + '-embed-builder"></div>'
+            + '</div>'; // closes .container
     }
 
     // stevner-page.js's own local copy of this exact helper (table-renderer.js's
