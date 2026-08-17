@@ -35,37 +35,96 @@ var StandplassStevnerPage = (function () {
         return normalizeClub(rowClub).indexOf(normalizeClub(slug)) !== -1;
     }
 
-    // Flattens the scraper's { competitions: [{ results: [...] }] } shape into
-    // one row per result, matching resultatliste-stevner.js's field names.
-    // The two competition-level fields the row-based views need are copied down
-    // onto every row: `applicableForClassification` (the tab buckets, cf.
-    // resultatliste-stevner.js:661-669) and `date` (the person chart's X axis,
-    // cf. nsf-ui.js's chart entries).
+    function decorateRow(comp, r) {
+        return {
+            position: r.position,
+            name: r.name,
+            personId: r.personId,
+            club: r.club,
+            discipline: r.discipline,
+            class: r.class,
+            score: r.score,
+            rankingScore: r.rankingScore,
+            date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
+            applicableForClassification: comp.applicableForClassification === true,
+            // data-discipline lets a future click handler resolve initialDisc
+            // for the person modal (Task 7) without a second data pass.
+            nameHtml: '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
+                + esc(r.personId) + '" data-person-name="' + esc(r.name) + '"'
+                + ' data-discipline="' + esc(r.discipline) + '">'
+                + esc(r.name || '–') + '</button>'
+        };
+    }
+
     function flattenRows(yearData) {
         var rows = [];
         (yearData.competitions || []).forEach(function (comp) {
-            (comp.results || []).forEach(function (r) {
-                rows.push({
-                    position: r.position,
-                    name: r.name,
-                    personId: r.personId,
-                    club: r.club,
-                    discipline: r.discipline,
-                    class: r.class,
-                    score: r.score,
-                    rankingScore: r.rankingScore,
-                    // Date-only, exactly like nsf-ui.js:2166 — the chart code
-                    // keys "best result per date" on this string and parses it
-                    // as UTC midnight, both of which break on a full datetime.
-                    date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
-                    applicableForClassification: comp.applicableForClassification === true,
-                    nameHtml: '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
-                        + esc(r.personId) + '" data-person-name="' + esc(r.name) + '">'
-                        + esc(r.name || '–') + '</button>'
-                });
-            });
+            (comp.results || []).forEach(function (r) { rows.push(decorateRow(comp, r)); });
         });
         return rows;
+    }
+
+    // Shared by the flat-row name/discipline autocomplete (allRows) and the
+    // card view (per-competition) — same predicate, two different inputs.
+    function matchesFilters(row, filters) {
+        if (filters.activeTab === 'klasse' && !row.applicableForClassification) { return false; }
+        if (filters.activeTab === 'ikke' && row.applicableForClassification) { return false; }
+        if (filters.activeDiscs.length && filters.activeDiscs.indexOf(row.discipline) < 0) { return false; }
+        if (filters.activeClubs.length && filters.activeClubs.indexOf(row.club) < 0) { return false; }
+        if (filters.klubbUnmatched && !matchesClub(row.club, filters.klubb)) { return false; }
+        if (filters.nameQuery && !(row.name && row.name.toLowerCase().indexOf(filters.nameQuery) >= 0)) { return false; }
+        return true;
+    }
+
+    function competitionStats(rows) {
+        var byPerson = {};
+        rows.forEach(function (r) { if (r.personId) { byPerson[r.personId] = true; } });
+        var scores = rows.map(function (r) { return Number(r.score); }).filter(function (n) { return !isNaN(n); });
+        var sorted = scores.slice().sort(function (a, b) { return a - b; });
+        var snitt = scores.length ? scores.reduce(function (a, b) { return a + b; }, 0) / scores.length : null;
+        var median = sorted.length
+            ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)
+            : null;
+        return { skyttere: Object.keys(byPerson).length, startere: rows.length, snitt: snitt, median: median };
+    }
+
+    // Mirrors resultatliste-stevner.js:794-850: 'klasse' groups by
+    // discipline+class; any other mode groups by discipline only (its row
+    // order within the group still comes from COMPARATORS[groupMode]).
+    function groupCompetitionRows(rows, groupMode) {
+        var comparator = COMPARATORS[groupMode] || compareByKlasse;
+        var sorted = rows.slice().sort(comparator);
+        var keyed = groupMode === 'klasse';
+        var groups = [], byKey = {};
+        sorted.forEach(function (r) {
+            var key = keyed ? (r.discipline || '') + '|' + (r.class || '') : (r.discipline || '');
+            if (!byKey[key]) {
+                byKey[key] = { key: key, label: keyed ? (r.discipline || '–') + ' – ' + (r.class || '–') : (r.discipline || '–'), rows: [] };
+                groups.push(byKey[key]);
+            }
+            byKey[key].rows.push(r);
+        });
+        return groups;
+    }
+
+    function buildCompetitionCards(competitions, filters) {
+        var withLowerQuery = { activeTab: filters.activeTab, activeDiscs: filters.activeDiscs, activeClubs: filters.activeClubs,
+            klubbUnmatched: filters.klubbUnmatched, klubb: filters.klubb, nameQuery: (filters.nameQuery || '').toLowerCase() };
+        var cards = [];
+        (competitions || []).forEach(function (comp) {
+            var rows = (comp.results || []).map(function (r) { return decorateRow(comp, r); })
+                .filter(function (r) { return matchesFilters(r, withLowerQuery); });
+            if (!rows.length) { return; }
+            cards.push({
+                id: comp.id, title: comp.title, status: comp.status, startDate: comp.startDate,
+                facilityName: comp.facilityName, organizationName: comp.organizationName,
+                resultFileUrl: comp.resultFileUrl, deepLink: comp.deepLink,
+                applicableForClassification: comp.applicableForClassification === true,
+                groups: groupCompetitionRows(rows, filters.groupMode),
+                stats: competitionStats(rows)
+            });
+        });
+        return cards;
     }
 
     function comparePosition(a, b) {
@@ -546,7 +605,9 @@ var StandplassStevnerPage = (function () {
         }
     }
 
-    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows, columns: columns };
+    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
+        buildCompetitionCards: buildCompetitionCards, groupCompetitionRows: groupCompetitionRows,
+        competitionStats: competitionStats, columns: columns };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
