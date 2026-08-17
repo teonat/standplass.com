@@ -743,7 +743,7 @@ var StandplassStevnerPage = (function () {
             // moment the button label or a reopened panel re-reads it. Matches
             // the discDropdown/clubCombo convention above: .rebuild() after
             // every state change.
-            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle) {
+            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear) {
                 var container = id(suffix);
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
                     + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Fjern alle</button>'
@@ -759,7 +759,12 @@ var StandplassStevnerPage = (function () {
                     // take 3 params even though `name` is unused here (id === name for
                     // these single-value items).
                     onToggle: function (v, name, checked) { onToggle(v, checked); dropdown.rebuild(); },
-                    onClearAll: function () { onToggle(null, false); dropdown.rebuild(); }
+                    // A dedicated no-arg callback, not a (null, false) sentinel routed
+                    // through onToggle -- toggleSetValue's `x !== v` removal is a no-op
+                    // for v=null (no element is ever null), and for the year dropdown
+                    // parseInt(null) is NaN, which would fetch a "NaN.json" and 404
+                    // with nothing to catch the rejection.
+                    onClearAll: function () { onClear(); dropdown.rebuild(); }
                 });
                 dropdown.rebuild();
                 return dropdown;
@@ -772,18 +777,21 @@ var StandplassStevnerPage = (function () {
                     var yr = parseInt(yearStr, 10);
                     if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
                     loadYearIfNeeded(yr).then(function () { if (mySeq === personOpenSeq) { refresh(); } });
-                });
+                }, function () { selectedYears = [activeYear]; refresh(); });
                 if (knownValues('competitionType').length > 1) {
                     mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
-                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); });
+                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
+                        function () { filters.types = null; refresh(); });
                 }
                 if (knownValues('discipline').length > 1) {
                     mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
-                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); });
+                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
+                        function () { filters.discs = null; refresh(); });
                 }
                 if (knownValues('class').length > 1) {
                     mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
-                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); });
+                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
+                        function () { filters.classes = null; refresh(); });
                 }
             }
 
