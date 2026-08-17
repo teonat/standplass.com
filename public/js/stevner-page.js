@@ -284,6 +284,14 @@ var StandplassStevnerPage = (function () {
         var nameQuery = '';
         var activeTab = 'alle';                    // 'alle' | 'klasse' | 'ikke'
         var activeGroupMode = 'klasse';            // key of COMPARATORS
+        var tabParam = params.get('tab');
+        if (tabParam && ['alle', 'klasse', 'ikke'].indexOf(tabParam) >= 0) { activeTab = tabParam; }
+        var groupParam = params.get('group');
+        if (groupParam && COMPARATORS[groupParam]) { activeGroupMode = groupParam; }
+        var discParam = params.get('disc');
+        if (discParam) { activeDiscs = [discParam]; }
+        var nameParamInit = params.get('name');
+        if (nameParamInit) { nameQuery = nameParamInit; }
         var masterClubs = {};                      // accumulates across loaded years (stevner.js:353-373)
         var masterDiscs = {};
         var allRows = [];                          // every row of activeYear
@@ -425,11 +433,13 @@ var StandplassStevnerPage = (function () {
                     activeDiscs = activeDiscs.filter(function (x) { return x !== id_; });
                 }
                 discDropdown.rebuild();
+                setUrlParam('disc', activeDiscs.length === 1 ? activeDiscs[0] : null);
                 applyFilters();
             },
             onClearAll: function () {
                 activeDiscs = [];
                 discDropdown.rebuild();
+                setUrlParam('disc', null);
                 applyFilters();
             }
         });
@@ -441,6 +451,16 @@ var StandplassStevnerPage = (function () {
         // "Opprett iframe" would hand a club admin an unfiltered national
         // embed. ?klubb= is single-valued, so 0 or 2+ chips means no param.
         // The other filters (discipline/name/tab/group) stay session-only.
+        // Single-value URL param write-through, same read-modify-write pattern as
+        // syncKlubbParam — shared here since 4 call sites now need it (tab, group,
+        // disc, name), where syncKlubbParam only ever served klubb's own single
+        // call site.
+        function setUrlParam(key, value) {
+            var qs = new URLSearchParams(urlState.getSearch());
+            if (value) { qs.set(key, value); } else { qs.delete(key); }
+            urlState.setSearch('?' + qs.toString());
+        }
+
         function syncKlubbParam() {
             // An explicit chip change supersedes an incoming slug that matched
             // no club, otherwise the stale slug filter would keep applying on
@@ -489,6 +509,7 @@ var StandplassStevnerPage = (function () {
 
         // ── Name search autocomplete (stevner.js:232-292) ────────────────
         var nameEl = id('-name');
+        if (nameQuery) { nameEl.value = nameQuery; }
         var nameWrap = id('-name-wrap');
         var nameTimer = null;
         var nameDirty = false;
@@ -498,6 +519,7 @@ var StandplassStevnerPage = (function () {
             nameDirty = false;
             applyFilters();
             nameWrap.classList.toggle('autocomplete-wrap--has-value', !!nameQuery);
+            setUrlParam('name', nameQuery || null);
         }
 
         nameEl.addEventListener('input', function () {
@@ -542,25 +564,39 @@ var StandplassStevnerPage = (function () {
         });
 
         // ── Tab + group toggles (stevner.js:574-585 / 99-122) ────────────
+        // Marks the button matching `value` active, mirrors the html's own
+        // hardcoded default (alle/klasse) so a restored ?tab=/?group= from
+        // the URL is reflected visually too, same as yearEl.value/nameEl.value
+        // above.
+        function setToggleActive(toggleEl, attr, value) {
+            Array.prototype.forEach.call(toggleEl.querySelectorAll('button'), function (b) {
+                var isActive = b.getAttribute('data-' + attr) === value;
+                b.classList.toggle('program-btn--active', isActive);
+                b.setAttribute('aria-pressed', String(isActive));
+            });
+        }
+
         function wireToggle(toggleEl, attr, onPick) {
             toggleEl.addEventListener('click', function (e) {
                 var btn = e.target.closest('button[data-' + attr + ']');
                 if (!btn) { return; }
-                Array.prototype.forEach.call(toggleEl.querySelectorAll('button'), function (b) {
-                    var isActive = b === btn;
-                    b.classList.toggle('program-btn--active', isActive);
-                    b.setAttribute('aria-pressed', String(isActive));
-                });
+                setToggleActive(toggleEl, attr, btn.getAttribute('data-' + attr));
                 onPick(btn.getAttribute('data-' + attr));
             });
         }
 
-        wireToggle(id('-tab-toggle'), 'tab', function (value) {
+        var tabToggleEl = id('-tab-toggle');
+        var groupToggleEl = id('-group-toggle');
+        setToggleActive(tabToggleEl, 'tab', activeTab);
+        setToggleActive(groupToggleEl, 'group', activeGroupMode);
+        wireToggle(tabToggleEl, 'tab', function (value) {
             activeTab = value;
+            setUrlParam('tab', value);
             applyFilters();
         });
-        wireToggle(id('-group-toggle'), 'group', function (value) {
+        wireToggle(groupToggleEl, 'group', function (value) {
             activeGroupMode = COMPARATORS[value] ? value : 'klasse';
+            setUrlParam('group', activeGroupMode);
             applyFilters();
         });
 

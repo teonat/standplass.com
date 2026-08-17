@@ -59,4 +59,14 @@ embedA.setSearch('');
 assert.strictEqual(get(window.location.search, 'sp_felt-a_person'), null);
 assert.strictEqual(get(window.location.search, 'sp_felt-b_person'), '2', 'clearing one instance must not affect another');
 
+// tab/group/disc/name filters are also tracked, same as year/klubb/person.
+window.location.search = '';
+var filters = StandplassUrlState.createController({ namespace: null });
+filters.setSearch('?year=2025&tab=klasse&group=poeng&disc=Grovfelt&name=Ola');
+var qs = new URLSearchParams(filters.getSearch());
+assert.strictEqual(qs.get('tab'), 'klasse');
+assert.strictEqual(qs.get('group'), 'poeng');
+assert.strictEqual(qs.get('disc'), 'Grovfelt');
+assert.strictEqual(qs.get('name'), 'Ola');
+
 console.log('url-state.test.js: all assertions passed');
