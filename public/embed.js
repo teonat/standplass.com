@@ -70,6 +70,7 @@ var StandplassEmbed = (function () {
             + '  <button type="button" class="program-btn" data-group="ovelse" aria-pressed="false">Per øvelse</button>'
             + '  <button type="button" class="program-btn" data-group="poeng" aria-pressed="false">Poengsum</button>'
             + '</div>'
+            + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
             + '<div id="' + idPrefix + '-rows"></div>'
             + '<button id="' + idPrefix + '-load-more" type="button">Last flere</button>'
             // role/aria-labelledby instead of a native <dialog> -- no

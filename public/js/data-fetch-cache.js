@@ -13,7 +13,11 @@ var StandplassData = (function () {
                 return entry.promise;
             }
             var promise = fetchImpl(dataBase + '/' + year + '.json').then(function (res) {
-                if (!res.ok) { throw new Error('Failed to fetch ' + key + ': ' + res.status); }
+                if (!res.ok) {
+                    var err = new Error('Failed to fetch ' + key + ': ' + res.status);
+                    err.status = res.status;
+                    throw err;
+                }
                 return res.json();
             });
             cache[key] = { time: now, promise: promise };

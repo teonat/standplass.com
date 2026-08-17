@@ -317,20 +317,37 @@ var StandplassStevnerPage = (function () {
                     }).join('');
             }
             rowsEl.classList.toggle('stevner-hide-club-col', activeClubs.length === 1);
+            loadMoreBtn.textContent = 'Last flere (viser ' + pagination.state.items.length + ' av ' + visibleCards.length + ' stevner)';
             loadMoreBtn.hidden = pagination.state.done;
+        }
+
+        function setStatus(msg, isError) {
+            var el = id('-status');
+            el.textContent = msg || '';
+            el.classList.toggle('ranking-error', !!isError);
+        }
+
+        function load() {
+            setStatus('Laster…');
+            return pagination.loadMore().then(function () {
+                render();
+                setStatus('');
+            }, showLoadError);
         }
 
         // pagination.js only clears state.loading on the success path, so a
         // failed fetch would wedge "Last flere" forever — clear it here and
-        // show the failure instead of leaving a dead button.
-        function showLoadError() {
+        // show the failure instead of leaving a dead button. err is only
+        // present on the loadYear() -> fetchYear() failure path; load()'s
+        // own fetchPage can't reject, so this also has to work called bare.
+        function showLoadError(err) {
             pagination.state.loading = false;
             loadMoreBtn.hidden = true;
-            rowsEl.innerHTML = '<p class="ranking-empty">Kunne ikke laste resultater.</p>';
-        }
-
-        function load() {
-            return pagination.loadMore().then(render, showLoadError);
+            var msg = (err && err.status === 404)
+                ? 'Ingen data for ' + activeYear + '.'
+                : 'Kunne ikke laste data. Prøv igjen senere.';
+            rowsEl.innerHTML = '';
+            setStatus(msg, true);
         }
 
         loadMoreBtn.addEventListener('click', load);
