@@ -825,6 +825,11 @@ var StandplassStevnerPage = (function () {
         // root (the <standplass-results> embed case), since a shadow root
         // has no `.body`; onto document.body for the direct-mount case.
         var compDialog = id('-comp-dialog');
+        // Same idea as personOpenSeq above: guards the async fetchDetail/
+        // fetchResults writes into the shared bodyEl against a race where a
+        // stale response resolves after the modal was reopened for a
+        // different competition, or the tab was switched away and back.
+        var compOpenSeq = 0;
         if (!compDialog) {
             compDialog = document.createElement('dialog');
             compDialog.id = config.idPrefix + '-comp-dialog';
@@ -839,6 +844,7 @@ var StandplassStevnerPage = (function () {
         compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
 
         function openCompModal(compId, title) {
+            var mySeq = ++compOpenSeq;
             compDialog.dataset.compId = compId;
             compDialog.querySelector('.comp-modal-title').textContent = title || '';
             var bodyEl = compDialog.querySelector('.comp-modal-body');
@@ -853,8 +859,12 @@ var StandplassStevnerPage = (function () {
             });
             compDialog.showModal();
             StandplassCompModal.fetchDetail(compId, window.fetch.bind(window)).then(function (data) {
+                if (mySeq !== compOpenSeq) { return; } // a newer competition was opened since this fetch started
                 bodyEl.innerHTML = StandplassCompModal.renderDetailBody(data);
-            }, function () { bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>'; });
+            }, function () {
+                if (mySeq !== compOpenSeq) { return; }
+                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
+            });
         }
 
         compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
@@ -866,12 +876,26 @@ var StandplassStevnerPage = (function () {
                 b.setAttribute('aria-pressed', String(isActive));
             });
             if (btn.getAttribute('data-comp-tab') !== 'resultater') { return; }
+            var mySeq = compOpenSeq;
             var bodyEl = compDialog.querySelector('.comp-modal-body');
             var compId = compDialog.dataset.compId;
             bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            // compOpenSeq alone catches "a different competition opened since
+            // this fetch started"; it doesn't change on a same-competition
+            // tab click, so also re-check that Resultater is still the
+            // active tab when the fetch resolves (covers switching back to
+            // Detaljer before this fetch settles).
+            function stillCurrent() {
+                return mySeq === compOpenSeq
+                    && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
+            }
             StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
+                if (!stillCurrent()) { return; }
                 bodyEl.innerHTML = StandplassCompModal.renderResultsBody(results);
-            }, function () { bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>'; });
+            }, function () {
+                if (!stillCurrent()) { return; }
+                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
+            });
         });
 
         rowsEl.addEventListener('click', function (e) {
