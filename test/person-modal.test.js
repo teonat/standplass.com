@@ -80,4 +80,21 @@ assert.strictEqual(StandplassPersonModal.dotColor({ position: 2 }, 'position'), 
 assert.strictEqual(StandplassPersonModal.dotColor({ position: 3 }, 'position'), '#b87333');
 assert.strictEqual(StandplassPersonModal.dotColor({ position: 4 }, 'position'), '#4a90d9');
 
+var e2024 = [{ date: '2024-05-01', discipline: 'Grovfelt', class: 'A', competitionType: 'Feltskyting', score: 28 }];
+var e2025 = [{ date: '2025-05-01', discipline: 'Fellesfelt', class: 'B', competitionType: 'Feltskyting', score: 30 }];
+var merged = StandplassPersonModal.mergeYearEntries({ 2024: e2024, 2025: e2025 }, [2024, 2025]);
+assert.strictEqual(merged.length, 2);
+assert.strictEqual(merged[0].date, '2024-05-01', 'merged entries are date-sorted ascending');
+
+var filtered = StandplassPersonModal.getFilteredEntries(merged, { types: null, discs: ['Grovfelt'], classes: null });
+assert.strictEqual(filtered.length, 1);
+assert.strictEqual(filtered[0].discipline, 'Grovfelt');
+
+var noneSelected = StandplassPersonModal.getFilteredEntries(merged, { types: null, discs: [], classes: null });
+assert.strictEqual(noneSelected.length, 0, 'an empty array means "none selected", not "no filter"');
+
+assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Grovfelt', ['Grovfelt', 'Fellesfelt']), ['Grovfelt']);
+assert.strictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), null, 'unmatched initial value falls back to no filter, never a false empty state');
+assert.strictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), null);
+
 console.log('person-modal.test.js: all assertions passed');

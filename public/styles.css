@@ -801,6 +801,15 @@ h1, h2, h3 {
     outline-offset: 2px;
 }
 
+/* ── Person modal filters (Year/Stevnetype/Øvelse/Klasse) ─ */
+.person-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.person-filters .checkbox-dropdown { flex: 1 1 150px; min-width: 130px; }
+
 /* ── Person chart (style.css:1378-1484) ─────────────────── */
 /* .chart-tooltip / .chart-legend rules are kept even though tooltip and
    legend interactivity is still deferred, so the fast-follow that adds them

@@ -657,31 +657,143 @@ var StandplassStevnerPage = (function () {
             if (chartEl) { StandplassPersonModal.renderChart(chartEl, modalEntries, modalMetric); }
         }
 
-        function renderPersonModal(personName, rows) {
-            modalEntries = rows.slice().sort(function (a, b) {
-                return (a.date || '') < (b.date || '') ? -1 : 1;
+        var personYearCache = {}; // { personId: { year: entry[] } }
+        var personOpenSeq = 0;
+
+        function fetchPersonYear(personId, year) {
+            personYearCache[personId] = personYearCache[personId] || {};
+            if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
+            return fetcher.fetchYear(dataBase, year).then(function (yearData) {
+                var entries = flattenRows(yearData).filter(function (r) { return r.personId === personId; })
+                    .map(function (r) { return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.discipline,
+                        position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name }; });
+                personYearCache[personId][year] = entries;
+                return entries;
             });
-            var body = rows.slice().sort(compareByKlasse).map(function (r) {
-                return '<tr><td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
-                    + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
-                    + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
-                    + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
-            }).join('');
-            var toggle = '<div class="person-chart-header">'
-                + '<div class="program-toggle" role="group" aria-label="Vis i graf">'
-                + METRICS.map(function (m) {
-                    return '<button type="button" class="program-btn person-chart-toggle'
-                        + (m.key === modalMetric ? ' program-btn--active' : '') + '"'
-                        + ' data-metric="' + m.key + '" aria-pressed="' + (m.key === modalMetric) + '"'
-                        + (m.title ? ' title="' + esc(m.title) + '"' : '')
-                        + '>' + m.label + '</button>';
-                }).join('')
-                + '</div></div>'
-                + '<div id="' + config.idPrefix + '-person-chart"></div>';
-            showModal(esc(personName || 'Ukjent skytter'), toggle
-                + '<table class="ranking-table"><thead><tr><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                + '<tbody>' + (body || ('<tr><td colspan="5">Ingen resultater for ' + activeYear + '.</td></tr>')) + '</tbody></table>');
-            drawChart();
+        }
+
+        function renderPersonModal(personId, personName, initialDisc) {
+            var mySeq = ++personOpenSeq;
+            var selectedYears = [activeYear];
+            var entriesByYear = {};
+            var filters = { types: null, discs: null, classes: null };
+
+            function knownValues(key) {
+                var all = {};
+                Object.keys(entriesByYear).forEach(function (y) {
+                    entriesByYear[y].forEach(function (e) { if (e[key]) { all[e[key]] = true; } });
+                });
+                return Object.keys(all).sort(function (a, b) { return a.localeCompare(b, 'no'); });
+            }
+
+            function refresh() {
+                var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
+                modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
+                var body = modalEntries.slice().sort(compareByKlasse).map(function (r) {
+                    return '<tr><td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
+                        + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
+                        + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
+                        + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
+                }).join('');
+                var tbody = id('-person-table-body');
+                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="5">Ingen resultater.</td></tr>'; }
+                drawChart();
+            }
+
+            function loadYearIfNeeded(year) {
+                if (entriesByYear[year]) { return Promise.resolve(); }
+                return fetchPersonYear(personId, year).then(function (entries) {
+                    if (mySeq !== personOpenSeq) { return; } // modal reopened since; discard this stale resolution
+                    entriesByYear[year] = entries;
+                });
+            }
+
+            function personModalBodyMarkup() {
+                // Each filter wrapper needs the same "checkbox-dropdown" class the
+                // main-page discipline dropdown gets from embed.js's static template
+                // -- it's what makes .checkbox-dropdown-panel's `position: absolute`
+                // anchor under its own button instead of the nearest positioned
+                // ancestor up the tree (the modal shell).
+                return '<div class="person-filters">'
+                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-year-filter"></div>'
+                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-type-filter"></div>'
+                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-disc-filter"></div>'
+                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-class-filter"></div>'
+                    + '</div>'
+                    + '<div class="person-chart-header"><div class="program-toggle" role="group" aria-label="Vis i graf">'
+                    + METRICS.map(function (m) {
+                        return '<button type="button" class="program-btn person-chart-toggle' + (m.key === modalMetric ? ' program-btn--active' : '') + '"'
+                            + ' data-metric="' + m.key + '" aria-pressed="' + (m.key === modalMetric) + '"'
+                            + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
+                    }).join('') + '</div></div>'
+                    + '<div id="' + config.idPrefix + '-person-chart"></div>'
+                    + '<table class="ranking-table"><thead><tr><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
+                    + '<tbody id="' + config.idPrefix + '-person-table-body"></tbody></table>';
+            }
+
+            function toggleSetValue(current, known, v, checked) {
+                var base = current === null ? known.slice() : current.slice();
+                if (checked) { if (base.indexOf(v) < 0) { base.push(v); } } else { base = base.filter(function (x) { return x !== v; }); }
+                return base;
+            }
+
+            // getSelected is a live getter, not a snapshot array -- filters.discs
+            // etc. are reassigned (not mutated) on every toggle via
+            // toggleSetValue, so a captured-by-value array would go stale the
+            // moment the button label or a reopened panel re-reads it. Matches
+            // the discDropdown/clubCombo convention above: .rebuild() after
+            // every state change.
+            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle) {
+                var container = id(suffix);
+                container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
+                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+                    + '<ul class="checkbox-dropdown-list"></ul></div>';
+                var dropdown = FW.makeCheckboxDropdown({
+                    btn: container.querySelector('.checkbox-dropdown-btn'), panel: container.querySelector('.checkbox-dropdown-panel'),
+                    list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
+                    labelNone: labelNone,
+                    getItems: function () { return items.map(function (i) { return { id: i, name: i }; }); },
+                    getSelected: function () { var s = getSelected(); return s === null ? items : s; },
+                    // makeCheckboxDropdown always calls onToggle(id, name, checked) --
+                    // the 3rd positional arg is the real checked boolean, so this must
+                    // take 3 params even though `name` is unused here (id === name for
+                    // these single-value items).
+                    onToggle: function (v, name, checked) { onToggle(v, checked); dropdown.rebuild(); },
+                    onClearAll: function () { onToggle(null, false); dropdown.rebuild(); }
+                });
+                dropdown.rebuild();
+                return dropdown;
+            }
+
+            function wirePersonModalFilters() {
+                var years = [];
+                for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) { years.push(y); }
+                mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
+                    var yr = parseInt(yearStr, 10);
+                    if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
+                    loadYearIfNeeded(yr).then(function () { if (mySeq === personOpenSeq) { refresh(); } });
+                });
+                if (knownValues('competitionType').length > 1) {
+                    mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
+                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); });
+                }
+                if (knownValues('discipline').length > 1) {
+                    mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
+                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); });
+                }
+                if (knownValues('class').length > 1) {
+                    mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
+                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); });
+                }
+            }
+
+            loadYearIfNeeded(activeYear).then(function () {
+                if (mySeq !== personOpenSeq) { return; }
+                filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
+                showModal(esc(personName || 'Ukjent skytter'), personModalBodyMarkup());
+                wirePersonModalFilters();
+                refresh();
+            }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
         }
 
         modalEl.addEventListener('click', function (e) {
@@ -698,22 +810,13 @@ var StandplassStevnerPage = (function () {
 
         wireGlobalEscapeHandler();
 
-        function openPersonModal(personId, year) {
-            fetcher.fetchYear(dataBase, year || activeYear).then(function (yearData) {
-                var rows = flattenRows(yearData).filter(function (r) { return r.personId === personId; });
-                renderPersonModal(rows.length ? rows[0].name : null, rows);
-            }, function () {
-                showModal('Feil', '<p>Kunne ikke laste resultater.</p>');
-            });
-        }
-
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-person-btn');
             if (!btn) { return; }
             var personId = btn.dataset.personId;
             modalOpener = btn;
             urlState.setSearch(StandplassPersonModal.buildPersonUrl(urlState.getSearch(), personId, activeYear));
-            openPersonModal(personId, activeYear);
+            renderPersonModal(personId, btn.dataset.personName, btn.dataset.discipline || null);
         });
 
         rowsEl.addEventListener('click', function (e) {
@@ -738,7 +841,7 @@ var StandplassStevnerPage = (function () {
 
         var personState = StandplassPersonModal.parsePersonFromUrl(urlState.getSearch());
         if (personState) {
-            openPersonModal(personState.personId, personState.year || activeYear);
+            renderPersonModal(personState.personId, null, null);
         }
     }
 

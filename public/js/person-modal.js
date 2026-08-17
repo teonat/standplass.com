@@ -29,6 +29,38 @@ var StandplassPersonModal = (function () {
         return qs ? '?' + qs : '';
     }
 
+    // --- Multi-year merge/filter helpers for the person modal's Year/
+    // Stevnetype/Øvelse/Klasse dropdowns.
+
+    function mergeYearEntries(entriesByYear, selectedYears) {
+        var out = [];
+        selectedYears.forEach(function (y) { (entriesByYear[y] || []).forEach(function (e) { out.push(e); }); });
+        return out.sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
+    }
+
+    function matchesSet(value, set) {
+        if (set === null) { return true; }
+        return set.indexOf(value) >= 0;
+    }
+
+    function getFilteredEntries(entries, filters) {
+        return entries.filter(function (e) {
+            return matchesSet(e.competitionType, filters.types)
+                && matchesSet(e.discipline, filters.discs)
+                && matchesSet(e.class, filters.classes);
+        });
+    }
+
+    // wanted: a single value from the clicked row (e.g. a discipline name);
+    // known: every distinct value actually present in the data. Falls back to
+    // null (no filter) rather than [] (filter to nothing) if wanted isn't a
+    // real value -- an unmatched initial filter must never look like "no
+    // results".
+    function resolveInitialFilter(wanted, known) {
+        if (!wanted) { return null; }
+        return known.indexOf(wanted) >= 0 ? [wanted] : null;
+    }
+
     // --- Chart: pure math/data-transform helpers + SVG string rendering,
     // ported from ressurser/nsf-ui.js (_shortDate/_dotColor/_chartPoints/
     // _renderChart). Tooltip/legend/expand-dialog interactivity is out of
@@ -186,7 +218,10 @@ var StandplassPersonModal = (function () {
         shortDate: shortDate,
         chartPoints: chartPoints,
         dotColor: dotColor,
-        renderChart: renderChart
+        renderChart: renderChart,
+        mergeYearEntries: mergeYearEntries,
+        getFilteredEntries: getFilteredEntries,
+        resolveInitialFilter: resolveInitialFilter
     };
 })();
 
