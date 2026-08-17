@@ -819,6 +819,67 @@ var StandplassStevnerPage = (function () {
 
         wireGlobalEscapeHandler();
 
+        // Competition-detail modal (native <dialog>, not the person modal's
+        // activeModalCloser system -- <dialog> handles Escape/focus-trap on
+        // its own). Appended onto `root` directly when `root` is a shadow
+        // root (the <standplass-results> embed case), since a shadow root
+        // has no `.body`; onto document.body for the direct-mount case.
+        var compDialog = id('-comp-dialog');
+        if (!compDialog) {
+            compDialog = document.createElement('dialog');
+            compDialog.id = config.idPrefix + '-comp-dialog';
+            compDialog.className = 'comp-modal-dialog';
+            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
+                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
+                + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
+                + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
+                + '<div class="comp-modal-body"></div>';
+            (root === document ? document.body : root).appendChild(compDialog);
+        }
+        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
+
+        function openCompModal(compId, title) {
+            compDialog.dataset.compId = compId;
+            compDialog.querySelector('.comp-modal-title').textContent = title || '';
+            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            // Reset to the Detaljer tab every time the modal opens for a new
+            // competition, so a previous open's Resultater selection doesn't
+            // leak into the next.
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
+                b.classList.toggle('program-btn--active', isDetaljer);
+                b.setAttribute('aria-pressed', String(isDetaljer));
+            });
+            compDialog.showModal();
+            StandplassCompModal.fetchDetail(compId, window.fetch.bind(window)).then(function (data) {
+                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(data);
+            }, function () { bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>'; });
+        }
+
+        compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-comp-tab]');
+            if (!btn) { return; }
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isActive = b === btn;
+                b.classList.toggle('program-btn--active', isActive);
+                b.setAttribute('aria-pressed', String(isActive));
+            });
+            if (btn.getAttribute('data-comp-tab') !== 'resultater') { return; }
+            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            var compId = compDialog.dataset.compId;
+            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
+                bodyEl.innerHTML = StandplassCompModal.renderResultsBody(results);
+            }, function () { bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>'; });
+        });
+
+        rowsEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-comp-btn');
+            if (!btn) { return; }
+            openCompModal(btn.dataset.compId, btn.textContent);
+        });
+
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-person-btn');
             if (!btn) { return; }

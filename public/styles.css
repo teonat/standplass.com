@@ -801,6 +801,29 @@ h1, h2, h3 {
     outline-offset: 2px;
 }
 
+/* ── Competition-detail modal (native <dialog>) ─ */
+.comp-modal-dialog {
+    max-width: 640px;
+    width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 0;
+}
+.comp-modal-dialog::backdrop { background: rgba(0,0,0,0.4); }
+.comp-modal-dialog .program-toggle { margin: 0.75rem 1.5rem 0; width: auto; }
+.comp-modal-dialog .comp-modal-body { padding: 0 1.5rem 1.5rem; }
+.comp-modal-infocard { padding: 1rem 0; }
+.comp-modal-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.125rem 0.5rem; border-radius: 999px; }
+.comp-modal-badge--yes { background: var(--brand-accent); color: var(--white); }
+.comp-modal-badge--no { background: var(--surface-base); color: var(--text-muted); }
+.comp-modal-comp-number { display: inline-block; font-size: 0.8125rem; color: var(--text-muted); }
+.comp-modal-description { margin-top: 0.75rem; }
+.comp-modal-events { padding: 0 0 1.5rem; }
+.comp-modal-section-title { font-weight: 700; margin: 1rem 0 0.5rem; }
+.comp-modal-class-tag { display: inline-block; background: var(--surface-base); border-radius: 4px; padding: 0.125rem 0.5rem; margin: 0 0.25rem 0.25rem 0; font-size: 0.8125rem; }
+
 /* ── Person modal filters (Year/Stevnetype/Øvelse/Klasse) ─ */
 .person-filters {
     display: flex;
