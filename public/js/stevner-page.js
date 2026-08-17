@@ -67,8 +67,8 @@ var StandplassStevnerPage = (function () {
         return rows;
     }
 
-    // Shared by the flat-row name/discipline autocomplete (allRows) and the
-    // card view (per-competition) — same predicate, two different inputs.
+    // Row-level filter predicate for the card view (buildCompetitionCards is
+    // its only caller; the name autocomplete does its own inline filtering).
     function matchesFilters(row, filters) {
         if (filters.activeTab === 'klasse' && !row.applicableForClassification) { return false; }
         if (filters.activeTab === 'ikke' && row.applicableForClassification) { return false; }
@@ -190,7 +190,9 @@ var StandplassStevnerPage = (function () {
         { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
     ];
 
-    function fmtNum(n) { return n == null ? '–' : String(n).replace('.', ','); }
+    // Rounds for display only -- competitionStats keeps its raw numbers. The
+    // extra Number() drops a trailing ".0" so whole numbers stay whole.
+    function fmtNum(n) { return n == null ? '–' : String(Number(Number(n).toFixed(1))).replace('.', ','); }
 
     function statsLine(stats) {
         return stats.skyttere + ' skyttere · ' + stats.startere + ' startere · '
@@ -200,6 +202,7 @@ var StandplassStevnerPage = (function () {
     function pad2(n) { return n < 10 ? '0' + n : String(n); }
     function formatUpdated(iso) {
         var d = new Date(iso);
+        if (isNaN(d.getTime())) { return ''; }
         return 'Oppdatert ' + pad2(d.getUTCDate()) + '.' + pad2(d.getUTCMonth() + 1) + '.' + d.getUTCFullYear()
             + ' kl. ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
     }
@@ -244,9 +247,9 @@ var StandplassStevnerPage = (function () {
             + '</div>'
             + '<table class="ranking-table"><thead><tr>'
             + '<th scope="col">#</th><th scope="col">Navn</th>'
-            + '<th scope="col" class="stevner-tablet-hide">Klubb</th>'
+            + '<th scope="col">Klubb</th>'
             + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
-            + '<th scope="col">Poeng</th><th scope="col" class="stevner-tablet-hide">Ranking</th>'
+            + '<th scope="col">Poeng</th><th scope="col">Ranking</th>'
             + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
             + '<p class="stevner-comp-stats">' + esc(statsLine(card.stats)) + '</p>'
             + '</div>';
@@ -323,6 +326,10 @@ var StandplassStevnerPage = (function () {
         // national list.
         var klubbResolved = false;
         var klubbUnmatched = false;
+        // Same idea as personOpenSeq/compOpenSeq below: year files are several
+        // MB, so rapid year-switching can let a slow older response land after
+        // a newer one and leave the page showing a year nothing else agrees on.
+        var yearSeq = 0;
 
         var pagination = StandplassPagination.createController({
             pageSize: 20, // matches the source's competition-count-based paging (a later task's concern to tune further; 20 is the right value now)
@@ -395,7 +402,10 @@ var StandplassStevnerPage = (function () {
         }
 
         function loadYear(year) {
+            var mySeq = ++yearSeq;
+            setStatus('Laster…');
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
+                if (mySeq !== yearSeq) { return; } // a newer year was picked since this fetch started
                 allRows = flattenRows(yearData);
                 currentCompetitions = yearData.competitions || [];
                 currentCompetitions.forEach(function (c) {
@@ -417,7 +427,7 @@ var StandplassStevnerPage = (function () {
                 clubCombo.rebuild();
                 organizerCombo.rebuild();
                 return applyFilters();
-            }, showLoadError);
+            }, function (err) { if (mySeq === yearSeq) { showLoadError(err); } });
         }
 
         // ── Year select (stevner.js:562-570 populate, 124-128 change) ─────
@@ -469,16 +479,12 @@ var StandplassStevnerPage = (function () {
         });
 
         // ── Club tag combobox (stevner.js:160-194) ───────────────────────
-        // The club selection is the one filter that is URL-synced, because
-        // embed-builder.js builds its snippet from the current query string
-        // (its ALLOWED_PARAMS whitelist is klubb/club/mode) — without this,
-        // "Opprett iframe" would hand a club admin an unfiltered national
-        // embed. ?klubb= is single-valued, so 0 or 2+ chips means no param.
-        // The other filters (discipline/name/tab/group) stay session-only.
-        // Single-value URL param write-through, same read-modify-write pattern as
-        // syncKlubbParam — shared here since 4 call sites now need it (tab, group,
-        // disc, name), where syncKlubbParam only ever served klubb's own single
-        // call site.
+        // The club selection has to be URL-synced, because embed-builder.js
+        // builds its snippet from the current query string (its ALLOWED_PARAMS
+        // whitelist is klubb/club/mode) — without this, "Opprett iframe" would
+        // hand a club admin an unfiltered national embed. ?klubb= is
+        // single-valued, so 0 or 2+ chips means no param. tab/group/disc/name/
+        // organizer/comp are URL-synced too, via setUrlParam below.
         function setUrlParam(key, value) {
             var qs = new URLSearchParams(urlState.getSearch());
             if (value) { qs.set(key, value); } else { qs.delete(key); }
@@ -490,9 +496,7 @@ var StandplassStevnerPage = (function () {
             // no club, otherwise the stale slug filter would keep applying on
             // top of the new selection.
             klubbUnmatched = false;
-            var qs = new URLSearchParams(urlState.getSearch());
-            if (activeClubs.length === 1) { qs.set('klubb', activeClubs[0]); } else { qs.delete('klubb'); }
-            urlState.setSearch('?' + qs.toString());
+            setUrlParam('klubb', activeClubs.length === 1 ? activeClubs[0] : null);
         }
 
         var clubCombo = FW.makeTagComboHandlers({
@@ -782,14 +786,20 @@ var StandplassStevnerPage = (function () {
             function refresh() {
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
-                var body = modalEntries.slice().sort(compareByKlasse).map(function (r) {
-                    return '<tr><td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
+                // Chronological, oldest first -- same ordering the chart's X-axis
+                // uses. With up to 6 years merged, the date is what tells two
+                // otherwise identical discipline/class rows apart.
+                var body = modalEntries.slice().sort(function (a, b) {
+                    return (a.date || '') < (b.date || '') ? -1 : 1;
+                }).map(function (r) {
+                    return '<tr><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
+                        + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
                         + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
                         + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
                         + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
                 }).join('');
                 var tbody = id('-person-table-body');
-                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="5">Ingen resultater.</td></tr>'; }
+                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="6">Ingen resultater.</td></tr>'; }
                 drawChart();
             }
 
@@ -820,7 +830,7 @@ var StandplassStevnerPage = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + config.idPrefix + '-person-chart"></div>'
-                    + '<table class="ranking-table"><thead><tr><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
+                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
                     + '<tbody id="' + config.idPrefix + '-person-table-body"></tbody></table>';
             }
 
@@ -869,7 +879,16 @@ var StandplassStevnerPage = (function () {
                 mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
                     var yr = parseInt(yearStr, 10);
                     if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
-                    loadYearIfNeeded(yr).then(function () { if (mySeq === personOpenSeq) { refresh(); } });
+                    loadYearIfNeeded(yr).then(function () {
+                        if (mySeq !== personOpenSeq) { return; }
+                        // A newly-checked year can introduce discipline/class/type
+                        // values the dropdowns were never mounted with (or at all,
+                        // if the first year had ≤1 distinct value). Remounting is
+                        // safe: mountFilterDropdown rewrites container.innerHTML
+                        // and wires fresh listeners each call.
+                        wirePersonModalFilters();
+                        refresh();
+                    });
                 }, function () { selectedYears = [activeYear]; refresh(); });
                 if (knownValues('competitionType').length > 1) {
                     mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
@@ -890,8 +909,11 @@ var StandplassStevnerPage = (function () {
 
             loadYearIfNeeded(activeYear).then(function () {
                 if (mySeq !== personOpenSeq) { return; }
+                // A ?person= deep link has no name to pass in (there is no row to
+                // read it from), so take it off the fetched entries instead.
+                var resolvedName = personName || ((entriesByYear[activeYear] || [])[0] || {}).name;
                 filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
-                showModal(esc(personName || 'Ukjent skytter'), personModalBodyMarkup());
+                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
                 refresh();
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });

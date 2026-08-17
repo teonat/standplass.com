@@ -649,9 +649,15 @@ h1, h2, h3 {
 /* Reuses this repo's existing 700px breakpoint (already used elsewhere in
    this file, e.g. above) rather than porting the source's 900px -- this
    repo already treats 700px as its one tablet/mobile line. */
-.stevner-tablet-hide { display: table-cell; }
+/* nth-child, not a class on the <th>s: renderRows() emits plain <td>s with no
+   per-cell classes, so a class-based rule would hide the headers only and
+   misalign every card table. Columns: # / Navn / Klubb / Øvelse / Klasse /
+   Poeng / Ranking -- Klubb is 3, Ranking is 7. Coexists with
+   .stevner-hide-club-col (JS-toggled, column 3 only); display:none is
+   idempotent, so both may apply at once. */
 @media (max-width: 700px) {
-    .stevner-tablet-hide { display: none; }
+    .ranking-card td:nth-child(3), .ranking-card th:nth-child(3),
+    .ranking-card td:nth-child(7), .ranking-card th:nth-child(7) { display: none; }
 }
 
 .ranking-meta {

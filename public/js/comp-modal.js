@@ -70,10 +70,11 @@ var StandplassCompModal = (function () {
         }).join('');
         return '<div class="comp-modal-infocard">'
             + '<p class="comp-modal-comp-number">Stevnenr. ' + esc(data.competitionNumber || '–') + '</p> ' + badge
-            // ponytail: data.description is trusted, pre-sanitized HTML from
-            // the source API (matches the source site's own behavior) -- not
-            // re-escaped here by design. See task-9 report for the flag on this.
-            + (data.description ? '<div class="comp-modal-description">' + data.description + '</div>' : '')
+            // data.description comes from a third party (any NSF competition
+            // organizer) and is escaped like every other field here. This drops
+            // any HTML formatting the API sends; sanitizing instead would mean a
+            // new dependency, which this project deliberately avoids.
+            + (data.description ? '<div class="comp-modal-description">' + esc(data.description) + '</div>' : '')
             + '</div>' + '<div class="comp-modal-events">' + eventsHtml + '</div>';
     }
 
