@@ -43,7 +43,8 @@ var comps = [
         results: [{ personId: '2', name: 'Kari', club: 'Klubb B', discipline: 'Grovfelt', class: 'B', position: 1, score: 29, rankingScore: 92 }]
     }
 ];
-var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], klubbUnmatched: false, klubb: null, nameQuery: '', groupMode: 'klasse' };
+var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], klubbUnmatched: false, klubb: null, nameQuery: '', groupMode: 'klasse',
+    activeOrganizers: [], compQuery: '' };
 
 var cards = SP.buildCompetitionCards(comps, baseFilters);
 assert.strictEqual(cards.length, 2, 'both competitions survive an unfiltered build');
@@ -82,5 +83,16 @@ assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 27.4, median:
 assert.strictEqual(SP.statsLine({ skyttere: 0, startere: 0, snitt: null, median: null }),
     '0 skyttere · 0 startere · snitt – · median –');
 assert.strictEqual(SP.formatUpdated('2026-08-17T14:05:00Z'), 'Oppdatert 17.08.2026 kl. 14:05');
+
+var byOrganizer = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { activeOrganizers: ['Klubb A'] }));
+assert.strictEqual(byOrganizer.length, 1, 'only c1 (organizationName "Klubb A") matches');
+assert.strictEqual(byOrganizer[0].id, 'c1');
+
+var byTitle = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { compQuery: 'høst' }));
+assert.strictEqual(byTitle.length, 1, 'case-insensitive substring match against comp.title');
+assert.strictEqual(byTitle[0].id, 'c2');
+
+var noMatch = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { compQuery: 'nonexistent' }));
+assert.strictEqual(noMatch.length, 0);
 
 console.log('stevner-page.test.js: all assertions passed');

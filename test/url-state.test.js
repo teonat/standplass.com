@@ -69,4 +69,10 @@ assert.strictEqual(qs.get('group'), 'poeng');
 assert.strictEqual(qs.get('disc'), 'Grovfelt');
 assert.strictEqual(qs.get('name'), 'Ola');
 
+// organizer/comp filters are also tracked, same as the others above.
+filters.setSearch('?organizer=Klubb%20A&comp=h%C3%B8st');
+var qs2 = new URLSearchParams(filters.getSearch());
+assert.strictEqual(qs2.get('organizer'), 'Klubb A');
+assert.strictEqual(qs2.get('comp'), 'høst');
+
 console.log('url-state.test.js: all assertions passed');

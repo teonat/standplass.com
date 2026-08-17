@@ -110,11 +110,23 @@ var StandplassStevnerPage = (function () {
         return groups;
     }
 
+    // Competition-level guard, separate from matchesFilters (which filters
+    // individual rows): organizer/title narrow which competitions appear at
+    // all, before any row-level filtering happens.
+    function matchesCompetition(comp, filters) {
+        if (filters.activeOrganizers && filters.activeOrganizers.length
+            && filters.activeOrganizers.indexOf(comp.organizationName) < 0) { return false; }
+        if (filters.compQuery && !(comp.title && comp.title.toLowerCase().indexOf(filters.compQuery) >= 0)) { return false; }
+        return true;
+    }
+
     function buildCompetitionCards(competitions, filters) {
         var withLowerQuery = { activeTab: filters.activeTab, activeDiscs: filters.activeDiscs, activeClubs: filters.activeClubs,
-            klubbUnmatched: filters.klubbUnmatched, klubb: filters.klubb, nameQuery: (filters.nameQuery || '').toLowerCase() };
+            klubbUnmatched: filters.klubbUnmatched, klubb: filters.klubb, nameQuery: (filters.nameQuery || '').toLowerCase(),
+            activeOrganizers: filters.activeOrganizers || [], compQuery: (filters.compQuery || '').toLowerCase() };
         var cards = [];
         (competitions || []).forEach(function (comp) {
+            if (!matchesCompetition(comp, withLowerQuery)) { return; }
             var rows = (comp.results || []).map(function (r) { return decorateRow(comp, r); })
                 .filter(function (r) { return matchesFilters(r, withLowerQuery); });
             if (!rows.length) { return; }
@@ -282,6 +294,8 @@ var StandplassStevnerPage = (function () {
         var activeClubs = [];
         var activeDiscs = [];
         var nameQuery = '';
+        var activeOrganizers = [];
+        var compQuery = '';
         var activeTab = 'alle';                    // 'alle' | 'klasse' | 'ikke'
         var activeGroupMode = 'klasse';            // key of COMPARATORS
         var tabParam = params.get('tab');
@@ -292,8 +306,13 @@ var StandplassStevnerPage = (function () {
         if (discParam) { activeDiscs = [discParam]; }
         var nameParamInit = params.get('name');
         if (nameParamInit) { nameQuery = nameParamInit; }
+        var organizerParam = params.get('organizer');
+        if (organizerParam) { activeOrganizers = [organizerParam]; }
+        var compParam = params.get('comp');
+        if (compParam) { compQuery = compParam; }
         var masterClubs = {};                      // accumulates across loaded years (stevner.js:353-373)
         var masterDiscs = {};
+        var masterOrganizers = {};
         var allRows = [];                          // every row of activeYear
         var currentCompetitions = [];               // raw competitions of activeYear, feeds card pagination
         var visibleCards = [];                      // after filters, built into cards
@@ -362,7 +381,8 @@ var StandplassStevnerPage = (function () {
 
         function currentFilters() {
             return { activeTab: activeTab, activeDiscs: activeDiscs, activeClubs: activeClubs,
-                klubbUnmatched: klubbUnmatched, klubb: klubb, nameQuery: nameQuery, groupMode: activeGroupMode };
+                klubbUnmatched: klubbUnmatched, klubb: klubb, nameQuery: nameQuery, groupMode: activeGroupMode,
+                activeOrganizers: activeOrganizers, compQuery: compQuery };
         }
 
         // Every filter change re-builds cards from scratch and restarts
@@ -378,6 +398,9 @@ var StandplassStevnerPage = (function () {
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                 allRows = flattenRows(yearData);
                 currentCompetitions = yearData.competitions || [];
+                currentCompetitions.forEach(function (c) {
+                    if (c.organizationName) { masterOrganizers[c.organizationName] = true; }
+                });
                 lastUpdated = yearData.lastUpdated;
                 allRows.forEach(function (r) {
                     if (r.club) { masterClubs[r.club] = true; }
@@ -392,6 +415,7 @@ var StandplassStevnerPage = (function () {
                 }
                 discDropdown.rebuild();
                 clubCombo.rebuild();
+                organizerCombo.rebuild();
                 return applyFilters();
             }, showLoadError);
         }
@@ -507,6 +531,47 @@ var StandplassStevnerPage = (function () {
             }
         });
 
+        // ── Organizer combo (competition-level filter, mirrors clubCombo) ─
+        function syncOrganizerParam() {
+            setUrlParam('organizer', activeOrganizers.length === 1 ? activeOrganizers[0] : null);
+        }
+
+        var organizerCombo = FW.makeTagComboHandlers({
+            input: id('-organizer-input'),
+            list: id('-organizer-list'),
+            tagsEl: id('-organizer-tags'),
+            clear: id('-organizer-clear'),
+            getItems: function (q) {
+                var lower = (q || '').toLowerCase();
+                return Object.keys(masterOrganizers)
+                    .sort(function (a, b) { return a.localeCompare(b, 'no'); })
+                    .filter(function (o) { return activeOrganizers.indexOf(o) < 0; })
+                    .filter(function (o) { return !lower || o.toLowerCase().indexOf(lower) >= 0; })
+                    .map(function (o) { return { id: o, name: o }; });
+            },
+            getSelected: function () {
+                return activeOrganizers.map(function (o) { return { id: o, name: o }; });
+            },
+            onSelect: function (id_) {
+                if (activeOrganizers.indexOf(id_) < 0) { activeOrganizers.push(id_); }
+                organizerCombo.rebuild();
+                syncOrganizerParam();
+                applyFilters();
+            },
+            onRemove: function (id_) {
+                activeOrganizers = activeOrganizers.filter(function (o) { return o !== id_; });
+                organizerCombo.rebuild();
+                syncOrganizerParam();
+                applyFilters();
+            },
+            onClearAll: function () {
+                activeOrganizers = [];
+                organizerCombo.rebuild();
+                syncOrganizerParam();
+                applyFilters();
+            }
+        });
+
         // ── Name search autocomplete (stevner.js:232-292) ────────────────
         var nameEl = id('-name');
         if (nameQuery) { nameEl.value = nameQuery; }
@@ -561,6 +626,33 @@ var StandplassStevnerPage = (function () {
                 nameQuery = '';
                 commitName();
             }
+        });
+
+        // ── Competition-title search (competition-level filter, plain
+        // substring, no autocomplete list -- mirrors the name search's
+        // debounce pattern without its pick-from-suggestions dropdown) ────
+        var compEl = id('-comp');
+        if (compQuery) { compEl.value = compQuery; }
+        var compWrap = id('-comp-wrap');
+        var compTimer = null;
+
+        function commitComp() {
+            clearTimeout(compTimer);
+            applyFilters();
+            compWrap.classList.toggle('autocomplete-wrap--has-value', !!compQuery);
+            setUrlParam('comp', compQuery || null);
+        }
+
+        compEl.addEventListener('input', function () {
+            compQuery = compEl.value.trim();
+            clearTimeout(compTimer);
+            compTimer = setTimeout(commitComp, 300);
+        });
+        id('-comp-clear').addEventListener('click', function () {
+            compEl.value = '';
+            compQuery = '';
+            commitComp();
+            compEl.focus();
         });
 
         // ── Tab + group toggles (stevner.js:574-585 / 99-122) ────────────
@@ -940,7 +1032,8 @@ var StandplassStevnerPage = (function () {
     }
 
     return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
-        buildCompetitionCards: buildCompetitionCards, groupCompetitionRows: groupCompetitionRows,
+        buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
+        groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, columns: columns,
         statsLine: statsLine, formatUpdated: formatUpdated };
 })();
