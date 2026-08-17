@@ -63,8 +63,8 @@ var StandplassPersonModal = (function () {
 
     // --- Chart: pure math/data-transform helpers + SVG string rendering,
     // ported from ressurser/nsf-ui.js (_shortDate/_dotColor/_chartPoints/
-    // _renderChart). Tooltip/legend/expand-dialog interactivity is out of
-    // scope here — this renders the static axes/line/dots only.
+    // _renderChart). Tooltip/legend/overlap-ring interactivity is wired;
+    // the expand-to-dialog view is still out of scope.
 
     var MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
 
@@ -101,6 +101,87 @@ var StandplassPersonModal = (function () {
             if (cls === 'D') { return v >= 85 ? '#a855f7' : '#eab308'; }
         }
         return 'var(--brand-accent)';
+    }
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    function fmtMetric(v, metric) { return metric === 'rankingScore' ? Number(v).toFixed(2) : String(v); }
+
+    function computeOverlapCounts(entries, metric) {
+        var counts = {};
+        entries.forEach(function (e) {
+            var key = e.date + '|' + fmtMetric(e[metric], metric);
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return counts;
+    }
+
+    function buildTooltipContent(entry, siblings, metric) {
+        var header = '<div class="chart-tip-val">' + fmtMetric(entry[metric], metric) + '</div>'
+            + '<div class="chart-tip-metric">' + esc(CHART_TITLES[metric] || '') + '</div>'
+            + '<div class="chart-tip-date">' + esc(shortDate(entry.date)) + '</div>';
+        var rows = siblings.length > 1
+            ? siblings.map(function (s) { return '<div class="chart-tip-row">' + esc(s.discipline || '') + ' – ' + esc(s.class || '') + '</div>'; }).join('')
+            : '<div class="chart-tip-row">' + esc(entry.discipline || '') + ' – ' + esc(entry.class || '') + '</div>';
+        return header + rows;
+    }
+
+    // Mirrors dotColor's own per-class thresholds exactly, in display order
+    // best→worst. Only the classes actually present in the charted points are
+    // shown, so switching between a Class A shooter's history and a Class C
+    // shooter's history shows the right legend, not every class always.
+    var RANKING_BANDS = {
+        A: [['#eab308', '97+'], ['#ef4444', '85–96'], ['#f97316', '<85']],
+        B: [['#22c55e', '97+'], ['#eab308', '85–96'], ['#ef4444', '75–84'], ['#f97316', '<75']],
+        C: [['#a855f7', '97+'], ['#22c55e', '85–96'], ['#eab308', '<85']],
+        D: [['#a855f7', '85+'], ['#eab308', '<85']]
+    };
+
+    function chartLegend(pts, metric) {
+        if (metric === 'position') {
+            return '<div class="chart-legend">'
+                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#e8b923"></span>1. plass</span>'
+                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#c8d0d8"></span>2. plass</span>'
+                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#b87333"></span>3. plass</span>'
+                + '</div>';
+        }
+        if (metric !== 'rankingScore') { return ''; }
+        var classesInView = {};
+        pts.forEach(function (e) { if (e.class && RANKING_BANDS[e.class]) { classesInView[e.class] = true; } });
+        var classKeys = Object.keys(classesInView).sort();
+        if (!classKeys.length) { return ''; }
+        return '<div class="chart-legend">' + classKeys.map(function (cls) {
+            return '<span class="chart-legend-group">Klasse ' + esc(cls) + ': ' + RANKING_BANDS[cls].map(function (band) {
+                return '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + band[0] + '"></span>' + esc(band[1]) + '</span>';
+            }).join('') + '</span>';
+        }).join('') + '</div>';
+    }
+
+    function wireChartTooltip(svgContainer, pts, metric) {
+        var tooltip = svgContainer.querySelector('.chart-tooltip');
+        var pinned = null;
+        function siblingsOf(dot) {
+            return pts.filter(function (e) { return e.date === dot.dataset.date && fmtMetric(e[metric], metric) === dot.dataset.val; });
+        }
+        function show(dot) {
+            var entry = { date: dot.dataset.date, discipline: dot.dataset.disc, class: dot.dataset.class };
+            entry[metric] = Number(dot.dataset.val);
+            tooltip.innerHTML = buildTooltipContent(entry, siblingsOf(dot), metric);
+            tooltip.hidden = false;
+            var rect = dot.getBoundingClientRect(), wrapRect = svgContainer.getBoundingClientRect();
+            tooltip.style.left = (rect.left - wrapRect.left) + 'px';
+            tooltip.style.top = (rect.top - wrapRect.top - tooltip.offsetHeight - 6) + 'px';
+        }
+        function hide() { if (!pinned) { tooltip.hidden = true; } }
+        svgContainer.addEventListener('mouseover', function (e) { var d = e.target.closest('.person-chart-dot'); if (d) { show(d); } });
+        svgContainer.addEventListener('mouseout', hide);
+        svgContainer.addEventListener('focusin', function (e) { var d = e.target.closest('.person-chart-dot'); if (d) { show(d); } });
+        svgContainer.addEventListener('focusout', hide);
+        svgContainer.addEventListener('click', function (e) {
+            var d = e.target.closest('.person-chart-dot');
+            if (d) { pinned = (pinned === d) ? null : d; if (pinned) { show(d); } else { hide(); } }
+            else if (pinned) { pinned = null; hide(); }
+        });
     }
 
     var CHART_TITLES = { rankingScore: 'Ranking', score: 'Poengsum', position: 'Plassering' };
@@ -190,11 +271,18 @@ var StandplassPersonModal = (function () {
                 + '<text x="' + px + '" y="' + (H - PB + 11) + '" text-anchor="middle" font-size="8" fill="var(--text-muted)">' + shortDate(lp[idx].date) + '</text>';
         }).join('');
 
+        var overlapCounts = computeOverlapCounts(pts, metric);
         var dots = pts.map(function (e) {
             var x = xPos(new Date(e.date).getTime());
             var y = PT + norm(Number(e[metric])) * (H - PT - PB);
             var color = dotColor(e, metric);
-            return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2" fill="' + color + '"/>';
+            var key = e.date + '|' + fmtMetric(e[metric], metric);
+            var ring = overlapCounts[key] > 1
+                ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="none" stroke="' + color + '"/>' : '';
+            return ring + '<circle class="person-chart-dot" tabindex="0" data-date="' + esc(e.date) + '" data-val="' + esc(fmtMetric(e[metric], metric))
+                + '" data-disc="' + esc(e.discipline || '') + '" data-class="' + esc(e.class || '')
+                + '" aria-label="' + esc(fmtMetric(e[metric], metric) + ' – ' + shortDate(e.date)) + '"'
+                + ' cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2" fill="' + color + '"/>';
         }).join('');
 
         var svg = '<div class="person-chart-wrap">'
@@ -206,9 +294,17 @@ var StandplassPersonModal = (function () {
             + yLabels
             + xTicks
             + '</svg>'
+            + chartLegend(pts, metric)
+            + '<div class="chart-tooltip" hidden></div>'
             + '</div>';
 
         svgContainer.innerHTML = svg;
+        // ponytail: guarded because tests exercise renderChart against plain
+        // {innerHTML} stand-ins with no real DOM behind them (see
+        // test/person-modal.test.js) — real callers always pass an element.
+        if (typeof svgContainer.querySelector === 'function') {
+            wireChartTooltip(svgContainer, pts, metric);
+        }
     }
 
     return {
@@ -218,6 +314,8 @@ var StandplassPersonModal = (function () {
         shortDate: shortDate,
         chartPoints: chartPoints,
         dotColor: dotColor,
+        computeOverlapCounts: computeOverlapCounts,
+        buildTooltipContent: buildTooltipContent,
         renderChart: renderChart,
         mergeYearEntries: mergeYearEntries,
         getFilteredEntries: getFilteredEntries,

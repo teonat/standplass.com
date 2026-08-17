@@ -811,10 +811,13 @@ h1, h2, h3 {
 .person-filters .checkbox-dropdown { flex: 1 1 150px; min-width: 130px; }
 
 /* ── Person chart (style.css:1378-1484) ─────────────────── */
-/* .chart-tooltip / .chart-legend rules are kept even though tooltip and
-   legend interactivity is still deferred, so the fast-follow that adds them
-   needs no second CSS pass. The .chart-expand-btn / chart-expand-dialog
+/* Tooltip/legend are wired now (hover/focus/click on .person-chart-dot).
+   Positioned absolute within .person-chart-wrap, not fixed against the
+   viewport as the source used — this modal is a plain <div>, not a native
+   <dialog>, so viewport-relative positioning with measure-then-clamp isn't
+   needed for a chart this small. The .chart-expand-btn / chart-expand-dialog
    rules are left out — that control isn't rendered here at all. */
+.person-chart-wrap { position: relative; }
 .person-chart-header {
     display: flex;
     flex-wrap: wrap;
@@ -828,7 +831,7 @@ h1, h2, h3 {
     outline-offset: 3px;
 }
 .chart-tooltip {
-    position: fixed;
+    position: absolute;
     background: var(--surface-card);
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -836,13 +839,12 @@ h1, h2, h3 {
     font-size: 0.75rem;
     line-height: 1.45;
     pointer-events: none;
-    z-index: 200;
+    z-index: 5;
     box-shadow: 0 2px 10px rgba(0,0,0,0.18);
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
     max-width: 240px;
-    transform: translateX(-50%);
 }
 .chart-tip-val {
     font-size: 0.875rem;
@@ -866,10 +868,21 @@ h1, h2, h3 {
     font-size: 0.6875rem;
     color: var(--text-muted);
 }
+.chart-legend-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
 .chart-legend-item {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+}
+.chart-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
 }
 
 /* ── Dark-mode text fixes ─────────────────────────────────────────── */

@@ -605,15 +605,16 @@ var StandplassStevnerPage = (function () {
         // ── Person modal ─────────────────────────────────────────────────
         // URL-state wiring (StandplassPersonModal) + the real SVG chart
         // (StandplassPersonModal.renderChart) above the per-entry table. The
-        // metric toggle mirrors nsf-ui.js:1685-1707; the tooltip / expand-dialog
-        // interactivity from that file is still deferred.
+        // metric toggle mirrors nsf-ui.js:1685-1707; renderChart itself now
+        // wires the tooltip/legend/overlap-ring, only the expand-dialog view
+        // from that file is still deferred.
         var modalEl = id('-person-modal');
         var METRICS = [
             { key: 'rankingScore', label: 'Ranking' },
             { key: 'score', label: 'Poeng', title: 'Poengsum varierer med stevnets maks-score — ikke direkte sammenlignbar på tvers av stevner' },
             { key: 'position', label: 'Plassering' }
         ];
-        var modalMetric = 'rankingScore';
+        var modalMetric = view === 'bane' ? 'score' : 'rankingScore';
         var modalEntries = [];
         // The element that opened the modal, so focus can go back where it came
         // from on close. Native <dialog>.showModal() (nsf-ui.js:1370) does this

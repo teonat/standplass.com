@@ -97,4 +97,17 @@ assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Grovfelt', ['
 assert.strictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), null, 'unmatched initial value falls back to no filter, never a false empty state');
 assert.strictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), null);
 
+var overlapEntries = [
+    { date: '2025-05-01', rankingScore: 90 }, { date: '2025-05-01', rankingScore: 90 }, { date: '2025-06-01', rankingScore: 80 }
+];
+var counts = StandplassPersonModal.computeOverlapCounts(overlapEntries, 'rankingScore');
+assert.strictEqual(counts['2025-05-01|90.00'], 2);
+assert.strictEqual(counts['2025-06-01|80.00'], 1);
+
+var html = StandplassPersonModal.buildTooltipContent({ date: '2025-05-01', rankingScore: 90, discipline: 'Grovfelt', class: 'A' },
+    [{ date: '2025-05-01', rankingScore: 90, discipline: 'Grovfelt', class: 'A' }, { date: '2025-05-01', rankingScore: 90, discipline: 'Fellesfelt', class: 'B' }],
+    'rankingScore');
+assert.ok(html.indexOf('90.00') !== -1);
+assert.ok(html.indexOf('Grovfelt') !== -1 && html.indexOf('Fellesfelt') !== -1, 'both overlapping entries get their own line');
+
 console.log('person-modal.test.js: all assertions passed');
