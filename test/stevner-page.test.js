@@ -73,4 +73,8 @@ assert.strictEqual(ovelseMode[0].groups.length, 2, 'ovelse mode groups by discip
 
 assert.ok(cards[0].groups[0].rows[0].nameHtml.indexOf('data-discipline="') !== -1, 'nameHtml now carries the row discipline for Task 7');
 
+var byKlubbSlug = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { klubbUnmatched: true, klubb: 'a' }));
+assert.strictEqual(byKlubbSlug.length, 1, 'klubbUnmatched filter with slug "a" matches "Klubb A" and drops "Klubb B" competitions entirely');
+assert.strictEqual(byKlubbSlug[0].stats.startere, 2, 'c1 keeps only its 2 Klubb A rows when filtered by klub slug');
+
 console.log('stevner-page.test.js: all assertions passed');

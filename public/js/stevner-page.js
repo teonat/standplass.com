@@ -45,6 +45,9 @@ var StandplassStevnerPage = (function () {
             class: r.class,
             score: r.score,
             rankingScore: r.rankingScore,
+            // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
+            // date" on this string and parses it as UTC midnight, both of which break on
+            // a full datetime.
             date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
             applicableForClassification: comp.applicableForClassification === true,
             // data-discipline lets a future click handler resolve initialDisc
