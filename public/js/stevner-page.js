@@ -178,6 +178,31 @@ var StandplassStevnerPage = (function () {
         { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
     ];
 
+    function fmtNum(n) { return n == null ? '–' : String(n).replace('.', ','); }
+
+    function statsLine(stats) {
+        return stats.skyttere + ' skyttere · ' + stats.startere + ' startere · '
+            + 'snitt ' + fmtNum(stats.snitt) + ' · median ' + fmtNum(stats.median);
+    }
+
+    function pad2(n) { return n < 10 ? '0' + n : String(n); }
+    function formatUpdated(iso) {
+        var d = new Date(iso);
+        return 'Oppdatert ' + pad2(d.getUTCDate()) + '.' + pad2(d.getUTCMonth() + 1) + '.' + d.getUTCFullYear()
+            + ' kl. ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+    }
+
+    function overallStatsBar(cards, lastUpdated, idPrefix) {
+        if (cards.length < 2) { return ''; }
+        var totals = cards.reduce(function (acc, c) {
+            acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
+        }, { skyttere: 0, startere: 0 });
+        return '<div class="stevner-overall-stats"><span>' + cards.length + ' stevner · '
+            + totals.skyttere + ' skyttere · ' + totals.startere + ' startere</span>'
+            + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
+            + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
+    }
+
     function statusBadge(applicableForClassification) {
         return applicableForClassification
             ? '<span class="comp-modal-badge comp-modal-badge--yes" title="Resultater teller for klasseopprykk og -nedrykk">Klasseførende</span>'
@@ -198,9 +223,12 @@ var StandplassStevnerPage = (function () {
         }).join('');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
             + '<div class="ranking-card-header">'
+            + '<button type="button" class="stevner-collapse-btn" data-comp-id="' + esc(card.id) + '" aria-expanded="true" aria-label="Fold sammen ' + esc(card.title || '') + '"><span class="stevner-collapse-icon">▾</span></button>'
+            + '<div class="ranking-card-header-text">'
             + '<p class="ranking-card-title"><button type="button" class="stevner-comp-btn link-btn" data-comp-id="' + esc(card.id) + '">' + titleHtml + '</button>'
             + (showClassBadge ? ' ' + statusBadge(card.applicableForClassification) : '') + '</p>'
             + '<p class="stevner-comp-meta">' + meta + (links ? ' · ' + links : '') + '</p>'
+            + '</div>'
             + '</div>'
             + '<table class="ranking-table"><thead><tr>'
             + '<th scope="col">#</th><th scope="col">Navn</th>'
@@ -208,6 +236,7 @@ var StandplassStevnerPage = (function () {
             + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
             + '<th scope="col">Poeng</th><th scope="col" class="stevner-tablet-hide">Ranking</th>'
             + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
+            + '<p class="stevner-comp-stats">' + esc(statsLine(card.stats)) + '</p>'
             + '</div>';
     }
 
@@ -260,6 +289,7 @@ var StandplassStevnerPage = (function () {
         var allRows = [];                          // every row of activeYear
         var currentCompetitions = [];               // raw competitions of activeYear, feeds card pagination
         var visibleCards = [];                      // after filters, built into cards
+        var lastUpdated = null;                     // yearData.lastUpdated, for the overall stats bar
         // ?klubb= is a slug; it is resolved against real club names once data is
         // loaded so it shows as a removable chip. If it matches nothing we keep
         // filtering by the slug, so an embed never silently widens to a
@@ -281,10 +311,12 @@ var StandplassStevnerPage = (function () {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
-                rowsEl.innerHTML = pagination.state.items.map(function (card) {
-                    return renderCard(card, activeTab === 'alle');
-                }).join('');
+                rowsEl.innerHTML = overallStatsBar(pagination.state.items, lastUpdated, config.idPrefix)
+                    + pagination.state.items.map(function (card) {
+                        return renderCard(card, activeTab === 'alle');
+                    }).join('');
             }
+            rowsEl.classList.toggle('stevner-hide-club-col', activeClubs.length === 1);
             loadMoreBtn.hidden = pagination.state.done;
         }
 
@@ -321,6 +353,7 @@ var StandplassStevnerPage = (function () {
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                 allRows = flattenRows(yearData);
                 currentCompetitions = yearData.competitions || [];
+                lastUpdated = yearData.lastUpdated;
                 allRows.forEach(function (r) {
                     if (r.club) { masterClubs[r.club] = true; }
                     if (r.discipline) { masterDiscs[r.discipline] = true; }
@@ -630,6 +663,26 @@ var StandplassStevnerPage = (function () {
             openPersonModal(personId, activeYear);
         });
 
+        rowsEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-collapse-btn');
+            if (btn) {
+                var card = btn.closest('.ranking-card');
+                var collapsed = card.classList.toggle('ranking-card--collapsed');
+                card.querySelector('table').hidden = collapsed;
+                btn.setAttribute('aria-expanded', String(!collapsed));
+                return;
+            }
+            if (e.target.classList.contains('stevner-collapse-all-btn')) {
+                var allCollapsed = rowsEl.querySelectorAll('.ranking-card:not(.ranking-card--collapsed)').length === 0;
+                Array.prototype.forEach.call(rowsEl.querySelectorAll('.ranking-card'), function (c) {
+                    c.classList.toggle('ranking-card--collapsed', !allCollapsed);
+                    c.querySelector('table').hidden = !allCollapsed;
+                    c.querySelector('.stevner-collapse-btn').setAttribute('aria-expanded', String(allCollapsed));
+                });
+                e.target.textContent = allCollapsed ? 'Fold alle' : 'Åpne alle';
+            }
+        });
+
         var personState = StandplassPersonModal.parsePersonFromUrl(urlState.getSearch());
         if (personState) {
             openPersonModal(personState.personId, personState.year || activeYear);
@@ -638,7 +691,8 @@ var StandplassStevnerPage = (function () {
 
     return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, groupCompetitionRows: groupCompetitionRows,
-        competitionStats: competitionStats, columns: columns };
+        competitionStats: competitionStats, columns: columns,
+        statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

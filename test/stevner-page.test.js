@@ -77,4 +77,10 @@ var byKlubbSlug = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters,
 assert.strictEqual(byKlubbSlug.length, 1, 'klubbUnmatched filter with slug "a" matches "Klubb A" and drops "Klubb B" competitions entirely');
 assert.strictEqual(byKlubbSlug[0].stats.startere, 2, 'c1 keeps only its 2 Klubb A rows when filtered by klub slug');
 
+assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 27.4, median: 28 }),
+    '3 skyttere · 5 startere · snitt 27,4 · median 28');
+assert.strictEqual(SP.statsLine({ skyttere: 0, startere: 0, snitt: null, median: null }),
+    '0 skyttere · 0 startere · snitt – · median –');
+assert.strictEqual(SP.formatUpdated('2026-08-17T14:05:00Z'), 'Oppdatert 17.08.2026 kl. 14:05');
+
 console.log('stevner-page.test.js: all assertions passed');
