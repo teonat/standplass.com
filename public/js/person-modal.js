@@ -21,12 +21,57 @@ var StandplassPersonModal = (function () {
         return '?' + params.toString();
     }
 
+    var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
+
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
         params.delete('person');
         params.delete('year');
+        FILTER_PARAM_KEYS.forEach(function (k) { params.delete(k); });
         var qs = params.toString();
         return qs ? '?' + qs : '';
+    }
+
+    // Reads the p_year/p_type/p_disc/p_class/p_metric params a deep link may
+    // carry (KSS: nsf-ui.js's tryOpenFromUrl) -- a plain row click never
+    // reads these, it always starts from defaults (see buildPersonFilterParams
+    // below for why a *default* selection never writes them in the first
+    // place, so a bookmarked URL with none of these present is exactly
+    // equivalent to "defaults", not "explicitly empty").
+    function parsePersonFilterParams(search) {
+        var params = new URLSearchParams(search);
+        function splitList(key) {
+            var v = params.get(key);
+            return v ? v.split(',').filter(Boolean) : null;
+        }
+        var yearsRaw = params.get('p_year');
+        var years = yearsRaw
+            ? yearsRaw.split(',').map(function (y) { return parseInt(y, 10); }).filter(function (y) { return !isNaN(y); })
+            : null;
+        return {
+            years: years && years.length ? years : null,
+            types: splitList('p_type'),
+            discs: splitList('p_disc'),
+            classes: splitList('p_class'),
+            metric: params.get('p_metric') || null
+        };
+    }
+
+    // Builds a { p_year, p_type, p_disc, p_class, p_metric } patch -- each
+    // value is either the param to set, or null to remove it -- so the URL
+    // never carries a param that just repeats the default state (a plain
+    // ?person=X&year=Y should stay exactly that until something's actually
+    // changed inside the modal). state: { selectedYears, activeYear, types,
+    // discs, classes, metric, defaultMetric }.
+    function buildPersonFilterParams(state) {
+        var isDefaultYears = state.selectedYears.length === 1 && state.selectedYears[0] === state.activeYear;
+        return {
+            p_year: isDefaultYears ? null : state.selectedYears.slice().sort(function (a, b) { return a - b; }).join(','),
+            p_type: state.types === null ? null : state.types.join(','),
+            p_disc: state.discs === null ? null : state.discs.join(','),
+            p_class: state.classes === null ? null : state.classes.join(','),
+            p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null
+        };
     }
 
     // --- Multi-year merge/filter helpers for the person modal's Year/
@@ -126,35 +171,29 @@ var StandplassPersonModal = (function () {
         return header + rows;
     }
 
-    // Mirrors dotColor's own per-class thresholds exactly, in display order
-    // best→worst. Only the classes actually present in the charted points are
-    // shown, so switching between a Class A shooter's history and a Class C
-    // shooter's history shows the right legend, not every class always.
-    var RANKING_BANDS = {
-        A: [['#eab308', '97+'], ['#ef4444', '85–96'], ['#f97316', '<85']],
-        B: [['#22c55e', '97+'], ['#eab308', '85–96'], ['#ef4444', '75–84'], ['#f97316', '<75']],
-        C: [['#a855f7', '97+'], ['#22c55e', '85–96'], ['#eab308', '<85']],
-        D: [['#a855f7', '85+'], ['#eab308', '<85']]
-    };
+    function legendDot(color, label) {
+        return '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + color + '"></span>' + esc(label) + '</span>';
+    }
 
-    function chartLegend(pts, metric) {
+    // A fixed legend describing what each color *means*, not per-class
+    // thresholds -- dotColor's thresholds already vary by class (a "97+" for
+    // Class A is a different relative standing than for Class C), so the
+    // legend describes the shared relative concept (2+ classes over/at
+    // opprykk/in class/under/2+ under) instead of duplicating numbers per
+    // class in view. Matches the source's own legend exactly.
+    function chartLegend(metric) {
         if (metric === 'position') {
             return '<div class="chart-legend">'
-                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#e8b923"></span>1. plass</span>'
-                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#c8d0d8"></span>2. plass</span>'
-                + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#b87333"></span>3. plass</span>'
+                + legendDot('#e8b923', '1. plass') + legendDot('#c8d0d8', '2. plass')
+                + legendDot('#b87333', '3. plass') + legendDot('#4a90d9', 'Andre')
                 + '</div>';
         }
         if (metric !== 'rankingScore') { return ''; }
-        var classesInView = {};
-        pts.forEach(function (e) { if (e.class && RANKING_BANDS[e.class]) { classesInView[e.class] = true; } });
-        var classKeys = Object.keys(classesInView).sort();
-        if (!classKeys.length) { return ''; }
-        return '<div class="chart-legend">' + classKeys.map(function (cls) {
-            return '<span class="chart-legend-group">Klasse ' + esc(cls) + ': ' + RANKING_BANDS[cls].map(function (band) {
-                return '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + band[0] + '"></span>' + esc(band[1]) + '</span>';
-            }).join('') + '</span>';
-        }).join('') + '</div>';
+        return '<div class="chart-legend">'
+            + legendDot('#a855f7', '2+ klasser over') + legendDot('#22c55e', 'Opprykksgrense nådd')
+            + legendDot('#eab308', 'I klassen') + legendDot('#ef4444', 'Under klassen')
+            + legendDot('#f97316', '2+ klasser under')
+            + '</div>';
     }
 
     function wireChartTooltip(svgContainer, pts, metric) {
@@ -294,7 +333,7 @@ var StandplassPersonModal = (function () {
             + yLabels
             + xTicks
             + '</svg>'
-            + chartLegend(pts, metric)
+            + chartLegend(metric)
             + '<div class="chart-tooltip" hidden></div>'
             + '</div>';
 
@@ -319,7 +358,9 @@ var StandplassPersonModal = (function () {
         renderChart: renderChart,
         mergeYearEntries: mergeYearEntries,
         getFilteredEntries: getFilteredEntries,
-        resolveInitialFilter: resolveInitialFilter
+        resolveInitialFilter: resolveInitialFilter,
+        parsePersonFilterParams: parsePersonFilterParams,
+        buildPersonFilterParams: buildPersonFilterParams
     };
 })();
 

@@ -441,6 +441,18 @@ h1, h2, h3 {
 .filter-group input[type="date"]:disabled,
 .filter-group input[type="search"]:disabled { opacity: 0.5; cursor: default; }
 
+.clear-all-filters-btn {
+    align-self: flex-end;
+    background: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.clear-all-filters-btn:hover { border-color: var(--brand-accent); color: var(--text); }
+
 @media (max-width: 700px) {
     .ranking-grid { grid-template-columns: 1fr; }
     .filter-group--narrow { flex: 1; }
@@ -520,6 +532,12 @@ h1, h2, h3 {
     padding: 0.125rem 0;
     max-height: 220px;
     overflow-y: auto;
+    /* Without this, an overflow-y other than visible makes the browser
+       compute overflow-x as auto too (not visible) per spec -- so any
+       overflow on this axis silently became a horizontal scrollbar instead
+       of the long option text just wrapping, which the rules below ensure
+       it can. */
+    overflow-x: hidden;
 }
 .checkbox-dropdown-list li { padding: 0; }
 .checkbox-dropdown-list label {
@@ -531,6 +549,10 @@ h1, h2, h3 {
     font-size: 0.875rem;
 }
 .checkbox-dropdown-list label:hover { background: var(--surface-hover); }
+.checkbox-dropdown-list label span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .checkbox-dropdown-list input[type="checkbox"] {
     flex-shrink: 0;
     accent-color: var(--brand-primary);
@@ -548,10 +570,12 @@ h1, h2, h3 {
     border-bottom: 1px solid var(--border);
     font: inherit;
     font-size: 0.875rem;
+    color: var(--text);
     background: transparent;
     box-sizing: border-box;
     outline: none;
 }
+.checkbox-dropdown-search::placeholder { color: var(--text-muted); }
 .checkbox-dropdown-search:focus { background: var(--surface-base); }
 .checkbox-dropdown-no-results {
     padding: 0.4rem 0.75rem;
@@ -984,6 +1008,11 @@ h1, h2, h3 {
     gap: 0.1rem;
     max-width: 240px;
 }
+/* An unconditional `display` on the class has equal specificity to the
+   UA's own `[hidden] { display: none }` rule -- author styles win ties over
+   UA styles, so without this the tooltip's `hidden` attribute was silently
+   ignored and it never actually disappeared once first shown. */
+.chart-tooltip[hidden] { display: none; }
 .chart-tip-val {
     font-size: 0.875rem;
     font-weight: 600;
@@ -1005,11 +1034,6 @@ h1, h2, h3 {
     margin-top: 0.375rem;
     font-size: 0.6875rem;
     color: var(--text-muted);
-}
-.chart-legend-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
 }
 .chart-legend-item {
     display: inline-flex;
@@ -1059,6 +1083,17 @@ h1, h2, h3 {
 /* The source leaves the focus ring navy in dark mode (an invisible focus
    indicator); recolor it with the text color instead. */
 [data-mode="dark"] .comp-modal-close:focus-visible { outline-color: var(--text); }
+/* Checkbox tint and autocomplete hover/selected are tuned for light
+   backgrounds (near-black accent, near-black text on a red tint) --
+   unreadable in dark mode. */
+[data-mode="dark"] .checkbox-dropdown-list input[type="checkbox"] { accent-color: var(--brand-accent); }
+[data-mode="dark"] .autocomplete-list li:hover,
+[data-mode="dark"] .autocomplete-list li[aria-selected="true"] {
+    background: var(--brand-accent-bg-subtle);
+    color: var(--text);
+}
+[data-mode="dark"] .ranking-more-btn { border-color: var(--text); color: var(--text); }
+[data-mode="dark"] .checkbox-dropdown-clear-all:hover { color: var(--text); }
 
 /* ── Terminliste – Vis flere-knapp ─────────────────────── */
 .ranking-more-btn {
@@ -1112,6 +1147,13 @@ h1, h2, h3 {
   text-decoration: none;
   border: 2px solid var(--brand-primary);
   color: var(--brand-primary);
+  cursor: pointer;
+  /* This class was only ever applied to <a> tags before (no native
+     chrome), so no background was needed. A real <button> falls back to
+     its UA stylesheet's own background (often white/light regardless of
+     page theme) unless one is set explicitly -- invisible in light mode,
+     but a white box behind near-unreadable dark-mode text otherwise. */
+  background: none;
 }
 .btn:hover { background: var(--surface-hover); }
 .btn-primary {
@@ -1120,3 +1162,17 @@ h1, h2, h3 {
   color: var(--white);
 }
 .btn-primary:hover { background: var(--brand-accent-dark); border-color: var(--brand-accent-dark); }
+
+.embed-snippet {
+    margin-top: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: var(--surface-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.embed-snippet:empty { display: none; }
