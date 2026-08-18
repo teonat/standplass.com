@@ -50,4 +50,18 @@
             try { localStorage.setItem('standplass_mode', current); } catch (e) { /* ignore */ }
         });
     }
+
+    // Analytics (GoatCounter) -- only on the real production domain, same
+    // hostname guard the source uses for its own tag, so a local dev server
+    // or any other host serving this same public/ directory never counts.
+    // One shared check here rather than duplicating the inline guard into
+    // every page's own <head> like the source does, since this file (unlike
+    // that one) already loads on every page.
+    if (/^standplass\.com$/.test(window.location.hostname)) {
+        var gc = document.createElement('script');
+        gc.async = true;
+        gc.src = '//gc.zgo.at/count.js';
+        gc.setAttribute('data-goatcounter', 'https://standplass.goatcounter.com/count');
+        document.head.appendChild(gc);
+    }
 })();

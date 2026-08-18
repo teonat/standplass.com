@@ -144,4 +144,31 @@ resolveMode('', null);
 modeBtn.fire('click', {});
 assert.strictEqual(documentEl.getAttribute('data-mode'), 'light', 'first click must flip, not no-op');
 
+// ── Analytics (GoatCounter) hostname guard ────────────────────────────────
+// Only ever injected on the real production domain -- a local dev server or
+// any other host serving this same public/ directory must not count hits.
+function runOnHost(hostname) {
+    var created = [];
+    documentEl = makeEl();
+    var head = { appendChild: function (el) { created.push(el); } };
+    document.documentElement = documentEl;
+    document.head = head;
+    document.createElement = function () { return makeEl(); };
+    modeBtn = makeEl();
+    dropdownBtn.listeners = {};
+    dropdownMenu.listeners = {};
+    docListeners.click = [];
+    window.location.hostname = hostname;
+    new Function(src)();
+    return created;
+}
+
+assert.strictEqual(runOnHost('localhost').length, 0, 'no analytics script on a local dev server');
+assert.strictEqual(runOnHost('example.com').length, 0, 'no analytics script on an unrelated host');
+var prodScripts = runOnHost('standplass.com');
+assert.strictEqual(prodScripts.length, 1, 'analytics script injected on the real production domain');
+assert.strictEqual(prodScripts[0].getAttribute('data-goatcounter'), 'https://standplass.goatcounter.com/count');
+assert.strictEqual(prodScripts[0].src, '//gc.zgo.at/count.js');
+assert.strictEqual(prodScripts[0].async, true);
+
 console.log('site-chrome.test.js: all assertions passed');
