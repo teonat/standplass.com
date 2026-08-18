@@ -23,7 +23,7 @@ var StandplassEmbed = (function () {
         return '<div class="container">'
             + '<p class="section-label">Resultater</p>'
             + '<h1 class="section-title">' + title + '</h1>'
-            + '<p class="section-lead">Resultater hentet fra skyting.no. Standplass er ikke tilknyttet noen enkelt klubb — denne siden viser alle klubbers resultater.</p>'
+            + '<p class="section-lead">Resultater hentet fra skyting.no.</p>'
             + '<div class="ranking-filters" id="' + idPrefix + '-filters">'
             + '  <div class="filter-group">'
             + '    <label for="' + idPrefix + '-year">År</label>'
