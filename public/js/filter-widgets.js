@@ -473,13 +473,33 @@ var StandplassFilterWidgets = (function () {
         return { rebuild: rebuild, clearAll: clearAll };
     }
 
+    // A single "clear all" button for a page's whole filter bar. Each
+    // individual filter widget above already has its own clear path (a
+    // checkbox dropdown's "Fjern alle", a tag combo's clear ×) that resets
+    // its own state *and* re-renders on its own -- calling all of those
+    // independently would re-render once per filter. This instead resets
+    // every filter's state via a page-supplied array of plain callbacks,
+    // rebuilds every affected widget once, then re-renders exactly once via
+    // onDone. Kept generic (plain callback/handle arrays, no felt/bane- or
+    // filter-shape-specific knowledge) so any future view's filter bar --
+    // not just this one -- can wire the same button instead of hand-writing
+    // a bespoke per-page reset function.
+    function wireClearAllFilters(btn, resets, widgets, onDone) {
+        btn.addEventListener('click', function () {
+            resets.forEach(function (fn) { fn(); });
+            widgets.forEach(function (w) { w.rebuild(); });
+            onDone();
+        });
+    }
+
     return {
         esc: esc,
         renderList: renderList,
         hideList: hideList,
         makeComboHandlers: makeComboHandlers,
         makeCheckboxDropdown: makeCheckboxDropdown,
-        makeTagComboHandlers: makeTagComboHandlers
+        makeTagComboHandlers: makeTagComboHandlers,
+        wireClearAllFilters: wireClearAllFilters
     };
 })();
 

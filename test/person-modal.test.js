@@ -18,7 +18,42 @@ assert.strictEqual(built, '?klubb=eksempel&person=42&year=2026');
 var cleared = StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026');
 assert.strictEqual(cleared, '?klubb=eksempel');
 
+// clearPersonFromUrl also strips the in-modal filter params, not just person/year
+assert.strictEqual(
+    StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_year=2024,2025&p_disc=Felt'),
+    '?klubb=eksempel'
+);
+
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");
+
+// parsePersonFilterParams: absent params -> nulls (defaults), not empty arrays
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42'),
+    { years: null, types: null, discs: null, classes: null, metric: null }
+);
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_year=2024,2025&p_disc=Felt,Bane&p_metric=score'),
+    { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score' }
+);
+
+// buildPersonFilterParams: default state (single selected year === activeYear,
+// no filters, default metric) writes nothing -- a plain ?person=X&year=Y link
+// never gets p_* clutter just from opening the modal
+assert.deepStrictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
+        metric: 'rankingScore', defaultMetric: 'rankingScore'
+    }),
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+);
+// a real change to each -- multi-year, a filter, and a non-default metric
+assert.deepStrictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2025, 2024], activeYear: 2026, types: null, discs: ['Felt'], classes: null,
+        metric: 'score', defaultMetric: 'rankingScore'
+    }),
+    { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
+);
 
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },
@@ -44,6 +79,13 @@ assert.ok(container.innerHTML.includes('<polyline'), 'renders a polyline for the
 assert.match(container.innerHTML, /<circle[^>]*>[\s\S]*<circle[^>]*>[\s\S]*<circle/, 'renders one circle per entry');
 assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 3, 'one dot per entry, no extra overlap rings');
 
+// Legend: a fixed 5-item legend describing what each color *means*
+// (2+ over/at opprykk/in class/under/2+ under), not per-class numeric
+// thresholds -- same regardless of which classes are actually in view.
+assert.ok(container.innerHTML.includes('2+ klasser over'), 'rankingScore legend uses the fixed semantic labels');
+assert.ok(container.innerHTML.includes('Opprykksgrense nådd'));
+assert.ok(!container.innerHTML.includes('Klasse A'), 'legend is not grouped/labeled per class');
+
 // Y-axis inversion for `position`: lower position (better) must plot higher
 // (smaller cy) than a higher position (worse) at the same metric range.
 var posEntries = [
@@ -56,6 +98,7 @@ var cys = [].concat(posContainer.innerHTML.match(/<circle[^>]*cy="([\d.]+)"/g)).
     return parseFloat(m.match(/cy="([\d.]+)"/)[1]);
 });
 assert.ok(cys[1] < cys[0], 'position=1 (better) plots higher (smaller cy) than position=5 (worse)');
+assert.ok(posContainer.innerHTML.includes('Andre'), 'position legend includes the 4th "Andre" (non-podium) color');
 
 // Fewer than 2 points: renders a fallback message, not a broken chart.
 var emptyContainer = {};

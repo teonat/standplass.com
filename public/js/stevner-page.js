@@ -45,6 +45,7 @@ var StandplassStevnerPage = (function () {
             class: r.class,
             score: r.score,
             rankingScore: r.rankingScore,
+            competition: comp.title,
             // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
             // date" on this string and parses it as UTC midnight, both of which break on
             // a full datetime.
@@ -457,6 +458,7 @@ var StandplassStevnerPage = (function () {
             list: id('-disc-list'),
             clearAllBtn: id('-disc-clear'),
             labelNone: 'Alle øvelser',
+            searchable: true,
             getItems: function () {
                 return Object.keys(masterDiscs)
                     .sort(function (a, b) { return a.localeCompare(b, 'no'); })
@@ -699,6 +701,23 @@ var StandplassStevnerPage = (function () {
             applyFilters();
         });
 
+        // ── Clear all filters ────────────────────────────────────────────
+        // activeGroupMode (Per klasse/Per øvelse/Poengsum) is a display
+        // preference, not a filter -- nothing is hidden by it -- so it's
+        // deliberately left untouched here.
+        FW.wireClearAllFilters(id('-clear-filters'), [
+            function () { activeDiscs = []; },
+            function () { activeClubs = []; klubbUnmatched = false; },
+            function () { activeOrganizers = []; },
+            function () { nameQuery = ''; nameEl.value = ''; nameWrap.classList.remove('autocomplete-wrap--has-value'); },
+            function () { compQuery = ''; compEl.value = ''; compWrap.classList.remove('autocomplete-wrap--has-value'); },
+            function () { activeTab = 'alle'; setToggleActive(tabToggleEl, 'tab', 'alle'); }
+        ], [discDropdown, clubCombo, organizerCombo], function () {
+            setUrlParam('disc', null); setUrlParam('klubb', null); setUrlParam('organizer', null);
+            setUrlParam('name', null); setUrlParam('comp', null); setUrlParam('tab', null);
+            applyFilters();
+        });
+
         loadYear(activeYear);
 
         // ── Person modal ─────────────────────────────────────────────────
@@ -715,6 +734,11 @@ var StandplassStevnerPage = (function () {
         ];
         var modalMetric = view === 'bane' ? 'score' : 'rankingScore';
         var modalEntries = [];
+        // Reassigned to the current open's syncPersonModalUrl on every
+        // renderPersonModal call -- the metric-toggle click handler below is
+        // wired once, outside renderPersonModal, so it can't close over a
+        // given open's own copy directly.
+        var syncCurrentPersonModalUrl = function () {};
         // The element that opened the modal, so focus can go back where it came
         // from on close. Native <dialog>.showModal() (nsf-ui.js:1370) does this
         // for free; a plain <div> has to do it by hand. Stays null when the
@@ -775,17 +799,27 @@ var StandplassStevnerPage = (function () {
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                 var entries = flattenRows(yearData).filter(function (r) { return r.personId === personId; })
                     .map(function (r) { return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.discipline,
+                        competition: r.competition,
                         position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name }; });
                 personYearCache[personId][year] = entries;
                 return entries;
             });
         }
 
-        function renderPersonModal(personId, personName, initialDisc) {
+        // urlFilters (from parsePersonFilterParams) is only ever passed on a
+        // ?person= deep link -- a row click always starts from the plain
+        // defaults below plus that row's own initialDisc, matching the
+        // source's separate open()/tryOpenFromUrl() entry points.
+        function renderPersonModal(personId, personName, initialDisc, urlFilters) {
             var mySeq = ++personOpenSeq;
-            var selectedYears = [activeYear];
+            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [activeYear];
             var entriesByYear = {};
-            var filters = { types: null, discs: null, classes: null };
+            var filters = {
+                types: (urlFilters && urlFilters.types) || null,
+                discs: (urlFilters && urlFilters.discs) || null,
+                classes: (urlFilters && urlFilters.classes) || null
+            };
+            if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
 
             function knownValues(key) {
                 var all = {};
@@ -795,7 +829,22 @@ var StandplassStevnerPage = (function () {
                 return Object.keys(all).sort(function (a, b) { return a.localeCompare(b, 'no'); });
             }
 
+            // Mirrors nsf-ui.js's urlParams(): only ever writes a p_* param
+            // when it differs from the default, so a plain ?person=X&year=Y
+            // link (nothing touched inside the modal) stays exactly that.
+            function syncPersonModalUrl() {
+                var defaultMetric = view === 'bane' ? 'score' : 'rankingScore';
+                var patch = StandplassPersonModal.buildPersonFilterParams({
+                    selectedYears: selectedYears, activeYear: activeYear,
+                    types: filters.types, discs: filters.discs, classes: filters.classes,
+                    metric: modalMetric, defaultMetric: defaultMetric
+                });
+                Object.keys(patch).forEach(function (k) { setUrlParam(k, patch[k]); });
+            }
+            syncCurrentPersonModalUrl = syncPersonModalUrl;
+
             function refresh() {
+                syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
                 // Chronological, oldest first -- same ordering the chart's X-axis
@@ -805,13 +854,14 @@ var StandplassStevnerPage = (function () {
                     return (a.date || '') < (b.date || '') ? -1 : 1;
                 }).map(function (r) {
                     return '<tr><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
+                        + '<td>' + esc(r.competition || '–') + '</td>'
                         + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
                         + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
                         + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
                         + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
                 }).join('');
                 var tbody = id('-person-table-body');
-                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="6">Ingen resultater.</td></tr>'; }
+                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
                 drawChart();
             }
 
@@ -842,7 +892,7 @@ var StandplassStevnerPage = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + config.idPrefix + '-person-chart"></div>'
-                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
+                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
                     + '<tbody id="' + config.idPrefix + '-person-table-body"></tbody></table>';
             }
 
@@ -858,15 +908,16 @@ var StandplassStevnerPage = (function () {
             // moment the button label or a reopened panel re-reads it. Matches
             // the discDropdown/clubCombo convention above: .rebuild() after
             // every state change.
-            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear) {
+            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
                 var container = id(suffix);
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
-                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
                     + '<ul class="checkbox-dropdown-list"></ul></div>';
                 var dropdown = FW.makeCheckboxDropdown({
                     btn: container.querySelector('.checkbox-dropdown-btn'), panel: container.querySelector('.checkbox-dropdown-panel'),
                     list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
                     labelNone: labelNone,
+                    searchable: !!searchable,
                     getItems: function () { return items.map(function (i) { return { id: i, name: i }; }); },
                     getSelected: function () { var s = getSelected(); return s === null ? items : s; },
                     // makeCheckboxDropdown always calls onToggle(id, name, checked) --
@@ -901,7 +952,13 @@ var StandplassStevnerPage = (function () {
                         wirePersonModalFilters();
                         refresh();
                     });
-                }, function () { selectedYears = [activeYear]; refresh(); });
+                // Labeled "Kun <år>", not "Fjern alle" like every other dropdown here --
+                // unlike those (which clear to "no filter", i.e. everything), this
+                // resets to a single selected year rather than zero, since an empty
+                // year selection is a confusing dead end (nothing to show, and
+                // parseInt(null) on the next fetch would 404 a "NaN.json"). A shared
+                // label would imply it behaves the same way the others do.
+                }, function () { selectedYears = [activeYear]; refresh(); }, false, 'Kun ' + activeYear);
                 if (knownValues('competitionType').length > 1) {
                     mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
                         function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
@@ -910,7 +967,7 @@ var StandplassStevnerPage = (function () {
                 if (knownValues('discipline').length > 1) {
                     mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
                         function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
-                        function () { filters.discs = null; refresh(); });
+                        function () { filters.discs = null; refresh(); }, true);
                 }
                 if (knownValues('class').length > 1) {
                     mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
@@ -919,12 +976,23 @@ var StandplassStevnerPage = (function () {
                 }
             }
 
-            loadYearIfNeeded(activeYear).then(function () {
+            Promise.all(selectedYears.map(loadYearIfNeeded)).then(function () {
                 if (mySeq !== personOpenSeq) { return; }
                 // A ?person= deep link has no name to pass in (there is no row to
-                // read it from), so take it off the fetched entries instead.
-                var resolvedName = personName || ((entriesByYear[activeYear] || [])[0] || {}).name;
-                filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
+                // read it from), so take it off the fetched entries instead --
+                // from whichever selected year actually has data, not
+                // necessarily activeYear (a p_year deep link's years don't
+                // have to include it).
+                var resolvedName = personName;
+                for (var i = 0; i < selectedYears.length && !resolvedName; i++) {
+                    resolvedName = ((entriesByYear[selectedYears[i]] || [])[0] || {}).name;
+                }
+                // A deep link's own p_disc (if any) already lives in
+                // filters.discs; only a row click's initialDisc should
+                // overwrite it here.
+                if (!urlFilters) {
+                    filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
+                }
                 showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
                 refresh();
@@ -940,6 +1008,7 @@ var StandplassStevnerPage = (function () {
                 b.classList.toggle('program-btn--active', isActive);
                 b.setAttribute('aria-pressed', String(isActive));
             });
+            syncCurrentPersonModalUrl();
             drawChart();
         });
 
@@ -1089,7 +1158,7 @@ var StandplassStevnerPage = (function () {
 
         var personState = StandplassPersonModal.parsePersonFromUrl(urlState.getSearch());
         if (personState) {
-            renderPersonModal(personState.personId, null, null);
+            renderPersonModal(personState.personId, null, null, StandplassPersonModal.parsePersonFilterParams(urlState.getSearch()));
         }
     }
 
