@@ -234,15 +234,6 @@ h1, h2, h3 {
     overflow: hidden;
 }
 
-.ranking-card-title {
-    font-size: 0.9375rem;
-    font-weight: 700;
-    color: var(--brand-primary);
-    padding: 0.875rem 1.125rem 0.75rem;
-    border-bottom: 1px solid var(--border);
-    margin: 0;
-}
-
 .ranking-card-header {
     padding: 0.875rem 1.125rem 0.75rem;
     border-bottom: 1px solid var(--border);
@@ -250,33 +241,93 @@ h1, h2, h3 {
     align-items: flex-start;
     gap: 0.5rem;
 }
-
+.ranking-card--collapsed .ranking-card-header {
+    border-bottom: none;
+}
+.stevner-card-info {
+    flex: 1;
+    min-width: 0;
+}
+.stevner-comp-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.stevner-comp-btn {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    cursor: pointer;
+    text-align: left;
+}
+.stevner-comp-btn:hover { color: var(--brand-accent); }
+.stevner-comp-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+.stevner-comp-links a {
+    display: inline-block;
+    margin-left: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--brand-primary);
+    text-decoration: none;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+}
+.stevner-comp-links a:hover { background: var(--border-faint); }
+.stevner-comp-meta {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+.stevner-comp-stats {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+.stevner-collapse-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin-top: -0.125rem;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.15s, background 0.15s;
+}
+.stevner-collapse-btn:hover {
+    color: var(--brand-accent);
+    background: var(--brand-accent-hover);
+}
+.stevner-collapse-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
 .stevner-collapse-icon {
     display: block;
+    font-size: 1.25rem;
+    line-height: 1;
     transition: transform 0.2s ease;
 }
 .ranking-card--collapsed .stevner-collapse-icon {
     transform: rotate(-90deg);
-}
-.ranking-card--collapsed .ranking-card-header {
-    border-bottom: none;
-}
-.ranking-card-header-text {
-    flex: 1;
-    min-width: 0;
-}
-.stevner-collapse-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.25rem;
-    color: var(--text-muted);
-}
-.stevner-comp-stats {
-    font-size: 0.8125rem;
-    color: var(--text-muted);
-    padding: 0.5rem 1.125rem 0.75rem;
-    margin: 0;
 }
 .stevner-overall-stats {
     display: flex;
@@ -294,6 +345,7 @@ h1, h2, h3 {
     border-radius: 4px;
     padding: 0.25rem 0.75rem;
     cursor: pointer;
+    color: var(--text-muted);
 }
 .stevner-hide-club-col td:nth-child(3), .stevner-hide-club-col th:nth-child(3) {
     display: none;
@@ -808,6 +860,9 @@ h1, h2, h3 {
 }
 
 /* ── Competition-detail modal (native <dialog>) ─ */
+/* A native <dialog>'s UA default is background:white/color:black -- unlike
+   every other surface in this project, it doesn't inherit the page's mode
+   variables from anywhere, so it has to be set explicitly here. */
 .comp-modal-dialog {
     max-width: 640px;
     width: 90vw;
@@ -816,19 +871,73 @@ h1, h2, h3 {
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     padding: 0;
+    background: var(--surface-card);
+    color: var(--text);
 }
 .comp-modal-dialog::backdrop { background: rgba(0,0,0,0.4); }
 .comp-modal-dialog .program-toggle { margin: 0.75rem 1.5rem 0; width: auto; }
 .comp-modal-dialog .comp-modal-body { padding: 0 1.5rem 1.5rem; }
-.comp-modal-infocard { padding: 1rem 0; }
-.comp-modal-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.125rem 0.5rem; border-radius: 999px; }
-.comp-modal-badge--yes { background: var(--brand-accent); color: var(--white); }
-.comp-modal-badge--no { background: var(--surface-base); color: var(--text-muted); }
-.comp-modal-comp-number { display: inline-block; font-size: 0.8125rem; color: var(--text-muted); }
-.comp-modal-description { margin-top: 0.75rem; }
-.comp-modal-events { padding: 0 0 1.5rem; }
-.comp-modal-section-title { font-weight: 700; margin: 1rem 0 0.5rem; }
-.comp-modal-class-tag { display: inline-block; background: var(--surface-base); border-radius: 4px; padding: 0.125rem 0.5rem; margin: 0 0.25rem 0.25rem 0; font-size: 0.8125rem; }
+.comp-modal-meta {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    padding: 0.375rem 1.5rem 0;
+    flex-shrink: 0;
+}
+.comp-modal-infocard {
+    background: var(--surface-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+}
+.comp-modal-infocard a { color: var(--brand-primary); }
+.comp-modal-infocard-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    color: var(--text);
+}
+.comp-modal-infocard-label {
+    font-size: 0.775rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 4.5rem;
+}
+.comp-modal-infocard-row-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.comp-modal-infocard-skyting {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.875rem;
+}
+.comp-modal-badge { display: inline-block; font-size: 0.725rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.5rem; border-radius: 4px; }
+.comp-modal-badge--yes { background: rgba(45,106,79,0.12); color: var(--green); border: 1px solid rgba(45,106,79,0.25); }
+.comp-modal-badge--no { background: var(--border-faint); color: var(--text-muted); border: 1px solid var(--border-strong); }
+.comp-modal-badge--warn { background: rgba(180,30,30,0.08); color: #b41e1e; border: 1px solid rgba(180,30,30,0.2); }
+.comp-modal-comp-number { font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.comp-modal-description { font-size: 0.9375rem; line-height: 1.6; margin: 0 0 1rem; }
+.comp-modal-description p { margin: 0 0 0.75rem; }
+.comp-modal-description p:last-child { margin-bottom: 0; }
+.comp-modal-section-title { font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 1.25rem 0 0.5rem; }
+.comp-modal-events-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
+.comp-modal-events-scroll { padding: 0.5rem 0.875rem 0.625rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.comp-modal-disc-name { font-size: 0.875rem; font-weight: 600; color: var(--brand-primary); margin-bottom: 0.2rem; }
+.comp-modal-disc-fee { font-size: 0.775rem; font-weight: 400; color: var(--text-muted); margin-left: 0.35rem; }
+.comp-modal-class-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.comp-modal-class-tag { display: inline-block; background: var(--surface-card); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0.1rem 0.45rem; font-size: 0.775rem; color: var(--text); }
 
 /* ── Person modal filters (Year/Stevnetype/Øvelse/Klasse) ─ */
 .person-filters {
@@ -922,6 +1031,10 @@ h1, h2, h3 {
    when it falls through to the OS preference), so no prefers-color-scheme
    duplicate is needed. */
 [data-mode="dark"] .stevner-person-btn.link-btn,
+[data-mode="dark"] .stevner-comp-btn,
+[data-mode="dark"] .stevner-comp-links a,
+[data-mode="dark"] .comp-modal-infocard a,
+[data-mode="dark"] .comp-modal-disc-name,
 [data-mode="dark"] .comp-modal-title { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
@@ -931,6 +1044,18 @@ h1, h2, h3 {
 }
 [data-mode="dark"] .comp-modal-close:hover,
 [data-mode="dark"] .comp-modal-close:focus-visible { color: var(--text); }
+/* Badge greens/reds are tuned for light backgrounds; dark mode needs the
+   brighter tones below to stay readable against a dark card. */
+[data-mode="dark"] .comp-modal-badge--yes {
+    color: #4ade80;
+    background: rgba(74,222,128,0.10);
+    border-color: rgba(74,222,128,0.25);
+}
+[data-mode="dark"] .comp-modal-badge--warn {
+    color: #f87171;
+    background: rgba(248,113,113,0.10);
+    border-color: rgba(248,113,113,0.25);
+}
 /* The source leaves the focus ring navy in dark mode (an invisible focus
    indicator); recolor it with the text color instead. */
 [data-mode="dark"] .comp-modal-close:focus-visible { outline-color: var(--text); }

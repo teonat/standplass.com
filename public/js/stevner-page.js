@@ -131,7 +131,7 @@ var StandplassStevnerPage = (function () {
                 .filter(function (r) { return matchesFilters(r, withLowerQuery); });
             if (!rows.length) { return; }
             cards.push({
-                id: comp.id, title: comp.title, status: comp.status, startDate: comp.startDate,
+                id: comp.id, title: comp.title, status: comp.status, startDate: comp.startDate, endDate: comp.endDate,
                 facilityName: comp.facilityName, organizationName: comp.organizationName,
                 resultFileUrl: comp.resultFileUrl, deepLink: comp.deepLink,
                 applicableForClassification: comp.applicableForClassification === true,
@@ -238,12 +238,16 @@ var StandplassStevnerPage = (function () {
         }).join('');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
             + '<div class="ranking-card-header">'
-            + '<button type="button" class="stevner-collapse-btn" data-comp-id="' + esc(card.id) + '" aria-expanded="true" aria-label="Fold sammen ' + esc(card.title || '') + '"><span class="stevner-collapse-icon">▾</span></button>'
-            + '<div class="ranking-card-header-text">'
-            + '<p class="ranking-card-title"><button type="button" class="stevner-comp-btn link-btn" data-comp-id="' + esc(card.id) + '">' + titleHtml + '</button>'
-            + (showClassBadge ? ' ' + statusBadge(card.applicableForClassification) : '') + '</p>'
-            + '<p class="stevner-comp-meta">' + meta + (links ? ' · ' + links : '') + '</p>'
+            + '<div class="stevner-card-info">'
+            + '<div class="stevner-comp-title-row">'
+            + '<button type="button" class="stevner-comp-btn" data-comp-id="' + esc(card.id) + '">' + titleHtml + '</button>'
+            + (showClassBadge ? statusBadge(card.applicableForClassification) : '')
+            + (links ? '<span class="stevner-comp-links">' + links + '</span>' : '')
             + '</div>'
+            + '<span class="stevner-comp-meta">' + meta + '</span>'
+            + '<span class="stevner-comp-stats">' + esc(statsLine(card.stats)) + '</span>'
+            + '</div>'
+            + '<button type="button" class="stevner-collapse-btn" data-comp-id="' + esc(card.id) + '" aria-expanded="true" aria-label="Fold sammen ' + esc(card.title || '') + '"><span class="stevner-collapse-icon">▾</span></button>'
             + '</div>'
             + '<table class="ranking-table"><thead><tr>'
             + '<th scope="col">#</th><th scope="col">Navn</th>'
@@ -251,7 +255,6 @@ var StandplassStevnerPage = (function () {
             + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
             + '<th scope="col">Poeng</th><th scope="col">Ranking</th>'
             + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
-            + '<p class="stevner-comp-stats">' + esc(statsLine(card.stats)) + '</p>'
             + '</div>';
     }
 
@@ -733,6 +736,15 @@ var StandplassStevnerPage = (function () {
             if (modalOpener) { modalOpener.focus(); modalOpener = null; }
         }
 
+        // modalEl is the full-viewport overlay; .person-modal-shell is the
+        // centered box inside it. A click lands with e.target === modalEl
+        // only when it's on the overlay itself, i.e. outside the shell --
+        // same "click outside closes it" check the source uses on its
+        // native <dialog> (nsf-ui.js: `if (e.target === _dialog) close()`).
+        modalEl.addEventListener('click', function (e) {
+            if (e.target === modalEl) { closePersonModal(); }
+        });
+
         function showModal(title, body) {
             modalEl.innerHTML = '<div class="person-modal-shell">'
                 + '<div class="comp-modal-header">'
@@ -939,28 +951,44 @@ var StandplassStevnerPage = (function () {
         // root (the <standplass-results> embed case), since a shadow root
         // has no `.body`; onto document.body for the direct-mount case.
         var compDialog = id('-comp-dialog');
+        // Fire-and-forget, module-singleton (see ensureReferenceData's own
+        // guard) -- discipline/class names for the modal's events list and
+        // Resultater tab, same one-time reference fetch the source performs
+        // at load rather than per page/instance.
+        StandplassCompModal.ensureReferenceData(window.fetch.bind(window));
         // Same idea as personOpenSeq above: guards the async fetchDetail/
         // fetchResults writes into the shared bodyEl against a race where a
         // stale response resolves after the modal was reopened for a
         // different competition, or the tab was switched away and back.
         var compOpenSeq = 0;
+        // Last-fetched Resultater rows, so the Gren filter can re-filter and
+        // re-render client-side instead of re-fetching on every change.
+        var compResults = [];
         if (!compDialog) {
             compDialog = document.createElement('dialog');
             compDialog.id = config.idPrefix + '-comp-dialog';
             compDialog.className = 'comp-modal-dialog';
             compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
                 + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
+                + '<p class="comp-modal-meta"></p>'
                 + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
                 + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
                 + '<div class="comp-modal-body"></div>';
             (root === document ? document.body : root).appendChild(compDialog);
         }
         compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
+        // A native <dialog>'s ::backdrop delivers its click with the dialog
+        // itself as e.target (no separate backdrop node) -- same check the
+        // source uses for its own competition/person dialogs.
+        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
 
-        function openCompModal(compId, title) {
+        function openCompModal(compId, title, card) {
             var mySeq = ++compOpenSeq;
             compDialog.dataset.compId = compId;
             compDialog.querySelector('.comp-modal-title').textContent = title || '';
+            compDialog.querySelector('.comp-modal-meta').textContent = card
+                ? [StandplassFormat.formatDateRange(card.startDate, card.endDate), card.facilityName, card.organizationName].filter(Boolean).join(' · ')
+                : '';
             var bodyEl = compDialog.querySelector('.comp-modal-body');
             bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
             // Reset to the Detaljer tab every time the modal opens for a new
@@ -972,9 +1000,9 @@ var StandplassStevnerPage = (function () {
                 b.setAttribute('aria-pressed', String(isDetaljer));
             });
             compDialog.showModal();
-            StandplassCompModal.fetchDetail(compId, window.fetch.bind(window)).then(function (data) {
+            StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
                 if (mySeq !== compOpenSeq) { return; } // a newer competition was opened since this fetch started
-                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(data);
+                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 if (mySeq !== compOpenSeq) { return; }
                 bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
@@ -1005,17 +1033,29 @@ var StandplassStevnerPage = (function () {
             }
             StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
                 if (!stillCurrent()) { return; }
-                bodyEl.innerHTML = StandplassCompModal.renderResultsBody(results);
+                compResults = results;
+                bodyEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
             }, function () {
                 if (!stillCurrent()) { return; }
                 bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
             });
         });
 
+        // Delegated on compDialog (not the filter select itself) since the
+        // Resultater body -- select included -- is torn down and rebuilt by
+        // innerHTML on every filter change.
+        compDialog.addEventListener('change', function (e) {
+            var select = e.target.closest('.comp-results-disc-filter');
+            if (!select) { return; }
+            compDialog.querySelector('.comp-modal-body').innerHTML =
+                StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
+        });
+
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-comp-btn');
             if (!btn) { return; }
-            openCompModal(btn.dataset.compId, btn.textContent);
+            var card = visibleCards.filter(function (c) { return String(c.id) === btn.dataset.compId; })[0];
+            openCompModal(btn.dataset.compId, btn.textContent, card);
         });
 
         rowsEl.addEventListener('click', function (e) {
