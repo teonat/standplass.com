@@ -13,6 +13,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
+    def end_headers(self):
+        # Mirrors public/_headers' CORS rule for /data/* -- that file is only
+        # honored by Cloudflare's platform, not a plain static server, so
+        # without this a locally-served third-party embed test would fail on
+        # CORS for a reason that has nothing to do with the embed itself.
+        if self.path.split('?', 1)[0].startswith('/data/'):
+            self.send_header('Access-Control-Allow-Origin', '*')
+        super().end_headers()
+
     def translate_path(self, path):
         clean = path.split('?', 1)[0].split('#', 1)[0]
         last_segment = clean.rsplit('/', 1)[-1]

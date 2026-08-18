@@ -8,6 +8,19 @@
 var StandplassEmbed = (function () {
     'use strict';
 
+    // document.currentScript is only valid during this script's own
+    // synchronous top-level execution (a plain <script src>, no async/defer,
+    // exactly what buildSnippet()'s generated tag is) -- captured once, here,
+    // rather than read lazily later (e.g. inside a custom element's
+    // connectedCallback, which can fire on a later tick, by which point it's
+    // reverted to null). Gives the *origin this exact file was loaded from*
+    // unambiguously, unlike location.hostname (see the comment on
+    // ensureDependencies below for why that's not usable here) -- correct
+    // whether that's production, a staging domain, or a local dev server.
+    var SELF_ORIGIN = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
+        ? new URL(document.currentScript.src).origin
+        : 'https://standplass.com';
+
     var VIEWS = {
         felt: { title: 'Feltskyting', dataBase: '/data/felt' },
         bane: { title: 'Baneskyting', dataBase: '/data/bane' }
@@ -78,6 +91,7 @@ var StandplassEmbed = (function () {
             + '      <button type="button" class="combo-clear" id="' + idPrefix + '-comp-clear" aria-label="Fjern stevnefilter">×</button>'
             + '    </div>'
             + '  </div>'
+            + '  <button type="button" class="clear-all-filters-btn" id="' + idPrefix + '-clear-filters">Nullstill filtre</button>'
             + '</div>'
             + '<div class="program-toggle" id="' + idPrefix + '-tab-toggle" role="group" aria-label="Velg visning">'
             + '  <button type="button" class="program-btn program-btn--active" data-tab="alle" aria-pressed="true">Alle</button>'
@@ -92,7 +106,7 @@ var StandplassEmbed = (function () {
             + '</div>'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
             + '<div id="' + idPrefix + '-rows"></div>'
-            + '<button id="' + idPrefix + '-load-more" type="button">Last flere</button>'
+            + '<button class="ranking-more-btn" id="' + idPrefix + '-load-more" type="button">Last flere</button>'
             // role/aria-labelledby instead of a native <dialog> -- no
             // aria-modal, since there is no focus trap and claiming one
             // would lie to screen readers.
@@ -138,12 +152,13 @@ var StandplassEmbed = (function () {
     // call sites below already know unambiguously which situation they're
     // in, so they say so directly: mountDirect always passes nothing
     // (root-relative -- it only ever runs shipped alongside these files),
-    // the custom element always passes true (absolute -- it only ever runs
-    // via <script src="https://standplass.com/embed.js"> on someone else's
-    // page).
+    // the custom element always passes true (absolute -- SELF_ORIGIN above
+    // is exactly where *this* embed.js was loaded from, whether that's
+    // production, a staging domain, or a local dev server serving the same
+    // public/ directory for testing).
     function ensureDependencies(absolute) {
         if (!dependenciesPromise) {
-            var prefix = absolute ? 'https://standplass.com' : '';
+            var prefix = absolute ? SELF_ORIGIN : '';
             dependenciesPromise = Promise.all(DEPENDENCY_PATHS.map(function (path) {
                 return new Promise(function (resolve, reject) {
                     var script = document.createElement('script');
@@ -198,10 +213,21 @@ var StandplassEmbed = (function () {
             });
 
             document.getElementById(idPrefix + '-embed-builder').innerHTML =
-                '<button type="button" id="' + idPrefix + '-create-embed">Opprett innebygging</button><pre id="' + idPrefix + '-embed-snippet"></pre>';
-            document.getElementById(idPrefix + '-create-embed').addEventListener('click', function () {
-                document.getElementById(idPrefix + '-embed-snippet').textContent =
-                    StandplassEmbedBuilder.buildSnippet(view, window.location.search);
+                '<button type="button" class="btn" id="' + idPrefix + '-create-embed" aria-expanded="false">Opprett innebygging</button>'
+                + '<pre class="embed-snippet" id="' + idPrefix + '-embed-snippet" hidden></pre>';
+            var createBtn = document.getElementById(idPrefix + '-create-embed');
+            var snippetEl = document.getElementById(idPrefix + '-embed-snippet');
+            createBtn.addEventListener('click', function () {
+                // Toggle: a second click while already open closes it instead
+                // of just re-writing the same (or, if klubb/club/mode hasn't
+                // changed, identical-looking) content. Reopening always
+                // rebuilds from the current URL, so it's never stale.
+                var opening = snippetEl.hidden;
+                snippetEl.hidden = !opening;
+                createBtn.setAttribute('aria-expanded', String(opening));
+                if (opening) {
+                    snippetEl.textContent = StandplassEmbedBuilder.buildSnippet(view, window.location.search);
+                }
             });
         }).catch(function () {
             // A blocked/failed dependency script (adblocker, CDN blip,
@@ -224,7 +250,7 @@ var StandplassEmbed = (function () {
     // for the same reason -- the two must agree about where this page's assets
     // live, so neither sniffs it.
     function attachStyles(shadowRoot, absolute) {
-        var prefix = absolute ? 'https://standplass.com' : '';
+        var prefix = absolute ? SELF_ORIGIN : '';
         return Promise.all(['/styles.css', '/themes.css'].map(function (path) {
             return new Promise(function (resolve) {
                 var link = document.createElement('link');
@@ -337,7 +363,7 @@ var StandplassEmbed = (function () {
                     }
                     StandplassStevnerPage.init({
                         view: view,
-                        dataBase: 'https://standplass.com' + VIEWS[view].dataBase,
+                        dataBase: SELF_ORIGIN + VIEWS[view].dataBase,
                         idPrefix: idPrefix,
                         root: shadowRoot,
                         urlState: urlState,
