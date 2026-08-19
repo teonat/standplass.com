@@ -45,6 +45,7 @@ var StandplassStevnerPage = (function () {
             class: r.class,
             score: r.score,
             rankingScore: r.rankingScore,
+            competitionType: comp.competitionTypeName || '',
             competition: comp.title,
             // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
             // date" on this string and parses it as UTC midnight, both of which break on
@@ -798,7 +799,7 @@ var StandplassStevnerPage = (function () {
             if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
             return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                 var entries = flattenRows(yearData).filter(function (r) { return r.personId === personId; })
-                    .map(function (r) { return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.discipline,
+                    .map(function (r) { return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
                         competition: r.competition,
                         position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name }; });
                 personYearCache[personId][year] = entries;
@@ -880,10 +881,10 @@ var StandplassStevnerPage = (function () {
                 // anchor under its own button instead of the nearest positioned
                 // ancestor up the tree (the modal shell).
                 return '<div class="person-filters">'
-                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-year-filter"></div>'
-                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-type-filter"></div>'
-                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-disc-filter"></div>'
-                    + '<div class="checkbox-dropdown" id="' + config.idPrefix + '-person-class-filter"></div>'
+                    + '<div class="filter-group"><label>År</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-year-filter"></div></div>'
+                    + '<div class="filter-group" hidden><label>Stevnetype</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-type-filter"></div></div>'
+                    + '<div class="filter-group" hidden><label>Øvelse</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-disc-filter"></div></div>'
+                    + '<div class="filter-group" hidden><label>Klasse</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-class-filter"></div></div>'
                     + '</div>'
                     + '<div class="person-chart-header"><div class="program-toggle" role="group" aria-label="Vis i graf">'
                     + METRICS.map(function (m) {
@@ -910,6 +911,7 @@ var StandplassStevnerPage = (function () {
             // every state change.
             function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
                 var container = id(suffix);
+                if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
                     + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
                     + '<ul class="checkbox-dropdown-list"></ul></div>';

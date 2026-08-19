@@ -970,7 +970,7 @@ h1, h2, h3 {
     gap: 0.75rem;
     margin-bottom: 1rem;
 }
-.person-filters .checkbox-dropdown { flex: 1 1 150px; min-width: 130px; }
+.person-filters .filter-group { flex: 1 1 150px; min-width: 130px; }
 
 /* ── Person chart (style.css:1378-1484) ─────────────────── */
 /* Tooltip/legend are wired now (hover/focus/click on .person-chart-dot).
