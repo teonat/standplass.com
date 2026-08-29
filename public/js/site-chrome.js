@@ -2,19 +2,35 @@
 (function () {
     'use strict';
 
-    var dropdownBtn = document.querySelector('.nav-dropdown-btn');
-    var dropdownMenu = document.getElementById('nav-resultater-menu');
-    if (dropdownBtn && dropdownMenu) {
-        dropdownBtn.addEventListener('click', function () {
-            var open = dropdownBtn.getAttribute('aria-expanded') === 'true';
-            dropdownBtn.setAttribute('aria-expanded', String(!open));
-            dropdownMenu.hidden = open;
+    // The header nav can hold more than one dropdown (Resultater,
+    // Topplister) alongside a plain link (Terminliste) -- each dropdown
+    // opens/closes independently, opening one closes any other that's open,
+    // and a click fully outside every dropdown closes them all.
+    var navDropdowns = document.querySelectorAll('.nav-dropdown');
+    if (navDropdowns.length) {
+        var closeDropdown = function (dd) {
+            var btn = dd.querySelector('.nav-dropdown-btn');
+            var menu = dd.querySelector('.nav-dropdown-menu');
+            if (btn) { btn.setAttribute('aria-expanded', 'false'); }
+            if (menu) { menu.hidden = true; }
+        };
+        Array.prototype.forEach.call(navDropdowns, function (dd) {
+            var btn = dd.querySelector('.nav-dropdown-btn');
+            var menu = dd.querySelector('.nav-dropdown-menu');
+            if (!btn || !menu) { return; }
+            btn.addEventListener('click', function () {
+                var open = btn.getAttribute('aria-expanded') === 'true';
+                Array.prototype.forEach.call(navDropdowns, function (other) {
+                    if (other !== dd) { closeDropdown(other); }
+                });
+                btn.setAttribute('aria-expanded', String(!open));
+                menu.hidden = open;
+            });
         });
         document.addEventListener('click', function (e) {
-            if (!dropdownBtn.parentElement.contains(e.target)) {
-                dropdownBtn.setAttribute('aria-expanded', 'false');
-                dropdownMenu.hidden = true;
-            }
+            Array.prototype.forEach.call(navDropdowns, function (dd) {
+                if (!dd.contains(e.target)) { closeDropdown(dd); }
+            });
         });
     }
 

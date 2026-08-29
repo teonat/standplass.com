@@ -81,6 +81,14 @@ h1, h2, h3 {
   letter-spacing: 0.05em;
   text-decoration: none;
 }
+/* Header nav now holds multiple items (two dropdowns + a plain link) --
+   previously just one .nav-dropdown, which relied on the header's own
+   flex layout and never needed this itself. */
+.site-header-inner nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
 .nav-dropdown { position: relative; }
 .nav-dropdown-btn {
   background: none;
@@ -92,6 +100,15 @@ h1, h2, h3 {
   padding: 0.4rem 0.6rem;
 }
 .nav-dropdown-btn:hover { color: var(--brand-accent); }
+/* Plain nav item (Terminliste) alongside the dropdowns -- one page, no
+   submenu needed. Same look as .nav-dropdown-btn, just an <a>. */
+.nav-link {
+  color: var(--white);
+  font-size: 0.9375rem;
+  text-decoration: none;
+  padding: 0.4rem 0.6rem;
+}
+.nav-link:hover { color: var(--brand-accent); }
 .nav-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
