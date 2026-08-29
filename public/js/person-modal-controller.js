@@ -291,7 +291,17 @@ var StandplassPersonModalController = (function () {
             }
         }
 
-        return { open: open, close: close, openFromUrl: openFromUrl };
+        // For a host page whose data source changes at runtime (e.g. klubb-page.js's
+        // Felt/Bane toggle) -- stevner-page.js's own felt/bane usage never calls this,
+        // since its program is page-fixed. Clears the personId+year cache (entries from
+        // the old program would otherwise be served stale) and updates the metric
+        // default for the next modal opened fresh.
+        function reset(newCfg) {
+            if (newCfg && newCfg.initialMetric) { modalMetric = newCfg.initialMetric; }
+            personYearCache = {};
+        }
+
+        return { open: open, close: close, openFromUrl: openFromUrl, reset: reset };
     }
 
     return { create: create };

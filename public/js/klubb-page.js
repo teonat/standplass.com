@@ -219,6 +219,7 @@ var StandplassKlubbPage = (function () {
                 feltBtn.setAttribute('aria-pressed', String(program === 'felt'));
                 baneBtn.classList.toggle('program-btn--active', program === 'bane');
                 baneBtn.setAttribute('aria-pressed', String(program === 'bane'));
+                personModal.reset({ initialMetric: program === 'bane' ? 'score' : 'rankingScore' });
                 loadAll();
             }
             feltBtn.addEventListener('click', function () { if (activeProgram !== 'felt') { setProgram('felt'); } });
