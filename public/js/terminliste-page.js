@@ -565,12 +565,23 @@ var StandplassTerminlistePage = (function () {
             compDialog = document.createElement('dialog');
             compDialog.id = config.idPrefix + '-comp-dialog';
             compDialog.className = 'comp-modal-dialog';
+            // Two persistent body containers, toggled via `hidden` -- not a
+            // single shared body replaced by innerHTML on every tab switch.
+            // Matches the source's own NSFUI.CompModal (#comp-view-detaljer/
+            // #comp-view-resultater, _switchTab toggling .hidden), which
+            // never destroys the Detaljer render when Resultater is shown.
+            // A single-body-replace design (this file's own first draft, and
+            // stevner-page.js's already-shipped compDialog) loses the
+            // Detaljer content the moment Resultater is viewed, with no way
+            // back short of a cache-and-restore patch -- the real fix is to
+            // never destroy it in the first place.
             compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
                 + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
                 + '<p class="comp-modal-meta"></p>'
                 + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
                 + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
-                + '<div class="comp-modal-body"></div>';
+                + '<div class="comp-modal-body" data-comp-view="detaljer"></div>'
+                + '<div class="comp-modal-body" data-comp-view="resultater" hidden></div>';
             (root === document ? document.body : root).appendChild(compDialog);
         }
         compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
@@ -581,8 +592,12 @@ var StandplassTerminlistePage = (function () {
             compDialog.dataset.compId = compId;
             compDialog.querySelector('.comp-modal-title').textContent = title || '';
             compDialog.querySelector('.comp-modal-meta').textContent = '';
-            var bodyEl = compDialog.querySelector('.comp-modal-body');
-            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            var detailViewEl = compDialog.querySelector('[data-comp-view="detaljer"]');
+            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
+            detailViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            resultsViewEl.innerHTML = '';
+            detailViewEl.hidden = false;
+            resultsViewEl.hidden = true;
             Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
                 var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
                 b.classList.toggle('program-btn--active', isDetaljer);
@@ -595,26 +610,29 @@ var StandplassTerminlistePage = (function () {
                     StandplassFormat.formatDateRange(result.comp.startDate, result.comp.endDate),
                     result.comp.facilityName, result.comp.organizationName
                 ].filter(Boolean).join(' · ');
-                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
+                detailViewEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 if (mySeq !== compOpenSeq) { return; }
-                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
+                detailViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
             });
         }
 
         compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
             var btn = e.target.closest('button[data-comp-tab]');
             if (!btn) { return; }
+            var isDetaljer = btn.getAttribute('data-comp-tab') === 'detaljer';
             Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
                 var isActive = b === btn;
                 b.classList.toggle('program-btn--active', isActive);
                 b.setAttribute('aria-pressed', String(isActive));
             });
-            if (btn.getAttribute('data-comp-tab') !== 'resultater') { return; }
+            compDialog.querySelector('[data-comp-view="detaljer"]').hidden = !isDetaljer;
+            compDialog.querySelector('[data-comp-view="resultater"]').hidden = isDetaljer;
+            if (isDetaljer) { return; }
             var mySeq = compOpenSeq;
-            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
             var compId = compDialog.dataset.compId;
-            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            resultsViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
             function stillCurrent() {
                 return mySeq === compOpenSeq
                     && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
@@ -622,17 +640,17 @@ var StandplassTerminlistePage = (function () {
             StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
                 if (!stillCurrent()) { return; }
                 compResults = results;
-                bodyEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
+                resultsViewEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
             }, function () {
                 if (!stillCurrent()) { return; }
-                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
+                resultsViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
             });
         });
 
         compDialog.addEventListener('change', function (e) {
             var select = e.target.closest('.comp-results-disc-filter');
             if (!select) { return; }
-            compDialog.querySelector('.comp-modal-body').innerHTML =
+            compDialog.querySelector('[data-comp-view="resultater"]').innerHTML =
                 StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
         });
 
