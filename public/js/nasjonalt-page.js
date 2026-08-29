@@ -223,8 +223,63 @@ var StandplassNasjonaltPage = (function () {
             }
         });
 
-        // Tasks 6-8 continue here: krets/klubb combos, num/period wiring,
-        // fetchAndRender + person-modal, initial branchlist load.
+        var allKretser = [], allClubs = [];
+
+        StandplassFilterWidgets.makeComboHandlers({
+            input: kretsInput, list: kretsList, clear: kretsClear,
+            getItems: function (query) {
+                var q = (query || '').trim().toLowerCase();
+                var filtered = q ? allKretser.filter(function (k) { return k.name.toLowerCase().indexOf(q) !== -1; }) : allKretser;
+                return filtered.slice(0, 50);
+            },
+            restoreOnBlur: function () { return selectedKretsName; },
+            onSelect: function (kretsId, kretsName) {
+                selectedKretsId = kretsId; selectedKretsName = kretsName;
+                kretsInput.value = kretsName;
+                kretsInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value');
+                setUrlParam('krets', kretsId);
+                fetchAndRender();
+            },
+            onClear: function () {
+                selectedKretsId = null; selectedKretsName = ''; kretsInput.value = '';
+                kretsInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                setUrlParam('krets', null);
+                fetchAndRender();
+            }
+        });
+
+        StandplassFilterWidgets.makeComboHandlers({
+            input: clubInput, list: clubList, clear: clubClear,
+            getItems: function (query) {
+                var q = (query || '').trim().toLowerCase();
+                var filtered = q ? allClubs.filter(function (c) { return c.name.toLowerCase().indexOf(q) !== -1; }) : allClubs;
+                return filtered.slice(0, 50);
+            },
+            restoreOnBlur: function () { return selectedOrgName; },
+            onSelect: function (orgId, orgName) {
+                selectedOrgId = orgId; selectedOrgName = orgName;
+                clubInput.value = orgName;
+                clubInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value');
+                setUrlParam('org', orgId);
+                fetchAndRender();
+            },
+            onClear: function () {
+                selectedOrgId = null; selectedOrgName = ''; clubInput.value = '';
+                clubInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                setUrlParam('org', null);
+                fetchAndRender();
+            }
+        });
+
+        numSelect.value = String(selectedNumResults);
+        numSelect.addEventListener('change', function () {
+            selectedNumResults = parseInt(numSelect.value, 10) || 1;
+            setUrlParam('num', selectedNumResults === 1 ? null : String(selectedNumResults));
+            fetchAndRender();
+        });
+
+        // Tasks 7-8 continue here: period-mode toggle, fetchAndRender +
+        // person-modal, initial branchlist/org load.
     }
 
     return {
