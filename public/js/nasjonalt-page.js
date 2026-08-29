@@ -192,6 +192,7 @@ var StandplassNasjonaltPage = (function () {
                 selectedClassId = null; selectedClassName = ''; classInput.value = '';
                 classInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
                 setUrlParam('disc', discId); setUrlParam('class', null);
+                personModal.reset({ initialMetric: stevneProgram() === 'bane' ? 'score' : 'rankingScore', defaultYear: selectedYear });
                 fetchAndRender();
             },
             onClear: function () {
@@ -339,8 +340,147 @@ var StandplassNasjonaltPage = (function () {
         fraInput.addEventListener('change', handleDateChange);
         tilInput.addEventListener('change', handleDateChange);
 
-        // Task 8 continues here: fetchAndRender + person-modal, initial
-        // branchlist/org load.
+        var rankingEntries = [];
+        var hasFetched = false;
+        var showAll = false;
+        var currentAbort = null;
+        var PAGE_SIZE = 50;
+
+        function renderTable() {
+            if (!hasFetched) { return; }
+            if (!rankingEntries.length) {
+                tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen resultater funnet.</p></div>';
+                return;
+            }
+            var clickable = isClickable(selectedDisciplineId);
+            var visible = showAll ? rankingEntries : rankingEntries.slice(0, PAGE_SIZE);
+            var rows = visible.map(function (e, i) {
+                var nameCell = clickable && e.fullName
+                    ? '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(e.personId)
+                        + '" data-person-name="' + esc(e.fullName) + '">' + esc(e.fullName) + '</button>'
+                    : esc(e.fullName || '–');
+                return '<tr><td class="ranking-rank">' + (e.position || (i + 1)) + '</td>'
+                    + '<td>' + nameCell + '</td>'
+                    + '<td>' + esc(e.personOrganizationName || '') + '</td>'
+                    + '<td class="ranking-score">' + (e.totalScore != null ? Number(e.totalScore).toFixed(2) : '–') + '</td></tr>';
+            }).join('');
+            var toggleHtml = rankingEntries.length > PAGE_SIZE
+                ? '<button type="button" class="ranking-toggle" id="' + config.idPrefix + '-show-toggle">'
+                    + (showAll ? 'Vis færre' : 'Vis alle (' + rankingEntries.length + ')') + '</button>'
+                : '';
+            tableWrapEl.innerHTML = '<div class="ranking-full-table"><table class="ranking-table" aria-label="Rangeringsliste">'
+                + '<thead><tr><th scope="col">#</th><th scope="col">Navn</th><th scope="col">Klubb</th><th scope="col">Poeng</th></tr></thead>'
+                + '<tbody>' + rows + '</tbody></table></div>' + toggleHtml;
+            var toggleBtn = id('-show-toggle');
+            if (toggleBtn) { toggleBtn.addEventListener('click', function () { showAll = !showAll; renderTable(); }); }
+        }
+
+        function fetchAndRender() {
+            if (!selectedDisciplineId) {
+                hasFetched = false; rankingEntries = [];
+                statusEl.textContent = '';
+                tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Velg en øvelse for å se rangeringslisten.</p></div>';
+                return;
+            }
+            if (selectedMode === 'periode' && (!selectedFra || !selectedTil || selectedFra > selectedTil)) { return; }
+            if (currentAbort) { currentAbort.abort(); }
+            currentAbort = new AbortController();
+            statusEl.textContent = 'Laster…';
+            tableWrapEl.innerHTML = '';
+            showAll = false; hasFetched = false;
+
+            var period = selectedMode === 'periode'
+                ? { periodStart: selectedFra + 'T00:00:00.000Z', periodEnd: selectedTil + 'T23:59:59.999Z' }
+                : { periodStart: yearFrom(selectedYear), periodEnd: yearTo(selectedYear) };
+            var url = buildRankingUrl({
+                disciplineId: selectedDisciplineId, classId: selectedClassId, kretsId: selectedKretsId, orgId: selectedOrgId,
+                numberOfResults: selectedNumResults, periodStart: period.periodStart, periodEnd: period.periodEnd
+            });
+            var thisAbort = currentAbort;
+            window.fetch(url, { signal: thisAbort.signal }).then(function (r) {
+                if (!r.ok) { throw new Error(String(r.status)); }
+                return r.json();
+            }).then(function (data) {
+                if (thisAbort !== currentAbort) { return; }
+                rankingEntries = filterRankingEntries(data && data.items);
+                hasFetched = true;
+                statusEl.textContent = '';
+                renderTable();
+            }, function (err) {
+                if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
+                statusEl.textContent = 'Kunne ikke hente data.';
+                statusEl.classList.add('ranking-error');
+            });
+        }
+
+        var localDataFetcher = StandplassData.createFetcher(window.fetch.bind(window));
+        function stevneProgram() {
+            var disc = branchlistData.disciplines.filter(function (d) { return d.id === selectedDisciplineId; })[0];
+            // Bane-covered disciplines resolve via klubb-discipline-groups.js's
+            // own resolveBane, same source of truth as the clickability gate --
+            // anything clickable but not in the Bane set is Felt.
+            var isBane = disc && StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups())
+                .some(function (d) { return d.id === disc.id; });
+            return isBane ? 'bane' : 'felt';
+        }
+        var personModal = StandplassPersonModalController.create({
+            idPrefix: config.idPrefix,
+            root: root,
+            urlState: urlState,
+            fetchEntriesForYear: function (personId, year) {
+                var dataBase = stevneProgram() === 'bane' ? '/data/bane' : '/data/felt';
+                return localDataFetcher.fetchYear(dataBase, year).then(function (yearData) {
+                    return StandplassStevnerPage.flattenRows(yearData).filter(function (r) { return r.personId === personId; })
+                        .map(function (r) {
+                            return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                                competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                        });
+                });
+            },
+            defaultYear: selectedYear,
+            firstYear: 2021,
+            currentYear: CURRENT_YEAR,
+            initialMetric: 'rankingScore'
+        });
+
+        tableWrapEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-person-btn');
+            if (!btn) { return; }
+            personModal.open(btn, { personId: btn.dataset.personId, personName: btn.dataset.personName, initialDisc: selectedDisciplineName || null });
+        });
+
+        Promise.all([
+            ensureBranchlist(window.fetch.bind(window)),
+            StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)),
+            // computeClickableIds/stevneProgram both call
+            // StandplassCompModal.getDisciplineGroups(), which returns []
+            // until ensureReferenceData resolves at least once -- must be
+            // triggered here, not assumed to already be running (this page
+            // never otherwise touches comp-modal.js's own init path the way
+            // klubb-page.js does at its very end).
+            StandplassCompModal.ensureReferenceData(window.fetch.bind(window))
+        ]).then(function (results) {
+            branchlistData = results[0];
+            clickableDiscIds = computeClickableIds(StandplassCompModal.getDisciplineGroups());
+            var rawOrgs = results[1];
+            allKretser = StandplassNsfOrgs.filterKretser(rawOrgs);
+            allClubs = StandplassNsfOrgs.filterClubs(rawOrgs);
+            discInput.disabled = false; discInput.placeholder = 'Søk øvelse…';
+            if (selectedDisciplineId) {
+                var disc = branchlistData.disciplines.filter(function (d) { return d.id === selectedDisciplineId; })[0];
+                if (disc) { selectedDisciplineName = disc.name; discInput.value = disc.name; discInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value'); }
+                else { selectedDisciplineId = null; }
+            }
+            // Discipline resolved from the URL -- restore class/krets/klubb
+            // display names the same way, then trigger the initial fetch.
+            personModal.reset({ initialMetric: stevneProgram() === 'bane' ? 'score' : 'rankingScore', defaultYear: selectedYear });
+            personModal.openFromUrl();
+            if (selectedDisciplineId) { fetchAndRender(); }
+        }, function () {
+            discInput.placeholder = 'Kunne ikke laste data';
+            statusEl.textContent = 'Kunne ikke laste data fra NSF. Prøv å laste siden på nytt.';
+            statusEl.classList.add('ranking-error');
+        });
     }
 
     return {
