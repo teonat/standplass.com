@@ -262,20 +262,6 @@ var StandplassStevnerPage = (function () {
             + '</div>';
     }
 
-    // Shared across every init() call on the page (both adapters, any number
-    // of instances) so that with two open person modals on one page, Escape
-    // closes only the most-recently-opened one instead of every instance's
-    // modal at once -- see the keydown wiring change in Step 6 below.
-    var activeModalCloser = null;
-    var escapeHandlerWired = false;
-    function wireGlobalEscapeHandler() {
-        if (escapeHandlerWired) { return; }
-        escapeHandlerWired = true;
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && activeModalCloser) { activeModalCloser(); }
-        });
-    }
-
     function init(config) {
         var dataBase = config.dataBase;
         var view = config.view;
@@ -723,300 +709,24 @@ var StandplassStevnerPage = (function () {
 
         loadYear(activeYear);
 
-        // ── Person modal ─────────────────────────────────────────────────
-        // URL-state wiring (StandplassPersonModal) + the real SVG chart
-        // (StandplassPersonModal.renderChart) above the per-entry table. The
-        // metric toggle mirrors nsf-ui.js:1685-1707; renderChart itself now
-        // wires the tooltip/legend/overlap-ring, only the expand-dialog view
-        // from that file is still deferred.
-        var modalEl = id('-person-modal');
-        var METRICS = [
-            { key: 'rankingScore', label: 'Ranking' },
-            { key: 'score', label: 'Poeng', title: 'Poengsum varierer med stevnets maks-score — ikke direkte sammenlignbar på tvers av stevner' },
-            { key: 'position', label: 'Plassering' }
-        ];
-        var modalMetric = view === 'bane' ? 'score' : 'rankingScore';
-        var modalEntries = [];
-        // Reassigned to the current open's syncPersonModalUrl on every
-        // renderPersonModal call -- the metric-toggle click handler below is
-        // wired once, outside renderPersonModal, so it can't close over a
-        // given open's own copy directly.
-        var syncCurrentPersonModalUrl = function () {};
-        // The element that opened the modal, so focus can go back where it came
-        // from on close. Native <dialog>.showModal() (nsf-ui.js:1370) does this
-        // for free; a plain <div> has to do it by hand. Stays null when the
-        // modal is opened from a ?person= deep link — there is nothing to
-        // return to then.
-        var modalOpener = null;
-
-        function closePersonModal() {
-            // Only this instance's own still-open modal clears the shared
-            // pointer -- if a second instance's modal opened since, closing
-            // this one must not null out that instance's active reference.
-            if (activeModalCloser === closePersonModal) { activeModalCloser = null; }
-            modalEl.hidden = true;
-            modalEl.innerHTML = '';
-            var qs = StandplassPersonModal.clearPersonFromUrl(urlState.getSearch());
-            urlState.setSearch(qs);
-            // A row the filters have since re-rendered away is detached, and
-            // focus() on a detached node is a harmless no-op.
-            if (modalOpener) { modalOpener.focus(); modalOpener = null; }
-        }
-
-        // modalEl is the full-viewport overlay; .person-modal-shell is the
-        // centered box inside it. A click lands with e.target === modalEl
-        // only when it's on the overlay itself, i.e. outside the shell --
-        // same "click outside closes it" check the source uses on its
-        // native <dialog> (nsf-ui.js: `if (e.target === _dialog) close()`).
-        modalEl.addEventListener('click', function (e) {
-            if (e.target === modalEl) { closePersonModal(); }
+        var personModal = StandplassPersonModalController.create({
+            idPrefix: config.idPrefix,
+            root: root,
+            urlState: urlState,
+            fetchEntriesForYear: function (personId, year) {
+                return fetcher.fetchYear(dataBase, year).then(function (yearData) {
+                    return flattenRows(yearData).filter(function (r) { return r.personId === personId; })
+                        .map(function (r) {
+                            return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                                competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                        });
+                });
+            },
+            defaultYear: activeYear,
+            firstYear: FIRST_YEAR,
+            currentYear: CURRENT_YEAR,
+            initialMetric: view === 'bane' ? 'score' : 'rankingScore'
         });
-
-        function showModal(title, body) {
-            modalEl.innerHTML = '<div class="person-modal-shell">'
-                + '<div class="comp-modal-header">'
-                + '<h2 class="comp-modal-title" id="' + config.idPrefix + '-person-modal-title">'
-                + title + '</h2>'
-                + '<button type="button" class="comp-modal-close" id="' + config.idPrefix
-                + '-person-modal-close" aria-label="Lukk">×</button>'
-                + '</div>'
-                + '<div class="comp-modal-body">' + body + '</div>'
-                + '</div>';
-            modalEl.hidden = false;
-            activeModalCloser = closePersonModal;
-            id('-person-modal-close').addEventListener('click', closePersonModal);
-            id('-person-modal-close').focus();
-        }
-
-        function drawChart() {
-            var chartEl = id('-person-chart');
-            if (chartEl) { StandplassPersonModal.renderChart(chartEl, modalEntries, modalMetric); }
-        }
-
-        var personYearCache = {}; // { personId: { year: entry[] } }
-        var personOpenSeq = 0;
-
-        function fetchPersonYear(personId, year) {
-            personYearCache[personId] = personYearCache[personId] || {};
-            if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
-            return fetcher.fetchYear(dataBase, year).then(function (yearData) {
-                var entries = flattenRows(yearData).filter(function (r) { return r.personId === personId; })
-                    .map(function (r) { return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
-                        competition: r.competition,
-                        position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name }; });
-                personYearCache[personId][year] = entries;
-                return entries;
-            });
-        }
-
-        // urlFilters (from parsePersonFilterParams) is only ever passed on a
-        // ?person= deep link -- a row click always starts from the plain
-        // defaults below plus that row's own initialDisc, matching the
-        // source's separate open()/tryOpenFromUrl() entry points.
-        function renderPersonModal(personId, personName, initialDisc, urlFilters) {
-            var mySeq = ++personOpenSeq;
-            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [activeYear];
-            var entriesByYear = {};
-            var filters = {
-                types: (urlFilters && urlFilters.types) || null,
-                discs: (urlFilters && urlFilters.discs) || null,
-                classes: (urlFilters && urlFilters.classes) || null
-            };
-            if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
-
-            function knownValues(key) {
-                var all = {};
-                Object.keys(entriesByYear).forEach(function (y) {
-                    entriesByYear[y].forEach(function (e) { if (e[key]) { all[e[key]] = true; } });
-                });
-                return Object.keys(all).sort(function (a, b) { return a.localeCompare(b, 'no'); });
-            }
-
-            // Mirrors nsf-ui.js's urlParams(): only ever writes a p_* param
-            // when it differs from the default, so a plain ?person=X&year=Y
-            // link (nothing touched inside the modal) stays exactly that.
-            function syncPersonModalUrl() {
-                var defaultMetric = view === 'bane' ? 'score' : 'rankingScore';
-                var patch = StandplassPersonModal.buildPersonFilterParams({
-                    selectedYears: selectedYears, activeYear: activeYear,
-                    types: filters.types, discs: filters.discs, classes: filters.classes,
-                    metric: modalMetric, defaultMetric: defaultMetric
-                });
-                Object.keys(patch).forEach(function (k) { setUrlParam(k, patch[k]); });
-            }
-            syncCurrentPersonModalUrl = syncPersonModalUrl;
-
-            function refresh() {
-                syncPersonModalUrl();
-                var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
-                modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
-                // Chronological, oldest first -- same ordering the chart's X-axis
-                // uses. With up to 6 years merged, the date is what tells two
-                // otherwise identical discipline/class rows apart.
-                var body = modalEntries.slice().sort(function (a, b) {
-                    return (a.date || '') < (b.date || '') ? -1 : 1;
-                }).map(function (r) {
-                    return '<tr><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
-                        + '<td>' + esc(r.competition || '–') + '</td>'
-                        + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
-                        + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
-                        + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
-                        + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
-                }).join('');
-                var tbody = id('-person-table-body');
-                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
-                drawChart();
-            }
-
-            function loadYearIfNeeded(year) {
-                if (entriesByYear[year]) { return Promise.resolve(); }
-                return fetchPersonYear(personId, year).then(function (entries) {
-                    if (mySeq !== personOpenSeq) { return; } // modal reopened since; discard this stale resolution
-                    entriesByYear[year] = entries;
-                });
-            }
-
-            function personModalBodyMarkup() {
-                // Each filter wrapper needs the same "checkbox-dropdown" class the
-                // main-page discipline dropdown gets from embed.js's static template
-                // -- it's what makes .checkbox-dropdown-panel's `position: absolute`
-                // anchor under its own button instead of the nearest positioned
-                // ancestor up the tree (the modal shell).
-                return '<div class="person-filters">'
-                    + '<div class="filter-group"><label>År</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-year-filter"></div></div>'
-                    + '<div class="filter-group" hidden><label>Stevnetype</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-type-filter"></div></div>'
-                    + '<div class="filter-group" hidden><label>Øvelse</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-disc-filter"></div></div>'
-                    + '<div class="filter-group" hidden><label>Klasse</label><div class="checkbox-dropdown" id="' + config.idPrefix + '-person-class-filter"></div></div>'
-                    + '</div>'
-                    + '<div class="person-chart-header"><div class="program-toggle" role="group" aria-label="Vis i graf">'
-                    + METRICS.map(function (m) {
-                        return '<button type="button" class="program-btn person-chart-toggle' + (m.key === modalMetric ? ' program-btn--active' : '') + '"'
-                            + ' data-metric="' + m.key + '" aria-pressed="' + (m.key === modalMetric) + '"'
-                            + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
-                    }).join('') + '</div></div>'
-                    + '<div id="' + config.idPrefix + '-person-chart"></div>'
-                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                    + '<tbody id="' + config.idPrefix + '-person-table-body"></tbody></table>';
-            }
-
-            function toggleSetValue(current, known, v, checked) {
-                var base = current === null ? known.slice() : current.slice();
-                if (checked) { if (base.indexOf(v) < 0) { base.push(v); } } else { base = base.filter(function (x) { return x !== v; }); }
-                return base;
-            }
-
-            // getSelected is a live getter, not a snapshot array -- filters.discs
-            // etc. are reassigned (not mutated) on every toggle via
-            // toggleSetValue, so a captured-by-value array would go stale the
-            // moment the button label or a reopened panel re-reads it. Matches
-            // the discDropdown/clubCombo convention above: .rebuild() after
-            // every state change.
-            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
-                var container = id(suffix);
-                if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
-                container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
-                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
-                    + '<ul class="checkbox-dropdown-list"></ul></div>';
-                var dropdown = FW.makeCheckboxDropdown({
-                    btn: container.querySelector('.checkbox-dropdown-btn'), panel: container.querySelector('.checkbox-dropdown-panel'),
-                    list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
-                    labelNone: labelNone,
-                    searchable: !!searchable,
-                    getItems: function () { return items.map(function (i) { return { id: i, name: i }; }); },
-                    getSelected: function () { var s = getSelected(); return s === null ? items : s; },
-                    // makeCheckboxDropdown always calls onToggle(id, name, checked) --
-                    // the 3rd positional arg is the real checked boolean, so this must
-                    // take 3 params even though `name` is unused here (id === name for
-                    // these single-value items).
-                    onToggle: function (v, name, checked) { onToggle(v, checked); dropdown.rebuild(); },
-                    // A dedicated no-arg callback, not a (null, false) sentinel routed
-                    // through onToggle -- toggleSetValue's `x !== v` removal is a no-op
-                    // for v=null (no element is ever null), and for the year dropdown
-                    // parseInt(null) is NaN, which would fetch a "NaN.json" and 404
-                    // with nothing to catch the rejection.
-                    onClearAll: function () { onClear(); dropdown.rebuild(); }
-                });
-                dropdown.rebuild();
-                return dropdown;
-            }
-
-            function wirePersonModalFilters() {
-                var years = [];
-                for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) { years.push(y); }
-                mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
-                    var yr = parseInt(yearStr, 10);
-                    if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
-                    loadYearIfNeeded(yr).then(function () {
-                        if (mySeq !== personOpenSeq) { return; }
-                        // A newly-checked year can introduce discipline/class/type
-                        // values the dropdowns were never mounted with (or at all,
-                        // if the first year had ≤1 distinct value). Remounting is
-                        // safe: mountFilterDropdown rewrites container.innerHTML
-                        // and wires fresh listeners each call.
-                        wirePersonModalFilters();
-                        refresh();
-                    });
-                // Labeled "Kun <år>", not "Fjern alle" like every other dropdown here --
-                // unlike those (which clear to "no filter", i.e. everything), this
-                // resets to a single selected year rather than zero, since an empty
-                // year selection is a confusing dead end (nothing to show, and
-                // parseInt(null) on the next fetch would 404 a "NaN.json"). A shared
-                // label would imply it behaves the same way the others do.
-                }, function () { selectedYears = [activeYear]; refresh(); }, false, 'Kun ' + activeYear);
-                if (knownValues('competitionType').length > 1) {
-                    mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
-                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
-                        function () { filters.types = null; refresh(); });
-                }
-                if (knownValues('discipline').length > 1) {
-                    mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
-                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
-                        function () { filters.discs = null; refresh(); }, true);
-                }
-                if (knownValues('class').length > 1) {
-                    mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
-                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
-                        function () { filters.classes = null; refresh(); });
-                }
-            }
-
-            Promise.all(selectedYears.map(loadYearIfNeeded)).then(function () {
-                if (mySeq !== personOpenSeq) { return; }
-                // A ?person= deep link has no name to pass in (there is no row to
-                // read it from), so take it off the fetched entries instead --
-                // from whichever selected year actually has data, not
-                // necessarily activeYear (a p_year deep link's years don't
-                // have to include it).
-                var resolvedName = personName;
-                for (var i = 0; i < selectedYears.length && !resolvedName; i++) {
-                    resolvedName = ((entriesByYear[selectedYears[i]] || [])[0] || {}).name;
-                }
-                // A deep link's own p_disc (if any) already lives in
-                // filters.discs; only a row click's initialDisc should
-                // overwrite it here.
-                if (!urlFilters) {
-                    filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
-                }
-                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
-                wirePersonModalFilters();
-                refresh();
-            }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
-        }
-
-        modalEl.addEventListener('click', function (e) {
-            var btn = e.target.closest('.person-chart-toggle');
-            if (!btn) { return; }
-            modalMetric = btn.getAttribute('data-metric');
-            Array.prototype.forEach.call(modalEl.querySelectorAll('.person-chart-toggle'), function (b) {
-                var isActive = b === btn;
-                b.classList.toggle('program-btn--active', isActive);
-                b.setAttribute('aria-pressed', String(isActive));
-            });
-            syncCurrentPersonModalUrl();
-            drawChart();
-        });
-
-        wireGlobalEscapeHandler();
 
         // Competition-detail modal (native <dialog>, not the person modal's
         // activeModalCloser system -- <dialog> handles Escape/focus-trap on
@@ -1134,10 +844,11 @@ var StandplassStevnerPage = (function () {
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-person-btn');
             if (!btn) { return; }
-            var personId = btn.dataset.personId;
-            modalOpener = btn;
-            urlState.setSearch(StandplassPersonModal.buildPersonUrl(urlState.getSearch(), personId, activeYear));
-            renderPersonModal(personId, btn.dataset.personName, btn.dataset.discipline || null);
+            personModal.open(btn, {
+                personId: btn.dataset.personId,
+                personName: btn.dataset.personName,
+                initialDisc: btn.dataset.discipline || null
+            });
         });
 
         rowsEl.addEventListener('click', function (e) {
@@ -1160,10 +871,7 @@ var StandplassStevnerPage = (function () {
             }
         });
 
-        var personState = StandplassPersonModal.parsePersonFromUrl(urlState.getSearch());
-        if (personState) {
-            renderPersonModal(personState.personId, null, null, StandplassPersonModal.parsePersonFilterParams(urlState.getSearch()));
-        }
+        personModal.openFromUrl();
     }
 
     return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
