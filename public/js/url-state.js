@@ -12,8 +12,13 @@ var StandplassUrlState = (function () {
     'use strict';
 
     // The only params any call site currently reads/writes via the URL.
+    // 'mode' is deliberately NOT tracked here -- it's the project-wide
+    // light/dark theme override param (read directly off
+    // window.location.search by site-chrome.js), not a nasjonalt-owned
+    // param; nasjonalt's own Periode-mode toggle uses 'periode' instead so
+    // it can never collide with it (see nasjonalt-page.js).
     var TRACKED_PARAMS = ['year', 'klubb', 'person', 'tab', 'group', 'disc', 'name', 'organizer', 'comp',
-        'program', 'num', 'class', 'krets', 'org', 'mode', 'fra', 'til',
+        'program', 'num', 'class', 'krets', 'org', 'periode', 'fra', 'til',
         'p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
 
     function createController(config) {

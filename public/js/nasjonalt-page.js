@@ -169,7 +169,12 @@ var StandplassNasjonaltPage = (function () {
         var selectedOrgName = '';
         var numParam = parseInt(params.get('num'), 10);
         var selectedNumResults = (numParam >= 1 && numParam <= 10) ? numParam : 1;
-        var selectedMode = params.get('mode') === 'periode' ? 'periode' : 'sesong';
+        // Own param name is 'periode', not 'mode' -- 'mode' is already the
+        // project-wide light/dark theme override param (see url-state.js's
+        // TRACKED_PARAMS comment); reusing it here made ?mode=periode force
+        // the whole page dark via themes.css's :root:not([data-mode="light"])
+        // selector, regardless of the user's actual theme preference.
+        var selectedMode = params.get('periode') === 'periode' ? 'periode' : 'sesong';
         var yearParam = parseInt(params.get('year'), 10);
         var selectedYear = (yearParam >= CURRENT_YEAR - 5 && yearParam <= CURRENT_YEAR) ? yearParam : CURRENT_YEAR;
         var selectedFra = params.get('fra') || '';
@@ -213,7 +218,7 @@ var StandplassNasjonaltPage = (function () {
                 selectedClassId = null; selectedClassName = ''; classInput.value = '';
                 classInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
                 setUrlParam('disc', null); setUrlParam('class', null);
-                statusEl.textContent = ''; tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Velg en øvelse for å se rangeringslisten.</p></div>';
+                fetchAndRender();
             }
         });
 
@@ -331,9 +336,9 @@ var StandplassNasjonaltPage = (function () {
                 fraInput.value = selectedFra; tilInput.value = selectedTil;
             }
             if (selectedMode === 'periode') {
-                setUrlParam('mode', 'periode'); setUrlParam('fra', selectedFra); setUrlParam('til', selectedTil); setUrlParam('year', null);
+                setUrlParam('periode', 'periode'); setUrlParam('fra', selectedFra); setUrlParam('til', selectedTil); setUrlParam('year', null);
             } else {
-                setUrlParam('mode', null); setUrlParam('fra', null); setUrlParam('til', null);
+                setUrlParam('periode', null); setUrlParam('fra', null); setUrlParam('til', null);
                 setUrlParam('year', selectedYear === CURRENT_YEAR ? null : String(selectedYear));
             }
             fetchAndRender();
@@ -371,7 +376,7 @@ var StandplassNasjonaltPage = (function () {
                     ? '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(e.personId)
                         + '" data-person-name="' + esc(e.fullName) + '">' + esc(e.fullName) + '</button>'
                     : esc(e.fullName || '–');
-                return '<tr><td class="ranking-rank">' + (e.position || (i + 1)) + '</td>'
+                return '<tr><td class="ranking-rank">' + esc(e.position || (i + 1)) + '</td>'
                     + '<td>' + nameCell + '</td>'
                     + '<td>' + esc(e.personOrganizationName || '') + '</td>'
                     + '<td class="ranking-score">' + (e.totalScore != null ? Number(e.totalScore).toFixed(2) : '–') + '</td></tr>';
@@ -389,6 +394,7 @@ var StandplassNasjonaltPage = (function () {
 
         function fetchAndRender() {
             if (!selectedDisciplineId) {
+                if (currentAbort) { currentAbort.abort(); currentAbort = null; }
                 hasFetched = false; rankingEntries = [];
                 statusEl.textContent = '';
                 tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Velg en øvelse for å se rangeringslisten.</p></div>';
@@ -477,16 +483,47 @@ var StandplassNasjonaltPage = (function () {
             var rawOrgs = results[1];
             allKretser = StandplassNsfOrgs.filterKretser(rawOrgs);
             allClubs = StandplassNsfOrgs.filterClubs(rawOrgs);
+            // Both empty is nsf-orgs.js's own fail-open signal (it resolves
+            // [] on a fetch failure rather than rejecting) -- same check
+            // klubb-page.js already does after its own ensureOrgs() resolve.
+            if (!allKretser.length && !allClubs.length) {
+                statusEl.textContent = 'Kunne ikke laste kretser/klubber. Filtrering på krets/klubb er ikke tilgjengelig.';
+                statusEl.classList.add('ranking-error');
+            }
             discInput.disabled = false; discInput.placeholder = 'Søk øvelse…';
             if (selectedDisciplineId) {
                 var disc = branchlistData.disciplines.filter(function (d) { return d.id === selectedDisciplineId; })[0];
-                if (disc) { selectedDisciplineName = disc.name; discInput.value = disc.name; discInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value'); }
-                else { selectedDisciplineId = null; }
+                if (disc) {
+                    selectedDisciplineName = disc.name; discInput.value = disc.name; discInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value');
+                    // Class names only resolve off the matched discipline's
+                    // own class list -- restore the same way disc itself
+                    // just was, right above.
+                    if (selectedClassId) {
+                        var cls = disc.classes.filter(function (c) { return c.id === selectedClassId; })[0];
+                        if (cls) { selectedClassName = cls.name; classInput.value = cls.name; classInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value'); }
+                        else { selectedClassId = null; }
+                    }
+                } else {
+                    selectedDisciplineId = null; selectedClassId = null;
+                }
             }
-            // Discipline resolved from the URL -- restore class/krets/klubb
-            // display names the same way, then trigger the initial fetch.
+            // Krets/klubb names resolve off the just-loaded org lists, same
+            // pattern as disc/class just above.
+            if (selectedKretsId) {
+                var krets = allKretser.filter(function (k) { return k.id === selectedKretsId; })[0];
+                if (krets) { selectedKretsName = krets.name; kretsInput.value = krets.name; kretsInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value'); }
+                else { selectedKretsId = null; }
+            }
+            if (selectedOrgId) {
+                var org = allClubs.filter(function (c) { return c.id === selectedOrgId; })[0];
+                if (org) { selectedOrgName = org.name; clubInput.value = org.name; clubInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value'); }
+                else { selectedOrgId = null; }
+            }
             personModal.reset({ initialMetric: stevneProgram() === 'bane' ? 'score' : 'rankingScore', defaultYear: selectedYear });
-            personModal.openFromUrl();
+            // Never dead-end a deep link into a modal for a non-clickable
+            // (Rifle/Leirdue/Viltmål) discipline -- same isClickable gate
+            // renderTable() uses for the name column itself.
+            if (isClickable(selectedDisciplineId)) { personModal.openFromUrl(); }
             if (selectedDisciplineId) { fetchAndRender(); }
         }, function () {
             discInput.placeholder = 'Kunne ikke laste data';

@@ -102,7 +102,10 @@ var StandplassPersonModalController = (function () {
             personYearCache[personId] = personYearCache[personId] || {};
             if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
             return cfg.fetchEntriesForYear(personId, year).then(function (entries) {
-                personYearCache[personId][year] = entries;
+                // Lazily re-init the bucket rather than assume it survived --
+                // reset() below can wipe personYearCache wholesale while this
+                // fetch is in flight.
+                (personYearCache[personId] = personYearCache[personId] || {})[year] = entries;
                 return entries;
             });
         }
@@ -301,6 +304,12 @@ var StandplassPersonModalController = (function () {
             if (newCfg && newCfg.initialMetric) { modalMetric = newCfg.initialMetric; cfg.initialMetric = newCfg.initialMetric; }
             if (newCfg && newCfg.defaultYear) { cfg.defaultYear = newCfg.defaultYear; }
             personYearCache = {};
+            // Bumping this makes any render already in flight under the old
+            // sequence number (see renderPersonModal's own mySeq checks)
+            // stale, so it bails instead of rendering into a modal that's
+            // since moved on -- same guard variable/pattern renderPersonModal
+            // already uses against overlapping open() calls.
+            personOpenSeq++;
         }
 
         return { open: open, close: close, openFromUrl: openFromUrl, reset: reset };
