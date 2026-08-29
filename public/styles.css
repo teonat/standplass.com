@@ -425,6 +425,7 @@ h1, h2, h3 {
 }
 .filter-period-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
 .filter-period-input[data-period-mode="periode"] { display: flex; gap: 0.5rem; }
+.filter-period-input[hidden] { display: none; }
 #nasjonalt-mode-error { color: #c0392b; font-size: 0.8125rem; margin: 0.25rem 0 0; }
 
 @media (max-width: 640px) {
