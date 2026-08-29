@@ -13,7 +13,7 @@ var StandplassUrlState = (function () {
 
     // The only params any call site currently reads/writes via the URL.
     var TRACKED_PARAMS = ['year', 'klubb', 'person', 'tab', 'group', 'disc', 'name', 'organizer', 'comp',
-        'p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
+        'program', 'num', 'p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
 
     function createController(config) {
         config = config || {};

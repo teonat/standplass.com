@@ -140,9 +140,9 @@ var StandplassEmbed = (function () {
     // that don't run until every one of these has already loaded.
     var DEPENDENCY_PATHS = [
         '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js',
-        '/js/pagination.js', '/js/person-modal.js', '/js/filter-widgets.js',
-        '/js/url-state.js', '/js/mode-resolve.js', '/js/embed-builder.js', '/js/stevner-page.js',
-        '/js/comp-modal.js'
+        '/js/pagination.js', '/js/person-modal.js', '/js/person-modal-controller.js',
+        '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
+        '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js'
     ];
     var dependenciesPromise = null;
     // `absolute` is set by the caller, not sniffed from location.hostname --

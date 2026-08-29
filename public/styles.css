@@ -244,6 +244,26 @@ h1, h2, h3 {
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
+.ranking-card-title {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+}
+/* ponytail: klubb-page.js only toggles #klubb-grid-wrap's hidden attribute
+   (never a wrapper around it), so #klubb-results mirrors that state via
+   :has() instead of getting its own hidden flag the JS would need to know
+   about. */
+#klubb-results:has(#klubb-grid-wrap[hidden]) {
+    display: none;
+}
+/* #klubb-grid-wrap carries .ranking-grid (display: grid), an author rule
+   that beats the UA stylesheet's [hidden] { display: none } regardless of
+   specificity -- same gotcha already documented for #felt/#bane-person-modal
+   above. Needs the same explicit override. */
+#klubb-grid-wrap[hidden] {
+    display: none;
+}
 .stevner-card-info {
     flex: 1;
     min-width: 0;
@@ -804,8 +824,7 @@ h1, h2, h3 {
    toggled with [hidden] (stevner-page.js showModal/closePersonModal), so
    ::backdrop becomes the container's own background and [open] becomes the
    default state. */
-#felt-person-modal,
-#bane-person-modal {
+.person-modal {
     position: fixed;
     inset: 0;
     z-index: 300;
@@ -816,8 +835,7 @@ h1, h2, h3 {
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(2px);
 }
-#felt-person-modal[hidden],
-#bane-person-modal[hidden] { display: none; }
+.person-modal[hidden] { display: none; }
 
 .person-modal-shell {
     display: flex;
@@ -1072,7 +1090,8 @@ h1, h2, h3 {
 [data-mode="dark"] .stevner-comp-links a,
 [data-mode="dark"] .comp-modal-infocard a,
 [data-mode="dark"] .comp-modal-disc-name,
-[data-mode="dark"] .comp-modal-title { color: var(--text); }
+[data-mode="dark"] .comp-modal-title,
+[data-mode="dark"] .ranking-card-title { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
 [data-mode="dark"] .btn:not(.btn-primary) {
