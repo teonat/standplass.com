@@ -183,8 +183,111 @@ var StandplassTerminlistePage = (function () {
             }
         });
 
-        // Task 5 continues here: Arrangør/Krets tag-combos, Stevnetype/
-        // Øvelsesgruppe (groupDropdown referenced above), initial data load.
+        var orgCombo = FW.makeTagComboHandlers({
+            input: orgInput, list: orgList, tagsEl: orgTags, clear: orgClear,
+            getItems: function (q) {
+                var lower = (q || '').toLowerCase();
+                return allClubs.filter(function (c) { return selectedOrgIds.indexOf(c.id) < 0; })
+                    .filter(function (c) { return !lower || c.name.toLowerCase().indexOf(lower) >= 0; })
+                    .slice(0, 50);
+            },
+            getSelected: function () { return selectedOrgIds.map(function (id_) { return { id: id_, name: selectedOrgNames[id_] || id_ }; }); },
+            onSelect: function (orgId, orgName) {
+                if (selectedOrgIds.indexOf(orgId) < 0) { selectedOrgIds.push(orgId); selectedOrgNames[orgId] = orgName; }
+                orgCombo.rebuild();
+                setUrlParam('t_org', StandplassTerminlistePage.encodeIdList(selectedOrgIds) || null);
+                fetchAndRender(true);
+            },
+            onRemove: function (orgId) {
+                selectedOrgIds = selectedOrgIds.filter(function (o) { return o !== orgId; });
+                orgCombo.rebuild();
+                setUrlParam('t_org', StandplassTerminlistePage.encodeIdList(selectedOrgIds) || null);
+                fetchAndRender(true);
+            },
+            onClearAll: function () {
+                selectedOrgIds = [];
+                orgCombo.rebuild();
+                setUrlParam('t_org', null);
+                fetchAndRender(true);
+            }
+        });
+
+        var kretsCombo = FW.makeTagComboHandlers({
+            input: kretsInput, list: kretsList, tagsEl: kretsTags, clear: kretsClear,
+            getItems: function (q) {
+                var lower = (q || '').toLowerCase();
+                return allKretser.filter(function (k) { return selectedKretsIds.indexOf(k.id) < 0; })
+                    .filter(function (k) { return !lower || k.name.toLowerCase().indexOf(lower) >= 0; })
+                    .slice(0, 50);
+            },
+            getSelected: function () { return selectedKretsIds.map(function (id_) { return { id: id_, name: selectedKretsNames[id_] || id_ }; }); },
+            onSelect: function (kretsId, kretsName) {
+                if (selectedKretsIds.indexOf(kretsId) < 0) { selectedKretsIds.push(kretsId); selectedKretsNames[kretsId] = kretsName; }
+                kretsCombo.rebuild();
+                setUrlParam('t_krets', StandplassTerminlistePage.encodeIdList(selectedKretsIds) || null);
+                fetchAndRender(true);
+            },
+            onRemove: function (kretsId) {
+                selectedKretsIds = selectedKretsIds.filter(function (k) { return k !== kretsId; });
+                kretsCombo.rebuild();
+                setUrlParam('t_krets', StandplassTerminlistePage.encodeIdList(selectedKretsIds) || null);
+                fetchAndRender(true);
+            },
+            onClearAll: function () {
+                selectedKretsIds = [];
+                kretsCombo.rebuild();
+                setUrlParam('t_krets', null);
+                fetchAndRender(true);
+            }
+        });
+
+        var typeDropdown = FW.makeCheckboxDropdown({
+            btn: typeBtn, panel: typePanel, list: typeList, clearAllBtn: typeClear,
+            labelNone: 'Alle stevnetyper',
+            getItems: function () { return allTypes.map(function (t) { return { id: t.id, name: t.name }; }); },
+            getSelected: function () { return selectedTypeIds; },
+            onToggle: function (typeId, name, checked) {
+                if (checked) { if (selectedTypeIds.indexOf(typeId) < 0) { selectedTypeIds.push(typeId); } }
+                else { selectedTypeIds = selectedTypeIds.filter(function (t) { return t !== typeId; }); }
+                typeDropdown.rebuild();
+                setUrlParam('t_type', StandplassTerminlistePage.encodeIdList(selectedTypeIds) || null);
+                fetchAndRender(true);
+            },
+            onClearAll: function () {
+                selectedTypeIds = [];
+                typeDropdown.rebuild();
+                setUrlParam('t_type', null);
+                fetchAndRender(true);
+            }
+        });
+
+        var groupDropdown = FW.makeCheckboxDropdown({
+            btn: groupBtn, panel: groupPanel, list: groupList, clearAllBtn: groupClear,
+            labelNone: 'Alle øvelsesgrupper',
+            searchable: true,
+            getItems: function () {
+                return StandplassTerminlistePage.groupsForBranches(branchlistData.branches, selectedBranchIds)
+                    .map(function (g) { return { id: g.id, name: g.name }; })
+                    .sort(function (a, b) { return a.name.localeCompare(b.name, 'no'); });
+            },
+            getSelected: function () { return selectedGroupIds; },
+            onToggle: function (groupId, name, checked) {
+                if (checked) { if (selectedGroupIds.indexOf(groupId) < 0) { selectedGroupIds.push(groupId); } }
+                else { selectedGroupIds = selectedGroupIds.filter(function (g) { return g !== groupId; }); }
+                groupDropdown.rebuild();
+                setUrlParam('t_group', StandplassTerminlistePage.encodeIdList(selectedGroupIds) || null);
+                fetchAndRender(true);
+            },
+            onClearAll: function () {
+                selectedGroupIds = [];
+                groupDropdown.rebuild();
+                setUrlParam('t_group', null);
+                fetchAndRender(true);
+            }
+        });
+
+        // Task 6 continues here: fetchAndRender, comp-modal wiring
+        // (Task 7), initial branchlist/org/type data load.
     }
 
     function buildMarkup(idPrefix, compact) {
