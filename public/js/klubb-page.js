@@ -22,10 +22,13 @@ var StandplassKlubbPage = (function () {
     // Pure -- no fetch, easy to test the query-string shape directly
     // against the documented gotchas (docs/superpowers/nsf-skyting-api-reference.md).
     //
-    // ponytail: orderBy is appended as a literal string, not via qs.set(),
-    // because URLSearchParams#toString() percent-encodes the ':' (produces
-    // totalScore%3Adesc) -- the API wants the literal colon. Every other
-    // param goes through URLSearchParams as usual.
+    // ponytail: orderBy kept as a literal string, not via qs.set(), for
+    // parity with this task's own test (URLSearchParams would
+    // percent-encode the colon to %3A). The percent-encoded form is likely
+    // equivalent against the real API -- other params here already carry
+    // percent-encoded colons (periodStart/periodEnd) -- but that hasn't
+    // been confirmed against a live call. Every other param goes through
+    // URLSearchParams as usual.
     function buildRankingUrl(opts) {
         var qs = new URLSearchParams();
         qs.set('pageIndex', '0');
