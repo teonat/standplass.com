@@ -36,7 +36,7 @@ var StandplassCompModal = (function () {
     // config. Mutated in place by ensureReferenceData below; read
     // synchronously here, so a lookup requested before that fetch resolves
     // falls back to the raw id for that one render, same as the source.
-    var refData = { disciplines: {}, classes: {} };
+    var refData = { disciplines: {}, classes: {}, disciplineGroups: [] };
     var refFetchPromise = null;
     function ensureReferenceData(fetchFn) {
         if (refFetchPromise) { return refFetchPromise; }
@@ -51,11 +51,17 @@ var StandplassCompModal = (function () {
                     // "Pistol\A") that's redundant once shown inside that
                     // branch's own discipline group -- stripped like the source does.
                     (branch.classes || []).forEach(function (c) { if (!c.deleted) { refData.classes[c.id] = c.name.replace(/^[^\\/]+[\\/]/, ''); } });
+                    // Kept nested (not flattened like refData.disciplines
+                    // above) -- klubb-discipline-groups.js needs to know
+                    // which group a discipline belongs to, which the flat
+                    // id->name map above discards.
+                    refData.disciplineGroups = refData.disciplineGroups.concat(branch.disciplineGroups || []);
                 });
             })
             .catch(function () { /* best-effort; renders fall back to raw ids */ });
         return refFetchPromise;
     }
+    function getDisciplineGroups() { return refData.disciplineGroups; }
 
     // Used for both result rows (one entry per competitor -- never dedup)
     // and, via groupCompetitionEvents below, competition event/class
@@ -316,6 +322,7 @@ var StandplassCompModal = (function () {
         groupEventsByDiscipline: groupEventsByDiscipline,
         sanitizeDescription: sanitizeDescription,
         ensureReferenceData: ensureReferenceData,
+        getDisciplineGroups: getDisciplineGroups,
         fetchDetail: fetchDetail,
         fetchDetailWithFacility: fetchDetailWithFacility,
         fetchResults: fetchResults,

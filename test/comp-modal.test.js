@@ -75,7 +75,7 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     var mockBranchlist = {
         items: [{
             classes: [{ id: 'c1', name: 'Pistol\\A', deleted: false }],
-            disciplineGroups: [{ disciplines: [{ id: 'd1', name: 'Spesialpistol', deleted: false }] }]
+            disciplineGroups: [{ name: 'Spesialpistol-gruppe', disciplines: [{ id: 'd1', name: 'Spesialpistol', deleted: false }] }]
         }]
     };
     return CM.ensureReferenceData(function () {
@@ -85,6 +85,11 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     var resolvedBody = CM.renderDetailBody({ events: [{ disciplineId: 'd1', classId: 'c1', entryFee: 50 }] });
     assert.ok(resolvedBody.indexOf('Spesialpistol') >= 0, 'discipline name resolves via the reference-list fetch');
     assert.ok(resolvedBody.indexOf('>A<') >= 0, 'class name resolves and the branch prefix is stripped');
+
+    assert.ok(typeof CM.getDisciplineGroups === 'function', 'getDisciplineGroups is exported');
+    var groups = CM.getDisciplineGroups();
+    assert.ok(Array.isArray(groups) && groups.length >= 1, 'getDisciplineGroups returns the Pistol branch\'s raw disciplineGroups array');
+    assert.strictEqual(groups[0].name, 'Spesialpistol-gruppe', 'group name and nested disciplines are preserved, not flattened');
 
     var resultsBody = CM.renderResultsBody([
         { disciplineId: 'd1', classId: 'c1', position: 2, fullName: 'B Person', organizationName: 'Klubb B', score: 40 },
