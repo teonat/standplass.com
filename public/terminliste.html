@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Baneskyting – Standplass</title>
+  <title>Terminliste – Standplass</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/themes.css">
 </head>
@@ -26,10 +26,22 @@
       <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
     </div>
   </header>
-  <main id="bane-root" class="ranking-section"></main>
+  <main id="terminliste-root" class="ranking-section"></main>
   <script src="/js/mode-resolve.js"></script>
   <script src="/js/site-chrome.js"></script>
-  <script src="/embed.js"></script>
-  <script>StandplassEmbed.mountDirect({ view: 'bane', idPrefix: 'bane' });</script>
+  <script src="/js/format.js"></script>
+  <script src="/js/filter-widgets.js"></script>
+  <script src="/js/url-state.js"></script>
+  <script src="/js/comp-modal.js"></script>
+  <script src="/js/nsf-orgs.js"></script>
+  <script src="/js/terminliste-page.js"></script>
+  <script>
+    document.getElementById('terminliste-root').innerHTML = StandplassTerminlistePage.buildMarkup('terminliste', false);
+    StandplassTerminlistePage.init({
+      idPrefix: 'terminliste',
+      root: document,
+      urlState: StandplassUrlState.createController({ namespace: null })
+    });
+  </script>
 </body>
 </html>

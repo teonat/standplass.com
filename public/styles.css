@@ -219,6 +219,61 @@ h1, h2, h3 {
 .ranking-full-table a:hover,
 .ranking-table td a:hover { color: var(--brand-accent-dark); }
 
+/* Standard screen-reader-only utility: used by terminliste's detail-column
+   header, which needs a labeled header cell without visible text. */
+.visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ── Terminliste ──────────────────────────────────────── */
+.terminliste-detail-col { width: 2.5rem; text-align: center; }
+.comp-detail-btn {
+    background: none;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    width: 1.75rem;
+    height: 1.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.comp-detail-btn:hover, .comp-detail-btn:focus-visible { border-color: var(--brand-accent); color: var(--brand-accent); }
+.terminliste-sub { display: block; font-size: 0.75rem; color: var(--text-muted); }
+.terminliste-date { white-space: nowrap; }
+.terminliste-result-cell { text-align: center; }
+
+/* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
+   [data-mode="dark"] overrides from the start (not a later fix round) --
+   see this plan's Global Constraints and STATUS.md's klubb-view gotcha #2
+   about --brand-primary-as-text; this uses fixed amber/red instead, same
+   choice the source itself made, just re-keyed to this project's own
+   [data-mode="dark"] convention instead of [data-theme="dark"]. */
+tr[data-status="0"] td { background: rgba(160, 110, 0, 0.07); }
+tr[data-status="2"] td, tr[data-status="3"] td { background: rgba(180, 30, 30, 0.07); }
+tr[data-status="0"] .comp-detail-btn { border-color: #b45309; color: #b45309; }
+tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { border-color: #b41e1e; color: #b41e1e; }
+[data-mode="dark"] tr[data-status="0"] td { background: rgba(250, 200, 80, 0.09); }
+[data-mode="dark"] tr[data-status="2"] td, [data-mode="dark"] tr[data-status="3"] td { background: rgba(248, 113, 113, 0.09); }
+[data-mode="dark"] tr[data-status="0"] .comp-detail-btn { border-color: #fbbf24; color: #fbbf24; }
+[data-mode="dark"] tr[data-status="2"] .comp-detail-btn, [data-mode="dark"] tr[data-status="3"] .comp-detail-btn { border-color: #f87171; color: #f87171; }
+
+/* Column hiding: terminliste uses its OWN semantic classes
+   (.terminliste-mobile-hide/.terminliste-tablet-hide), never nth-child --
+   deliberately avoiding this session's own .ranking-card[data-comp-id]
+   nth-child collision class of bug (a positional rule that accidentally
+   also matched a differently-shaped table reusing the same base class). */
+@media (max-width: 700px) {
+    .terminliste-mobile-hide { display: none; }
+}
+@media (max-width: 900px) {
+    .terminliste-tablet-hide { display: none; }
+}
+
 /* ── Ranking card ─────────────────────────────────────── */
 .ranking-grid {
     display: grid;
