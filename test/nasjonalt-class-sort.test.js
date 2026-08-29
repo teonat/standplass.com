@@ -12,7 +12,7 @@ function cls(code, name) { return { id: code, name: name || code, code: code }; 
 var scrambled = [
     cls('K'), cls('M'), cls('D'), cls('C'), cls('B'), cls('A'),
     cls('PPC'), cls('P3'), cls('P10'), cls('SH'),
-    cls('X-NM', 'Noe -NM'), cls('X-N', 'Noe -N'),
+    cls('X-NM', 'Alpha'), cls('X-N', 'Zulu'),
     cls('W55'), cls('M42'), cls('V73'), cls('V'), cls('V55'),
     cls('U'), cls('U12'), cls('U14'), cls('U16'), cls('U-annet', 'U-noe'),
     cls('Jr-annet', 'Jr-noe'), cls('Jr'), cls('JK'), cls('JM'),
