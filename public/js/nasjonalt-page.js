@@ -87,6 +87,38 @@ var StandplassNasjonaltPage = (function () {
         return !!(clickableDiscIds && clickableDiscIds[disciplineId]);
     }
 
+    function yearFrom(y) { return (y - 1) + '-12-31T23:00:00.000Z'; }
+    function yearTo(y) { return y + '-12-31T22:59:59.999Z'; }
+
+    var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    function isValidIsoDate(s) {
+        if (!s || !ISO_DATE_RE.test(s)) { return false; }
+        var d = new Date(s + 'T00:00:00Z');
+        return !isNaN(d) && d.toISOString().slice(0, 10) === s;
+    }
+
+    // ponytail: orderBy kept as a literal string, not via qs.set(), same
+    // reason as klubb-page.js's own buildRankingUrl -- URLSearchParams
+    // would percent-encode the colon, and this keeps the query string
+    // byte-identical to what the source itself sends.
+    function buildRankingUrl(opts) {
+        var qs = new URLSearchParams();
+        qs.set('pageIndex', '0');
+        qs.set('pageSize', '500');
+        qs.set('disciplineId', opts.disciplineId);
+        qs.set('numberOfResults', String(opts.numberOfResults));
+        qs.set('periodStart', opts.periodStart);
+        qs.set('periodEnd', opts.periodEnd);
+        if (opts.classId) { qs.set('classId', JSON.stringify([opts.classId])); }
+        if (opts.kretsId) { qs.set('personRegionOrganizationId', JSON.stringify([opts.kretsId])); }
+        if (opts.orgId) { qs.set('personOrganizationId', JSON.stringify([opts.orgId])); }
+        return 'https://nsfapi.azurewebsites.net/ranking?orderBy=totalScore:desc&' + qs.toString();
+    }
+
+    function filterRankingEntries(items) {
+        return (items || []).filter(function (e) { return (e.totalScore || 0) > 0; });
+    }
+
     function init(config) {
         // Filled in by Tasks 5-8.
     }
@@ -96,6 +128,11 @@ var StandplassNasjonaltPage = (function () {
         ensureBranchlist: ensureBranchlist,
         computeClickableIds: computeClickableIds,
         isClickable: isClickable,
+        yearFrom: yearFrom,
+        yearTo: yearTo,
+        isValidIsoDate: isValidIsoDate,
+        buildRankingUrl: buildRankingUrl,
+        filterRankingEntries: filterRankingEntries,
         init: init
     };
 })();
