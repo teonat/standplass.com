@@ -67,6 +67,18 @@ assert.ok(clickableIds['bane1'], 'Bane-group discipline is clickable');
 assert.ok(!clickableIds['ppc1'], 'PPC-group discipline is NOT clickable -- the source\'s own gate wrongly includes this, this project\'s does not');
 assert.ok(!clickableIds['rifle1'], 'a discipline in neither Felt nor Bane resolution is not clickable (Rifle/Leirdue/Viltmål)');
 
+// buildDiscItems: group headers are query-dependent, not a static "more
+// than one branch total" check (bug found during Task 10 QA -- the source's
+// own `allBranches.length > 1` check is scoped to the branches that
+// actually matched the current query, not the whole dataset).
+var unambiguous = NP.buildDiscItems(processed.branches, 'finfelt');
+assert.ok(!unambiguous.some(function (i) { return i.isGroup; }), 'no stray group header when only one branch matches the query');
+assert.strictEqual(unambiguous.length, 1, 'just the matching discipline itself');
+
+var ambiguous = NP.buildDiscItems(processed.branches, ''); // empty query matches every branch
+assert.ok(ambiguous.some(function (i) { return i.isGroup && i.name === 'Pistol'; }), 'group header shown once multiple branches match');
+assert.ok(ambiguous.some(function (i) { return i.isGroup && i.name === 'Rifle'; }), 'every matching branch gets its own header');
+
 // buildRankingUrl: classId/kretsId/orgId are each optional and, when
 // given, JSON-array-encoded -- a bare UUID 500s against the real API
 // (see docs/superpowers/nsf-skyting-api-reference.md).

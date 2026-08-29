@@ -119,6 +119,30 @@ var StandplassNasjonaltPage = (function () {
         return (items || []).filter(function (e) { return (e.totalScore || 0) > 0; });
     }
 
+    // Group header shown only when the CURRENT query matches disciplines
+    // from more than one branch -- matches the source's own
+    // `allBranches.length > 1` check (see the design spec's "Branchlist
+    // processing" section). Bug found during Task 10 QA: this used to check
+    // the total branch count in the whole dataset (always 4, so always
+    // true) instead of how many branches matched *this* query, which showed
+    // a stray single-branch group header on every unambiguous search (e.g.
+    // "Finfelt", which only ever matches Pistol). Pure/exported so it's
+    // unit-testable without a DOM.
+    function buildDiscItems(branches, query) {
+        var q = (query || '').trim().toLowerCase();
+        var matched = (branches || [])
+            .map(function (branch) {
+                return { branch: branch, matching: branch.disciplines.filter(function (d) { return !q || d.name.toLowerCase().indexOf(q) !== -1; }) };
+            })
+            .filter(function (m) { return m.matching.length; });
+        var items = [];
+        matched.forEach(function (m) {
+            if (matched.length > 1) { items.push({ isGroup: true, name: m.branch.name }); }
+            m.matching.forEach(function (d) { items.push({ id: d.id, name: d.name }); });
+        });
+        return items;
+    }
+
     function init(config) {
         var root = config.root || document;
         var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
@@ -160,18 +184,6 @@ var StandplassNasjonaltPage = (function () {
             urlState.setSearch('?' + qs.toString());
         }
 
-        function buildDiscItems(query) {
-            var q = (query || '').trim().toLowerCase();
-            var items = [];
-            branchlistData.branches.forEach(function (branch) {
-                var matching = branch.disciplines.filter(function (d) { return !q || d.name.toLowerCase().indexOf(q) !== -1; });
-                if (!matching.length) { return; }
-                if (branchlistData.branches.length > 1) { items.push({ isGroup: true, name: branch.name }); }
-                matching.forEach(function (d) { items.push({ id: d.id, name: d.name }); });
-            });
-            return items;
-        }
-
         function buildClassItems(query) {
             var disc = branchlistData.disciplines.filter(function (d) { return d.id === selectedDisciplineId; })[0];
             if (!disc || !disc.classes.length) { return []; }
@@ -183,7 +195,7 @@ var StandplassNasjonaltPage = (function () {
 
         StandplassFilterWidgets.makeComboHandlers({
             input: discInput, list: discList, clear: discClear,
-            getItems: buildDiscItems,
+            getItems: function (query) { return buildDiscItems(branchlistData.branches, query); },
             restoreOnBlur: function () { return selectedDisciplineName; },
             onSelect: function (discId, discName) {
                 selectedDisciplineId = discId; selectedDisciplineName = discName;
@@ -493,6 +505,7 @@ var StandplassNasjonaltPage = (function () {
         isValidIsoDate: isValidIsoDate,
         buildRankingUrl: buildRankingUrl,
         filterRankingEntries: filterRankingEntries,
+        buildDiscItems: buildDiscItems,
         init: init
     };
 })();
