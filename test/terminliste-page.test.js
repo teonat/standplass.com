@@ -42,10 +42,6 @@ assert.deepStrictEqual(TP.decodeIdList(null), []);
 assert.strictEqual(TP.STATUS_LABEL[0], 'Søknad');
 assert.strictEqual(TP.STATUS_LABEL[1], 'Godkjent');
 assert.strictEqual(TP.STATUS_LABEL[3], 'Avlyst');
-assert.strictEqual(TP.statusClass(1), '', 'Godkjent gets no tint class');
-assert.strictEqual(TP.statusClass(0), 'terminliste-status--pending');
-assert.strictEqual(TP.statusClass(2), 'terminliste-status--rejected');
-assert.strictEqual(TP.statusClass(3), 'terminliste-status--rejected');
 
 // buildCompetitionListUrl: every id-list opt is optional and, when given,
 // JSON-array-encoded under an `in:` prefix; date opts use `ge:`/`le:`;

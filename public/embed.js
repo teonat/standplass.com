@@ -217,8 +217,8 @@ var StandplassEmbed = (function () {
         // Mode is resolved by site-chrome.js, which runs before this file
         // on every direct-mount page.
 
-        container.innerHTML = buildMarkupFor(idPrefix, view, false);
         ensureDependencies().then(function () {
+            container.innerHTML = buildMarkupFor(idPrefix, view, false);
             initFor(view, {
                 view: view,
                 dataBase: VIEWS[view].dataBase,
@@ -341,17 +341,22 @@ var StandplassEmbed = (function () {
                 var club = el.getAttribute('club');
                 if (club) { wrapper.setAttribute('data-club', club); }
 
-                wrapper.innerHTML = buildMarkupFor(idPrefix, view, compact);
-                // Hidden until styles are attached below -- unlike today's
-                // iframe (which blocks on its own document's stylesheet load
-                // before painting anything), Shadow DOM content is visible
-                // synchronously the instant it's appended, which would
-                // otherwise guarantee a flash of unstyled content on every
-                // embed load.
+                // Hidden until styles are attached and markup is populated
+                // below -- unlike today's iframe (which blocks on its own
+                // document's stylesheet load before painting anything),
+                // Shadow DOM content is visible synchronously the instant
+                // it's appended, which would otherwise guarantee a flash of
+                // unstyled content on every embed load. The wrapper is
+                // appended (empty) now so there's a mount point in the DOM;
+                // buildMarkupFor() itself must not run until
+                // ensureDependencies() resolves, since for view='terminliste'
+                // it dereferences StandplassTerminlistePage, one of the
+                // globals ensureDependencies() loads.
                 wrapper.style.visibility = 'hidden';
                 shadowRoot.appendChild(wrapper);
 
                 Promise.all([attachStyles(shadowRoot, true), ensureDependencies(true)]).then(function () {
+                    wrapper.innerHTML = buildMarkupFor(idPrefix, view, compact);
                     wrapper.style.visibility = '';
 
                     var mode = StandplassModeResolve.resolveMode({
@@ -381,6 +386,7 @@ var StandplassEmbed = (function () {
                     initFor(view, {
                         view: view,
                         dataBase: view === 'terminliste' ? null : SELF_ORIGIN + VIEWS[view].dataBase,
+                        origin: SELF_ORIGIN,
                         idPrefix: idPrefix,
                         root: shadowRoot,
                         urlState: urlState,

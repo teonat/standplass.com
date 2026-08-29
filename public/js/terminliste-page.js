@@ -42,9 +42,6 @@ var StandplassTerminlistePage = (function () {
     }
 
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };
-    // Only 0/2/3 get a tint -- 1 (Godkjent) is the common case, no styling.
-    var STATUS_CLASS = { 0: 'terminliste-status--pending', 2: 'terminliste-status--rejected', 3: 'terminliste-status--rejected' };
-    function statusClass(status) { return STATUS_CLASS[status] || ''; }
 
     // Comma-joined id lists for both the competitionlist API's `in:` JSON-
     // array params and this page's own multi-value URL params -- url-state.js
@@ -146,7 +143,13 @@ var StandplassTerminlistePage = (function () {
             }).then(function (data) {
                 if (thisAbort !== currentAbort) { return; }
                 var items = (data && data.items) || [];
-                var linkUrl = '/terminliste?t_fra=' + selectedYear + '-01-01&t_til=' + selectedYear + '-12-31&t_org=' + encodeURIComponent(orgId);
+                // config.origin (SELF_ORIGIN, set only by embed.js's
+                // custom-element path) is required here: this widget is only
+                // ever mounted on a 3rd-party page, so a root-relative link
+                // would resolve against that page's own domain, not
+                // standplass.com. mountDirect never sets config.origin
+                // (always same-origin), so '' is the correct fallback there.
+                var linkUrl = (config.origin || '') + '/terminliste?t_fra=' + selectedYear + '-01-01&t_til=' + selectedYear + '-12-31&t_org=' + encodeURIComponent(orgId);
                 if (!items.length) {
                     tableWrapEl.innerHTML = '<p>Ingen stevner registrert for ' + selectedYear + '.</p>';
                 } else {
@@ -457,16 +460,21 @@ var StandplassTerminlistePage = (function () {
                 + '</tr>';
         }
 
-        function renderTable(append) {
-            if (!append && !rows.length) {
+        // `appendItems`, when given, is just the newly-fetched page -- only
+        // those rows get rendered/appended, since `rows` (the full
+        // accumulated history across every "Last inn flere" click) is
+        // already on the page from earlier calls. Omit it (reset load) to
+        // render the full current `rows` array fresh.
+        function renderTable(appendItems) {
+            if (!appendItems && !rows.length) {
                 tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen stevner funnet.</p></div>';
                 moreBtn.hidden = true;
                 return;
             }
-            var bodyHtml = rows.map(renderRow).join('');
-            if (append) {
-                tableWrapEl.querySelector('tbody').insertAdjacentHTML('beforeend', bodyHtml);
+            if (appendItems) {
+                tableWrapEl.querySelector('tbody').insertAdjacentHTML('beforeend', appendItems.map(renderRow).join(''));
             } else {
+                var bodyHtml = rows.map(renderRow).join('');
                 tableWrapEl.innerHTML = '<div class="ranking-full-table"><table class="ranking-table" aria-label="Terminliste">'
                     + '<thead><tr>'
                     + '<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>'
@@ -502,7 +510,7 @@ var StandplassTerminlistePage = (function () {
                 rows = reset ? items : rows.concat(items);
                 hasMore = !!(data && data.paging && data.paging.hasNextPage);
                 statusEl.textContent = '';
-                renderTable(!reset);
+                renderTable(reset ? null : items);
             }, function (err) {
                 if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
                 statusEl.textContent = 'Kunne ikke hente data.';
@@ -522,7 +530,27 @@ var StandplassTerminlistePage = (function () {
             allKretser = StandplassNsfOrgs.filterKretser ? StandplassNsfOrgs.filterKretser(rawOrgs) : [];
             allClubs = StandplassNsfOrgs.filterClubs(rawOrgs);
             allTypes = (results[2] || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'no'); });
-            grenDropdown.rebuild(); typeDropdown.rebuild(); groupDropdown.rebuild();
+            // A deep-linked t_gren+t_group combination can be stale/invalid
+            // (e.g. a t_group id that belongs to a branch not in
+            // selectedBranchIds) -- reconcile once here, the same way Gren's
+            // own onToggle handler already does on every later change, so
+            // the very first fetch/render never silently sends an
+            // impossible filter combination.
+            var groupCandidates = StandplassTerminlistePage.groupsForBranches(branchlistData.branches, selectedBranchIds).map(function (g) { return g.id; });
+            selectedGroupIds = selectedGroupIds.filter(function (g) { return groupCandidates.indexOf(g) !== -1; });
+            // Restore chip labels for deep-linked t_org/t_krets ids -- names
+            // only resolve once allClubs/allKretser have loaded (same
+            // pattern as nasjonalt-page.js's own post-load id->name
+            // restoration).
+            selectedOrgIds.forEach(function (id_) {
+                var org = allClubs.filter(function (c) { return c.id === id_; })[0];
+                if (org) { selectedOrgNames[id_] = org.name; }
+            });
+            selectedKretsIds.forEach(function (id_) {
+                var krets = allKretser.filter(function (k) { return k.id === id_; })[0];
+                if (krets) { selectedKretsNames[id_] = krets.name; }
+            });
+            grenDropdown.rebuild(); typeDropdown.rebuild(); groupDropdown.rebuild(); orgCombo.rebuild(); kretsCombo.rebuild();
             fetchAndRender(true);
         }, function () {
             statusEl.textContent = 'Kunne ikke laste data fra NSF. Prøv å laste siden på nytt.';
@@ -675,7 +703,6 @@ var StandplassTerminlistePage = (function () {
         processBranchlist: processBranchlist,
         ensureBranchlist: ensureBranchlist,
         STATUS_LABEL: STATUS_LABEL,
-        statusClass: statusClass,
         encodeIdList: encodeIdList,
         decodeIdList: decodeIdList,
         buildCompetitionListUrl: buildCompetitionListUrl,
