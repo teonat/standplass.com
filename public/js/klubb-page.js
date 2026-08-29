@@ -57,6 +57,8 @@ var StandplassKlubbPage = (function () {
         var initialProgram = (programParam === 'felt' || programParam === 'bane') ? programParam : 'felt';
         var numParam = parseInt(params.get('num'), 10);
         var initialNumResults = (numParam >= 1 && numParam <= 10) ? numParam : 1;
+        var yearParam = parseInt(params.get('year'), 10);
+        var initialYear = (yearParam >= CURRENT_YEAR - 5 && yearParam <= CURRENT_YEAR) ? yearParam : CURRENT_YEAR;
 
         var pickerEl = id('-picker');
         var gridWrapEl = id('-grid-wrap');
@@ -105,7 +107,7 @@ var StandplassKlubbPage = (function () {
             var matched = klubbSlug ? StandplassNsfOrgs.matchClub(clubs, klubbSlug) : null;
             if (!matched) { showPicker(clubs); return; }
             showGrid();
-            var selectedYear = CURRENT_YEAR;
+            var selectedYear = initialYear;
             var selectedNumResults = initialNumResults;
             var activeProgram = initialProgram;
             var rankingCache = {}; // { "discId|year|num": { time, promise } }
