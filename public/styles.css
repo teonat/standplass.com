@@ -244,6 +244,19 @@ h1, h2, h3 {
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
+.ranking-card-title {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+}
+/* ponytail: klubb-page.js only toggles #klubb-grid-wrap's hidden attribute
+   (never a wrapper around it), so #klubb-results mirrors that state via
+   :has() instead of getting its own hidden flag the JS would need to know
+   about. */
+#klubb-results:has(#klubb-grid-wrap[hidden]) {
+    display: none;
+}
 .stevner-card-info {
     flex: 1;
     min-width: 0;
