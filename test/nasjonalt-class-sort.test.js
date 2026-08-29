@@ -12,7 +12,7 @@ function cls(code, name) { return { id: code, name: name || code, code: code }; 
 var scrambled = [
     cls('K'), cls('M'), cls('D'), cls('C'), cls('B'), cls('A'),
     cls('PPC'), cls('P3'), cls('P10'), cls('SH'),
-    cls('-NM-suffix', 'Noe -NM'), cls('-N-suffix', 'Noe -N'),
+    cls('X-NM', 'Noe -NM'), cls('X-N', 'Noe -N'),
     cls('W55'), cls('M42'), cls('V73'), cls('V'), cls('V55'),
     cls('U'), cls('U12'), cls('U14'), cls('U16'), cls('U-annet', 'U-noe'),
     cls('Jr-annet', 'Jr-noe'), cls('Jr'), cls('JK'), cls('JM'),
@@ -31,9 +31,9 @@ assert.deepStrictEqual(sorted, [
     'M', 'K',
     'SH',
     'P3', 'P10', 'PPC',
-    '-N-suffix',
-    '-NM-suffix'
-], 'full bucket order matches the source exactly, including numeric age-bracket sort within V/P buckets');
+    'X-N',
+    'X-NM'
+], 'full bucket order: A/B/C/D, senior, junior, youth, V/M/W age brackets, M/K, SH, P-classes, -N suffix, -NM suffix, unknown');
 
 // A code the algorithm has no rule for falls into the last bucket, sorted
 // alphabetically among any other unknowns -- not thrown, not silently
