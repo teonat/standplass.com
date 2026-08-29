@@ -397,6 +397,93 @@ var StandplassTerminlistePage = (function () {
             statusEl.textContent = 'Kunne ikke laste data fra NSF. Prøv å laste siden på nytt.';
             statusEl.classList.add('ranking-error');
         });
+
+        var compDialog = id('-comp-dialog');
+        StandplassCompModal.ensureReferenceData(window.fetch.bind(window));
+        var compOpenSeq = 0;
+        var compResults = [];
+        if (!compDialog) {
+            compDialog = document.createElement('dialog');
+            compDialog.id = config.idPrefix + '-comp-dialog';
+            compDialog.className = 'comp-modal-dialog';
+            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
+                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
+                + '<p class="comp-modal-meta"></p>'
+                + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
+                + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
+                + '<div class="comp-modal-body"></div>';
+            (root === document ? document.body : root).appendChild(compDialog);
+        }
+        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
+        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
+
+        function openCompModal(compId, title) {
+            var mySeq = ++compOpenSeq;
+            compDialog.dataset.compId = compId;
+            compDialog.querySelector('.comp-modal-title').textContent = title || '';
+            compDialog.querySelector('.comp-modal-meta').textContent = '';
+            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
+                b.classList.toggle('program-btn--active', isDetaljer);
+                b.setAttribute('aria-pressed', String(isDetaljer));
+            });
+            compDialog.showModal();
+            StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
+                if (mySeq !== compOpenSeq) { return; }
+                compDialog.querySelector('.comp-modal-meta').textContent = [
+                    StandplassFormat.formatDateRange(result.comp.startDate, result.comp.endDate),
+                    result.comp.facilityName, result.comp.organizationName
+                ].filter(Boolean).join(' · ');
+                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
+            }, function () {
+                if (mySeq !== compOpenSeq) { return; }
+                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
+            });
+        }
+
+        compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-comp-tab]');
+            if (!btn) { return; }
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isActive = b === btn;
+                b.classList.toggle('program-btn--active', isActive);
+                b.setAttribute('aria-pressed', String(isActive));
+            });
+            if (btn.getAttribute('data-comp-tab') !== 'resultater') { return; }
+            var mySeq = compOpenSeq;
+            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            var compId = compDialog.dataset.compId;
+            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            function stillCurrent() {
+                return mySeq === compOpenSeq
+                    && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
+            }
+            StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
+                if (!stillCurrent()) { return; }
+                compResults = results;
+                bodyEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
+            }, function () {
+                if (!stillCurrent()) { return; }
+                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
+            });
+        });
+
+        compDialog.addEventListener('change', function (e) {
+            var select = e.target.closest('.comp-results-disc-filter');
+            if (!select) { return; }
+            compDialog.querySelector('.comp-modal-body').innerHTML =
+                StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
+        });
+
+        tableWrapEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.comp-detail-btn');
+            if (!btn) { return; }
+            var tr = btn.closest('tr');
+            var titleLink = tr && tr.querySelector('td:nth-child(3) a');
+            openCompModal(btn.dataset.id, titleLink ? titleLink.textContent : '');
+        });
     }
 
     function buildMarkup(idPrefix, compact) {
