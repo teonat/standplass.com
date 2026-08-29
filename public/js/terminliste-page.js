@@ -59,6 +59,35 @@ var StandplassTerminlistePage = (function () {
         return param.split(',').map(decodeURIComponent).filter(Boolean);
     }
 
+    // ponytail: orderBy kept as a literal string, not via qs.set(), same
+    // reason as klubb-page.js/nasjonalt-page.js's own URL builders --
+    // URLSearchParams would percent-encode the colon, and this keeps the
+    // query string byte-identical to what the source itself sends.
+    function buildCompetitionListUrl(opts) {
+        var qs = new URLSearchParams();
+        qs.set('pageIndex', String(opts.pageIndex || 0));
+        qs.set('pageSize', String(opts.pageSize));
+        if (opts.fra) { qs.set('startDate', 'ge:' + opts.fra + 'T00:00:00.000Z'); }
+        if (opts.til) { qs.set('endDate', 'le:' + opts.til + 'T23:59:59.999Z'); }
+        if (opts.branchIds && opts.branchIds.length) { qs.set('branches', 'in:' + JSON.stringify(opts.branchIds)); }
+        if (opts.orgIds && opts.orgIds.length) { qs.set('organizationId', 'in:' + JSON.stringify(opts.orgIds)); }
+        if (opts.kretsIds && opts.kretsIds.length) { qs.set('regionOrganizationId', 'in:' + JSON.stringify(opts.kretsIds)); }
+        if (opts.typeIds && opts.typeIds.length) { qs.set('competitionTypeId', 'in:' + JSON.stringify(opts.typeIds)); }
+        if (opts.groupIds && opts.groupIds.length) { qs.set('disciplineGroups', 'in:' + JSON.stringify(opts.groupIds)); }
+        if (opts.name) { qs.set('title', 'like:' + opts.name); }
+        return 'https://nsfapi.azurewebsites.net/query/competitionlist?orderBy=startDate:asc&' + qs.toString();
+    }
+
+    function groupsForBranches(branches, selectedBranchIds) {
+        var selected = (selectedBranchIds && selectedBranchIds.length) ? selectedBranchIds : null;
+        var groups = [];
+        branches.forEach(function (b) {
+            if (selected && selected.indexOf(b.id) === -1) { return; }
+            groups = groups.concat(b.groups);
+        });
+        return groups;
+    }
+
     function init(config) {
         // Filled in by Tasks 4-6 (full page) and Task 9 (compact widget).
     }
@@ -75,6 +104,8 @@ var StandplassTerminlistePage = (function () {
         statusClass: statusClass,
         encodeIdList: encodeIdList,
         decodeIdList: decodeIdList,
+        buildCompetitionListUrl: buildCompetitionListUrl,
+        groupsForBranches: groupsForBranches,
         buildMarkup: buildMarkup,
         init: init
     };
