@@ -408,6 +408,25 @@ h1, h2, h3 {
 
 .filter-group--period { flex: 0 0 280px; min-width: 0; }
 
+.filter-period-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.filter-period-toggle {
+    background: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.filter-period-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
+.filter-period-input[data-period-mode="periode"] { display: flex; gap: 0.5rem; }
+#nasjonalt-mode-error { color: #c0392b; font-size: 0.8125rem; margin: 0.25rem 0 0; }
+
 @media (max-width: 640px) {
     .filter-group--period { flex: 1 1 100%; }
     .filter-period-input[data-period-mode="periode"] { flex-direction: column; }

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nasjonalt – Standplass</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/themes.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="site-logo">STANDPLASS</a>
+      <nav aria-label="Hovedmeny">
+        <div class="nav-dropdown">
+          <button type="button" class="nav-dropdown-btn" aria-expanded="false" aria-controls="nav-resultater-menu">Resultater ▾</button>
+          <div class="nav-dropdown-menu" id="nav-resultater-menu" hidden>
+            <a href="/felt">Feltskyting</a>
+            <a href="/bane">Baneskyting</a>
+            <a href="/klubb">Klubb</a>
+            <a href="/nasjonalt">Nasjonalt</a>
+          </div>
+        </div>
+      </nav>
+      <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
+    </div>
+  </header>
+  <main id="nasjonalt-root" class="ranking-section">
+    <div class="container">
+      <p class="section-label">Resultater</p>
+      <h1 class="section-title">Nasjonalt</h1>
+      <p class="section-lead">Søk i NSFs offisielle nasjonale rangering
+        (<a href="https://www.skyting.no/konkurranse/100-pa-topp/" target="_blank" rel="noopener noreferrer">«100 på topp»</a>)
+        på skyting.no — alle grener, klasser og kretser.</p>
+      <div class="ranking-filters">
+        <div class="filter-group">
+          <label for="nasjonalt-disc-input">Øvelse</label>
+          <div class="autocomplete-wrap" id="nasjonalt-disc-wrap">
+            <input type="text" id="nasjonalt-disc-input" class="filter-input" autocomplete="off" disabled placeholder="Laster…"
+                   aria-autocomplete="list" aria-controls="nasjonalt-disc-list" aria-expanded="false">
+            <button type="button" class="combo-clear" id="nasjonalt-disc-clear" aria-label="Fjern øvelse">×</button>
+            <ul class="autocomplete-list" id="nasjonalt-disc-list" role="listbox" aria-label="Øvelser" hidden></ul>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label for="nasjonalt-class-input">Klasse</label>
+          <div class="autocomplete-wrap" id="nasjonalt-class-wrap">
+            <input type="text" id="nasjonalt-class-input" class="filter-input" autocomplete="off" placeholder="Søk klasse…"
+                   aria-autocomplete="list" aria-controls="nasjonalt-class-list" aria-expanded="false">
+            <button type="button" class="combo-clear" id="nasjonalt-class-clear" aria-label="Fjern klasse">×</button>
+            <ul class="autocomplete-list" id="nasjonalt-class-list" role="listbox" aria-label="Klasser" hidden></ul>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label for="nasjonalt-krets-input">Krets</label>
+          <div class="autocomplete-wrap" id="nasjonalt-krets-wrap">
+            <input type="text" id="nasjonalt-krets-input" class="filter-input" autocomplete="off" placeholder="Søk krets…"
+                   aria-autocomplete="list" aria-controls="nasjonalt-krets-list" aria-expanded="false">
+            <button type="button" class="combo-clear" id="nasjonalt-krets-clear" aria-label="Fjern krets">×</button>
+            <ul class="autocomplete-list" id="nasjonalt-krets-list" role="listbox" aria-label="Kretser" hidden></ul>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label for="nasjonalt-club-input">Klubb</label>
+          <div class="autocomplete-wrap" id="nasjonalt-club-wrap">
+            <input type="text" id="nasjonalt-club-input" class="filter-input" autocomplete="off" placeholder="Søk klubb…"
+                   aria-autocomplete="list" aria-controls="nasjonalt-club-list" aria-expanded="false">
+            <button type="button" class="combo-clear" id="nasjonalt-club-clear" aria-label="Fjern klubb">×</button>
+            <ul class="autocomplete-list" id="nasjonalt-club-list" role="listbox" aria-label="Klubber" hidden></ul>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label for="nasjonalt-num-select">Tellende res.</label>
+          <select id="nasjonalt-num-select">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+            <option value="10">10</option>
+          </select>
+        </div>
+        <div class="filter-group filter-group--period">
+          <div class="filter-period-header">
+            <label>Periode</label>
+            <button type="button" class="filter-period-toggle" id="nasjonalt-mode-toggle" aria-pressed="false">Egendefinert</button>
+          </div>
+          <div data-period-mode="sesong">
+            <select id="nasjonalt-year-select"></select>
+          </div>
+          <div class="filter-period-input" data-period-mode="periode" hidden>
+            <input type="date" id="nasjonalt-fra-input" aria-describedby="nasjonalt-mode-error">
+            <input type="date" id="nasjonalt-til-input" aria-describedby="nasjonalt-mode-error">
+          </div>
+          <p id="nasjonalt-mode-error" role="alert" hidden></p>
+        </div>
+      </div>
+      <p class="ranking-status-msg" id="nasjonalt-status" aria-live="polite"></p>
+      <div id="nasjonalt-table-wrap"></div>
+    </div>
+  </main>
+  <script src="/js/mode-resolve.js"></script>
+  <script src="/js/site-chrome.js"></script>
+  <script src="/js/format.js"></script>
+  <script src="/js/data-fetch-cache.js"></script>
+  <script src="/js/person-modal.js"></script>
+  <script src="/js/person-modal-controller.js"></script>
+  <script src="/js/filter-widgets.js"></script>
+  <script src="/js/url-state.js"></script>
+  <script src="/js/comp-modal.js"></script>
+  <script src="/js/nsf-orgs.js"></script>
+  <script src="/js/klubb-discipline-groups.js"></script>
+  <script src="/js/nasjonalt-class-sort.js"></script>
+  <script src="/js/stevner-page.js"></script>
+  <script src="/js/nasjonalt-page.js"></script>
+  <script>
+    StandplassNasjonaltPage.init({
+      idPrefix: 'nasjonalt',
+      root: document,
+      urlState: StandplassUrlState.createController({ namespace: null })
+    });
+  </script>
+</body>
+</html>
