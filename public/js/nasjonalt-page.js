@@ -120,7 +120,111 @@ var StandplassNasjonaltPage = (function () {
     }
 
     function init(config) {
-        // Filled in by Tasks 5-8.
+        var root = config.root || document;
+        var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
+        var urlState = config.urlState;
+        var CURRENT_YEAR = new Date().getUTCFullYear();
+
+        var discInput = id('-disc-input'), discList = id('-disc-list'), discClear = id('-disc-clear');
+        var classInput = id('-class-input'), classList = id('-class-list'), classClear = id('-class-clear');
+        var kretsInput = id('-krets-input'), kretsList = id('-krets-list'), kretsClear = id('-krets-clear');
+        var clubInput = id('-club-input'), clubList = id('-club-list'), clubClear = id('-club-clear');
+        var numSelect = id('-num-select');
+        var yearSelect = id('-year-select');
+        var statusEl = id('-status');
+        var tableWrapEl = id('-table-wrap');
+
+        var params = new URLSearchParams(urlState.getSearch());
+        var selectedDisciplineId = params.get('disc') || null;
+        var selectedDisciplineName = '';
+        var selectedClassId = params.get('class') || null;
+        var selectedClassName = '';
+        var selectedKretsId = params.get('krets') || null;
+        var selectedKretsName = '';
+        var selectedOrgId = params.get('org') || null;
+        var selectedOrgName = '';
+        var numParam = parseInt(params.get('num'), 10);
+        var selectedNumResults = (numParam >= 1 && numParam <= 10) ? numParam : 1;
+        var selectedMode = params.get('mode') === 'periode' ? 'periode' : 'sesong';
+        var yearParam = parseInt(params.get('year'), 10);
+        var selectedYear = (yearParam >= CURRENT_YEAR - 5 && yearParam <= CURRENT_YEAR) ? yearParam : CURRENT_YEAR;
+        var selectedFra = params.get('fra') || '';
+        var selectedTil = params.get('til') || '';
+        if (selectedMode === 'periode' && (!isValidIsoDate(selectedFra) || !isValidIsoDate(selectedTil) || selectedFra > selectedTil)) {
+            selectedMode = 'sesong'; selectedFra = ''; selectedTil = '';
+        }
+
+        function setUrlParam(key, value) {
+            var qs = new URLSearchParams(urlState.getSearch());
+            if (value) { qs.set(key, value); } else { qs.delete(key); }
+            urlState.setSearch('?' + qs.toString());
+        }
+
+        function buildDiscItems(query) {
+            var q = (query || '').trim().toLowerCase();
+            var items = [];
+            branchlistData.branches.forEach(function (branch) {
+                var matching = branch.disciplines.filter(function (d) { return !q || d.name.toLowerCase().indexOf(q) !== -1; });
+                if (!matching.length) { return; }
+                if (branchlistData.branches.length > 1) { items.push({ isGroup: true, name: branch.name }); }
+                matching.forEach(function (d) { items.push({ id: d.id, name: d.name }); });
+            });
+            return items;
+        }
+
+        function buildClassItems(query) {
+            var disc = branchlistData.disciplines.filter(function (d) { return d.id === selectedDisciplineId; })[0];
+            if (!disc || !disc.classes.length) { return []; }
+            var sorted = StandplassNasjonaltClassSort.sortClasses(disc.classes);
+            var q = (query || '').trim().toLowerCase();
+            return sorted.filter(function (c) { return !q || c.name.toLowerCase().indexOf(q) !== -1; })
+                .map(function (c) { return { id: c.id, name: c.name }; });
+        }
+
+        StandplassFilterWidgets.makeComboHandlers({
+            input: discInput, list: discList, clear: discClear,
+            getItems: buildDiscItems,
+            restoreOnBlur: function () { return selectedDisciplineName; },
+            onSelect: function (discId, discName) {
+                selectedDisciplineId = discId; selectedDisciplineName = discName;
+                discInput.value = discName;
+                discInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value');
+                selectedClassId = null; selectedClassName = ''; classInput.value = '';
+                classInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                setUrlParam('disc', discId); setUrlParam('class', null);
+                fetchAndRender();
+            },
+            onClear: function () {
+                selectedDisciplineId = null; selectedDisciplineName = ''; discInput.value = '';
+                discInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                selectedClassId = null; selectedClassName = ''; classInput.value = '';
+                classInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                setUrlParam('disc', null); setUrlParam('class', null);
+                statusEl.textContent = ''; tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Velg en øvelse for å se rangeringslisten.</p></div>';
+            }
+        });
+
+        StandplassFilterWidgets.makeComboHandlers({
+            input: classInput, list: classList, clear: classClear,
+            getItems: buildClassItems,
+            restoreOnBlur: function () { return selectedClassName; },
+            onSelect: function (classId, className) {
+                selectedClassId = classId; selectedClassName = className;
+                classInput.value = className;
+                classInput.closest('.autocomplete-wrap').classList.add('autocomplete-wrap--has-value');
+                setUrlParam('class', classId);
+                fetchAndRender();
+            },
+            onClear: function () {
+                selectedClassId = null; selectedClassName = ''; classInput.value = '';
+                classInput.closest('.autocomplete-wrap').classList.remove('autocomplete-wrap--has-value');
+                setUrlParam('class', null);
+                fetchAndRender();
+            }
+        });
+
+        // Tasks 6-8 continue here: krets/klubb combos, num/period wiring,
+        // fetchAndRender + person-modal, initial branchlist load.
     }
 
     return {
