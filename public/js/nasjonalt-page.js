@@ -278,8 +278,69 @@ var StandplassNasjonaltPage = (function () {
             fetchAndRender();
         });
 
-        // Tasks 7-8 continue here: period-mode toggle, fetchAndRender +
-        // person-modal, initial branchlist/org load.
+        var modeToggle = id('-mode-toggle');
+        var modeError = id('-mode-error');
+        var sesongPanel = root.querySelector('[data-period-mode="sesong"]');
+        var periodePanel = root.querySelector('[data-period-mode="periode"]');
+        var fraInput = id('-fra-input'), tilInput = id('-til-input');
+
+        for (var y = CURRENT_YEAR; y >= CURRENT_YEAR - 5; y--) {
+            var opt = document.createElement('option');
+            opt.value = String(y); opt.textContent = String(y);
+            yearSelect.appendChild(opt);
+        }
+        yearSelect.value = String(selectedYear);
+        yearSelect.addEventListener('change', function () {
+            selectedYear = parseInt(yearSelect.value, 10);
+            setUrlParam('year', selectedYear === CURRENT_YEAR ? null : String(selectedYear));
+            fetchAndRender();
+        });
+
+        function applyModeUI(mode) {
+            sesongPanel.hidden = (mode !== 'sesong');
+            periodePanel.hidden = (mode !== 'periode');
+            modeToggle.setAttribute('aria-pressed', mode === 'periode' ? 'true' : 'false');
+            modeToggle.textContent = (mode === 'periode') ? 'Sesong' : 'Egendefinert';
+        }
+        applyModeUI(selectedMode);
+        if (selectedMode === 'periode') { fraInput.value = selectedFra; tilInput.value = selectedTil; }
+
+        function setPeriodError(msg) {
+            modeError.textContent = msg || '';
+            modeError.hidden = !msg;
+        }
+
+        modeToggle.addEventListener('click', function () {
+            selectedMode = (selectedMode === 'periode') ? 'sesong' : 'periode';
+            applyModeUI(selectedMode);
+            if (selectedMode === 'periode' && !selectedFra && !selectedTil) {
+                selectedFra = selectedYear + '-01-01'; selectedTil = selectedYear + '-12-31';
+                fraInput.value = selectedFra; tilInput.value = selectedTil;
+            }
+            if (selectedMode === 'periode') {
+                setUrlParam('mode', 'periode'); setUrlParam('fra', selectedFra); setUrlParam('til', selectedTil); setUrlParam('year', null);
+            } else {
+                setUrlParam('mode', null); setUrlParam('fra', null); setUrlParam('til', null);
+                setUrlParam('year', selectedYear === CURRENT_YEAR ? null : String(selectedYear));
+            }
+            fetchAndRender();
+        });
+
+        function handleDateChange() {
+            selectedFra = fraInput.value; selectedTil = tilInput.value;
+            if (selectedFra && selectedTil && selectedFra > selectedTil) {
+                setPeriodError('Fra-dato kan ikke være etter til-dato.');
+                return;
+            }
+            setPeriodError('');
+            setUrlParam('fra', selectedFra); setUrlParam('til', selectedTil);
+            if (selectedFra && selectedTil && selectedDisciplineId) { fetchAndRender(); }
+        }
+        fraInput.addEventListener('change', handleDateChange);
+        tilInput.addEventListener('change', handleDateChange);
+
+        // Task 8 continues here: fetchAndRender + person-modal, initial
+        // branchlist/org load.
     }
 
     return {
