@@ -88,7 +88,138 @@ var StandplassTerminlistePage = (function () {
         return groups;
     }
 
+    function buildCompactMarkup(idPrefix) {
+        return '<div class="terminliste-widget">'
+            + '<div class="terminliste-widget-years" id="' + idPrefix + '-year-nav"></div>'
+            + '<div id="' + idPrefix + '-table-wrap"><p class="ranking-status-msg">Laster…</p></div>'
+            + '<p class="terminliste-widget-link" id="' + idPrefix + '-more-link"></p>'
+            + '</div>';
+    }
+
+    // Mirrors the source's stevner-widget.js exactly: org-scoped (via the
+    // klubb attribute, resolved through nsf-orgs.js's matchClub -- same
+    // precedent as klubb-page.js), a 5-year nav, fixed pageSize (no "load
+    // more"), links out to the full page pre-filtered to that org + year.
+    // No filter bar at all -- this is NOT "terminliste with compact
+    // filters", confirmed against the source's own actual widget code
+    // during design, not assumed.
+    function initCompact(config) {
+        var root = config.root || document;
+        var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
+        var yearNavEl = id('-year-nav');
+        var tableWrapEl = id('-table-wrap');
+        var moreLinkEl = id('-more-link');
+        var CURRENT_YEAR = new Date().getUTCFullYear();
+        var selectedYear = CURRENT_YEAR;
+        var orgId = null;
+        var currentAbort = null;
+
+        for (var y = CURRENT_YEAR; y >= CURRENT_YEAR - 4; y--) {
+            var btn = document.createElement('button');
+            btn.type = 'button'; btn.className = 'terminliste-widget-year-btn'; btn.dataset.year = String(y);
+            btn.textContent = String(y);
+            btn.setAttribute('aria-current', y === CURRENT_YEAR ? 'true' : 'false');
+            yearNavEl.appendChild(btn);
+        }
+        yearNavEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.terminliste-widget-year-btn');
+            if (!btn) { return; }
+            selectedYear = parseInt(btn.dataset.year, 10);
+            Array.prototype.forEach.call(yearNavEl.querySelectorAll('.terminliste-widget-year-btn'), function (b) {
+                b.setAttribute('aria-current', b === btn ? 'true' : 'false');
+            });
+            fetchYear();
+        });
+
+        function fetchYear() {
+            if (!orgId) { return; }
+            if (currentAbort) { currentAbort.abort(); }
+            currentAbort = new AbortController();
+            var thisAbort = currentAbort;
+            tableWrapEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            var url = StandplassTerminlistePage.buildCompetitionListUrl({
+                pageIndex: 0, pageSize: 15, fra: selectedYear + '-01-01', til: selectedYear + '-12-31', orgIds: [orgId]
+            });
+            window.fetch(url, { signal: thisAbort.signal }).then(function (r) {
+                if (!r.ok) { throw new Error(String(r.status)); }
+                return r.json();
+            }).then(function (data) {
+                if (thisAbort !== currentAbort) { return; }
+                var items = (data && data.items) || [];
+                var linkUrl = '/terminliste?t_fra=' + selectedYear + '-01-01&t_til=' + selectedYear + '-12-31&t_org=' + encodeURIComponent(orgId);
+                if (!items.length) {
+                    tableWrapEl.innerHTML = '<p>Ingen stevner registrert for ' + selectedYear + '.</p>';
+                } else {
+                    tableWrapEl.innerHTML = '<table class="ranking-table" aria-label="Stevner">'
+                        + '<thead><tr><th class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>'
+                        + '<th>Dato</th><th>Stevne</th><th class="terminliste-mobile-hide">Stevnetype</th><th>Resultater</th></tr></thead>'
+                        + '<tbody>' + items.map(renderCompactRow).join('') + '</tbody></table>';
+                }
+                moreLinkEl.innerHTML = '<a href="' + linkUrl + '">Se terminliste →</a>';
+            }, function (err) {
+                if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
+                tableWrapEl.innerHTML = '<p>Kunne ikke laste stevneoversikt.</p>';
+            });
+        }
+
+        function renderCompactRow(c) {
+            var resultCell = (c.hasResult && c.resultFileUrl)
+                ? '<a href="' + esc(c.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
+                : '–';
+            return '<tr data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
+                + '<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="' + esc(c.id) + '" aria-label="Se detaljer for ' + esc(c.title || '–') + '">ⓘ</button></td>'
+                + '<td class="terminliste-date">' + esc(StandplassFormat.formatDateRange(c.startDate, c.endDate)) + '</td>'
+                + '<td>' + esc(c.title || '–') + '</td>'
+                + '<td class="terminliste-mobile-hide">' + esc(c.competitionTypeName || '–') + '</td>'
+                + '<td class="terminliste-result-cell">' + resultCell + '</td></tr>';
+        }
+
+        // Modal wiring (Task 7's openCompModal is defined only inside the
+        // full-page branch of init() -- the widget needs its own, much
+        // smaller instance, since compact mode never shows the Resultater
+        // tab's Gren filter interaction, only Detaljer, matching the
+        // source's own widget behavior).
+        var compDialog = id('-comp-dialog');
+        StandplassCompModal.ensureReferenceData(window.fetch.bind(window));
+        if (!compDialog) {
+            compDialog = document.createElement('dialog');
+            compDialog.id = config.idPrefix + '-comp-dialog';
+            compDialog.className = 'comp-modal-dialog';
+            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
+                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
+                + '<p class="comp-modal-meta"></p><div class="comp-modal-body"></div>';
+            (root === document ? document.body : root).appendChild(compDialog);
+        }
+        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
+        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
+        tableWrapEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.comp-detail-btn');
+            if (!btn) { return; }
+            var bodyEl = compDialog.querySelector('.comp-modal-body');
+            bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            compDialog.showModal();
+            StandplassCompModal.fetchDetailWithFacility(btn.dataset.id, window.fetch.bind(window)).then(function (result) {
+                compDialog.querySelector('.comp-modal-title').textContent = result.comp.title || '';
+                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
+            }, function () {
+                bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
+            });
+        });
+
+        var klubbSlug = config.klubb || (new URLSearchParams(window.location.search)).get('klubb');
+        StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)).then(function (rawOrgs) {
+            var clubs = StandplassNsfOrgs.filterClubs(rawOrgs);
+            var matched = klubbSlug ? StandplassNsfOrgs.matchClub(clubs, klubbSlug) : null;
+            if (!matched) { tableWrapEl.innerHTML = '<p>Ukjent klubb.</p>'; return; }
+            orgId = matched.id;
+            fetchYear();
+        }, function () {
+            tableWrapEl.innerHTML = '<p>Kunne ikke laste klubbliste.</p>';
+        });
+    }
+
     function init(config) {
+        if (config.compact) { return initCompact(config); }
         var root = config.root || document;
         var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
         var urlState = config.urlState;
@@ -487,7 +618,7 @@ var StandplassTerminlistePage = (function () {
     }
 
     function buildMarkup(idPrefix, compact) {
-        if (compact) { return ''; } // Task 9
+        if (compact) { return buildCompactMarkup(idPrefix); }
         return '<div class="container">'
             + '<p class="section-label">Resultater</p>'
             + '<h1 class="section-title">Terminliste</h1>'
