@@ -63,21 +63,17 @@ var StandplassNsfOrgs = (function () {
         if (cached) { orgsPromise = Promise.resolve(cached); return orgsPromise; }
         orgsPromise = fetchFn(ORG_URL)
             .then(function (r) {
-                if (!r.ok) {
-                    orgsPromise = null;  // Reset so next call retries instead of using failed promise
-                    return [];  // Graceful fallback for this call, matching comp-modal.js convention
-                }
+                if (!r.ok) { throw new Error('Org fetch failed'); }  // Throw to preserve failure in chain
                 return r.json();
             })
             .then(function (rawOrgs) {
-                if (!rawOrgs) { return []; }  // Handle null response from failed path
                 var clubs = filterClubs(rawOrgs);
                 writeCache(clubs);
                 return clubs;
             })
             .catch(function () {
-                orgsPromise = null;  // Reset on rejection so next call retries instead of returning rejected promise
-                return [];  // Graceful fallback, matching comp-modal.js convention
+                orgsPromise = null;  // Reset on any failure so next call retries instead of returning rejected/failed promise
+                return [];  // Graceful fallback for this call, matching comp-modal.js convention
             });
         return orgsPromise;
     }
@@ -85,8 +81,7 @@ var StandplassNsfOrgs = (function () {
     return {
         filterClubs: filterClubs,
         matchClub: matchClub,
-        ensureOrgs: ensureOrgs,
-        _resetForTesting: function () { orgsPromise = null; }  // Test helper to reset module state
+        ensureOrgs: ensureOrgs
     };
 })();
 
