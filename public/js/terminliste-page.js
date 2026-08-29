@@ -576,8 +576,17 @@ var StandplassTerminlistePage = (function () {
         compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
         compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
 
+        // Cache of the last successfully-rendered Detaljer body for the
+        // currently-open competition -- switching to Resultater overwrites
+        // .comp-modal-body via innerHTML, so without this, switching back to
+        // Detaljer had nothing to restore (the tab click only toggled the
+        // visual active state and returned). Reset on every new open so a
+        // previous competition's cached HTML never leaks into a fresh one.
+        var detailBodyHtml = '';
+
         function openCompModal(compId, title) {
             var mySeq = ++compOpenSeq;
+            detailBodyHtml = '';
             compDialog.dataset.compId = compId;
             compDialog.querySelector('.comp-modal-title').textContent = title || '';
             compDialog.querySelector('.comp-modal-meta').textContent = '';
@@ -595,7 +604,8 @@ var StandplassTerminlistePage = (function () {
                     StandplassFormat.formatDateRange(result.comp.startDate, result.comp.endDate),
                     result.comp.facilityName, result.comp.organizationName
                 ].filter(Boolean).join(' · ');
-                bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
+                detailBodyHtml = StandplassCompModal.renderDetailBody(result.comp, result.facility);
+                bodyEl.innerHTML = detailBodyHtml;
             }, function () {
                 if (mySeq !== compOpenSeq) { return; }
                 bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
@@ -610,6 +620,17 @@ var StandplassTerminlistePage = (function () {
                 b.classList.toggle('program-btn--active', isActive);
                 b.setAttribute('aria-pressed', String(isActive));
             });
+            if (btn.getAttribute('data-comp-tab') === 'detaljer') {
+                // Restore the cached Detaljer render rather than leaving
+                // whatever Resultater last put into .comp-modal-body. If the
+                // initial detail fetch hasn't resolved yet (still "Laster…"
+                // or a failure message showing), there's nothing cached yet
+                // -- leave that state alone rather than blanking it.
+                if (detailBodyHtml) {
+                    compDialog.querySelector('.comp-modal-body').innerHTML = detailBodyHtml;
+                }
+                return;
+            }
             if (btn.getAttribute('data-comp-tab') !== 'resultater') { return; }
             var mySeq = compOpenSeq;
             var bodyEl = compDialog.querySelector('.comp-modal-body');
