@@ -123,6 +123,13 @@ var StandplassKlubbPage = (function () {
                     return filterRankingEntries(data && data.items);
                 });
                 rankingCache[key] = { time: Date.now(), promise: promise };
+                // ponytail: evict on rejection (abort or real failure) so a later
+                // call for the same key retries instead of replaying a stuck
+                // rejected promise for the rest of the TTL. Guard against a
+                // newer call having already replaced this cache entry.
+                promise.catch(function () {
+                    if (rankingCache[key] && rankingCache[key].promise === promise) { delete rankingCache[key]; }
+                });
                 return promise;
             }
 
