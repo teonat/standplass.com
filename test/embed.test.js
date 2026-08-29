@@ -2,9 +2,11 @@
 var assert = require('node:assert');
 var StandplassEmbed = require('../public/embed.js');
 
-assert.deepStrictEqual(Object.keys(StandplassEmbed.VIEWS).sort(), ['bane', 'felt']);
+assert.deepStrictEqual(Object.keys(StandplassEmbed.VIEWS).sort(), ['bane', 'felt', 'terminliste']);
 assert.strictEqual(StandplassEmbed.VIEWS.felt.dataBase, '/data/felt');
 assert.strictEqual(StandplassEmbed.VIEWS.bane.dataBase, '/data/bane');
+assert.strictEqual(StandplassEmbed.VIEWS.terminliste.title, 'Terminliste');
+assert.strictEqual(StandplassEmbed.VIEWS.terminliste.dataBase, undefined, 'terminliste has no static JSON, unlike felt/bane');
 
 var markup = StandplassEmbed.buildMarkup('felt', 'felt');
 assert.ok(markup.indexOf('<h1 class="section-title">Feltskyting</h1>') !== -1);

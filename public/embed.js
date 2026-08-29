@@ -23,7 +23,8 @@ var StandplassEmbed = (function () {
 
     var VIEWS = {
         felt: { title: 'Feltskyting', dataBase: '/data/felt' },
-        bane: { title: 'Baneskyting', dataBase: '/data/bane' }
+        bane: { title: 'Baneskyting', dataBase: '/data/bane' },
+        terminliste: { title: 'Terminliste' }
     };
 
     // Everything felt.html/bane.html used to hand-author between <h1> and
@@ -115,6 +116,20 @@ var StandplassEmbed = (function () {
             + '</div>'; // closes .container
     }
 
+    // Terminliste is a genuinely different page engine (different filter
+    // bar, no year/program/group toggles) -- felt/bane keep using the one
+    // buildMarkup/StandplassStevnerPage.init above unchanged; terminliste
+    // provides its own markup/init, resolved here rather than baked into
+    // the VIEWS literal (StandplassTerminlistePage doesn't exist yet at
+    // embed.js's own parse time -- it's one of ensureDependencies()'s
+    // scripts, loaded and evaluated later, in the same global scope).
+    function buildMarkupFor(idPrefix, view, compact) {
+        return view === 'terminliste' ? StandplassTerminlistePage.buildMarkup(idPrefix, compact) : buildMarkup(idPrefix, view);
+    }
+    function initFor(view, config) {
+        if (view === 'terminliste') { StandplassTerminlistePage.init(config); } else { StandplassStevnerPage.init(config); }
+    }
+
     // stevner-page.js's own local copy of this exact helper (table-renderer.js's
     // esc() isn't exported) -- kept as its own small copy here too rather than
     // shared, matching that file's existing precedent for this one function.
@@ -142,7 +157,8 @@ var StandplassEmbed = (function () {
         '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js',
         '/js/pagination.js', '/js/person-modal.js', '/js/person-modal-controller.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
-        '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js'
+        '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',
+        '/js/nsf-orgs.js', '/js/klubb-discipline-groups.js', '/js/terminliste-page.js'
     ];
     var dependenciesPromise = null;
     // `absolute` is set by the caller, not sniffed from location.hostname --
@@ -201,9 +217,9 @@ var StandplassEmbed = (function () {
         // Mode is resolved by site-chrome.js, which runs before this file
         // on every direct-mount page.
 
-        container.innerHTML = buildMarkup(idPrefix, view);
+        container.innerHTML = buildMarkupFor(idPrefix, view, false);
         ensureDependencies().then(function () {
-            StandplassStevnerPage.init({
+            initFor(view, {
                 view: view,
                 dataBase: VIEWS[view].dataBase,
                 idPrefix: idPrefix,
@@ -301,6 +317,7 @@ var StandplassEmbed = (function () {
                 // HTML attribute interpolation -- reject anything unsafe
                 // rather than trust it (see Task 6's safeIdPrefix).
                 var idPrefix = safeIdPrefix(el.id || view, view);
+                var compact = el.hasAttribute('compact');
                 var syncUrl = el.hasAttribute('sync-url');
                 if (syncUrl) {
                     if (seenSyncedNamespaces[idPrefix]) {
@@ -324,7 +341,7 @@ var StandplassEmbed = (function () {
                 var club = el.getAttribute('club');
                 if (club) { wrapper.setAttribute('data-club', club); }
 
-                wrapper.innerHTML = buildMarkup(idPrefix, view);
+                wrapper.innerHTML = buildMarkupFor(idPrefix, view, compact);
                 // Hidden until styles are attached below -- unlike today's
                 // iframe (which blocks on its own document's stylesheet load
                 // before painting anything), Shadow DOM content is visible
@@ -361,13 +378,15 @@ var StandplassEmbed = (function () {
                         qs.set('klubb', klubbAttr);
                         urlState.setSearch('?' + qs.toString());
                     }
-                    StandplassStevnerPage.init({
+                    initFor(view, {
                         view: view,
-                        dataBase: SELF_ORIGIN + VIEWS[view].dataBase,
+                        dataBase: view === 'terminliste' ? null : SELF_ORIGIN + VIEWS[view].dataBase,
                         idPrefix: idPrefix,
                         root: shadowRoot,
                         urlState: urlState,
-                        fetcher: getSharedFetcher()
+                        fetcher: getSharedFetcher(),
+                        compact: compact,
+                        klubb: el.getAttribute('klubb') || null
                     });
                 }).catch(function () {
                     // Same reasoning as mountDirect's .catch: without this,
