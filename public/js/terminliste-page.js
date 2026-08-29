@@ -89,7 +89,102 @@ var StandplassTerminlistePage = (function () {
     }
 
     function init(config) {
-        // Filled in by Tasks 4-6 (full page) and Task 9 (compact widget).
+        var root = config.root || document;
+        var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
+        var urlState = config.urlState;
+        var FW = StandplassFilterWidgets;
+
+        var nameInput = id('-name-input');
+        var fraInput = id('-fra-input'), tilInput = id('-til-input');
+        var grenBtn = id('-gren-btn'), grenPanel = id('-gren-panel'), grenList = id('-gren-list'), grenClear = id('-gren-clear');
+        var typeBtn = id('-type-btn'), typePanel = id('-type-panel'), typeList = id('-type-list'), typeClear = id('-type-clear');
+        var groupBtn = id('-group-btn'), groupPanel = id('-group-panel'), groupList = id('-group-list'), groupClear = id('-group-clear');
+        var orgInput = id('-org-input'), orgList = id('-org-list'), orgTags = id('-org-tags'), orgClear = id('-org-clear');
+        var kretsInput = id('-krets-input'), kretsList = id('-krets-list'), kretsTags = id('-krets-tags'), kretsClear = id('-krets-clear');
+        var statusEl = id('-status');
+        var tableWrapEl = id('-table-wrap');
+        var moreBtn = id('-more-btn');
+
+        var today = new Date();
+        var defaultFra = today.toISOString().slice(0, 10);
+        var defaultTilDate = new Date(today.getTime());
+        defaultTilDate.setUTCMonth(defaultTilDate.getUTCMonth() + 1);
+        var defaultTil = defaultTilDate.toISOString().slice(0, 10);
+
+        var params = new URLSearchParams(urlState.getSearch());
+        var selectedName = params.get('t_name') || '';
+        var selectedFra = params.get('t_fra') || defaultFra;
+        var selectedTil = params.get('t_til') || defaultTil;
+        var selectedBranchIds = StandplassTerminlistePage.decodeIdList(params.get('t_gren'));
+        var selectedOrgIds = StandplassTerminlistePage.decodeIdList(params.get('t_org'));
+        var selectedOrgNames = {};
+        var selectedKretsIds = StandplassTerminlistePage.decodeIdList(params.get('t_krets'));
+        var selectedKretsNames = {};
+        var selectedTypeIds = StandplassTerminlistePage.decodeIdList(params.get('t_type'));
+        var selectedGroupIds = StandplassTerminlistePage.decodeIdList(params.get('t_group'));
+        var allTypes = [];
+        var allKretser = [], allClubs = [];
+
+        function setUrlParam(key, value) {
+            var qs = new URLSearchParams(urlState.getSearch());
+            if (value) { qs.set(key, value); } else { qs.delete(key); }
+            urlState.setSearch('?' + qs.toString());
+        }
+
+        nameInput.value = selectedName;
+        fraInput.value = selectedFra;
+        tilInput.value = selectedTil;
+
+        var nameDebounce = null;
+        nameInput.addEventListener('input', function () {
+            clearTimeout(nameDebounce);
+            nameDebounce = setTimeout(function () {
+                selectedName = nameInput.value.trim();
+                setUrlParam('t_name', selectedName || null);
+                fetchAndRender(true);
+            }, 300);
+        });
+
+        function handleDateChange() {
+            selectedFra = fraInput.value; selectedTil = tilInput.value;
+            setUrlParam('t_fra', selectedFra === defaultFra ? null : selectedFra);
+            setUrlParam('t_til', selectedTil === defaultTil ? null : selectedTil);
+            fetchAndRender(true);
+        }
+        fraInput.addEventListener('change', handleDateChange);
+        tilInput.addEventListener('change', handleDateChange);
+
+        var grenDropdown = FW.makeCheckboxDropdown({
+            btn: grenBtn, panel: grenPanel, list: grenList, clearAllBtn: grenClear,
+            labelNone: 'Alle grener',
+            getItems: function () {
+                return branchlistData.branches.map(function (b) { return { id: b.id, name: b.name }; });
+            },
+            getSelected: function () { return selectedBranchIds; },
+            onToggle: function (branchId, name, checked) {
+                if (checked) { if (selectedBranchIds.indexOf(branchId) < 0) { selectedBranchIds.push(branchId); } }
+                else { selectedBranchIds = selectedBranchIds.filter(function (b) { return b !== branchId; }); }
+                grenDropdown.rebuild();
+                // Øvelsesgruppe's own candidate set is a function of Gren --
+                // drop any selected group that's no longer a candidate,
+                // rather than leaving a silently-inconsistent filter active.
+                var candidates = StandplassTerminlistePage.groupsForBranches(branchlistData.branches, selectedBranchIds).map(function (g) { return g.id; });
+                selectedGroupIds = selectedGroupIds.filter(function (g) { return candidates.indexOf(g) !== -1; });
+                groupDropdown.rebuild();
+                setUrlParam('t_gren', StandplassTerminlistePage.encodeIdList(selectedBranchIds) || null);
+                setUrlParam('t_group', StandplassTerminlistePage.encodeIdList(selectedGroupIds) || null);
+                fetchAndRender(true);
+            },
+            onClearAll: function () {
+                selectedBranchIds = [];
+                grenDropdown.rebuild();
+                setUrlParam('t_gren', null);
+                fetchAndRender(true);
+            }
+        });
+
+        // Task 5 continues here: Arrangør/Krets tag-combos, Stevnetype/
+        // Øvelsesgruppe (groupDropdown referenced above), initial data load.
     }
 
     function buildMarkup(idPrefix, compact) {
