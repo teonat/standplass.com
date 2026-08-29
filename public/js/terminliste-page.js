@@ -286,8 +286,117 @@ var StandplassTerminlistePage = (function () {
             }
         });
 
-        // Task 6 continues here: fetchAndRender, comp-modal wiring
-        // (Task 7), initial branchlist/org/type data load.
+        var rows = [];
+        var pageIndex = 0;
+        var PAGE_SIZE = 50;
+        var hasMore = false;
+        var currentAbort = null;
+
+        function renderRow(c) {
+            var href = 'https://app.skyting.no/p/c/' + esc(c.id) + '/details';
+            var frist = c.registrationEndDate ? StandplassFormat.formatDate(c.registrationEndDate) : '–';
+            var resultCell = (c.hasResult && c.resultFileUrl)
+                ? '<a href="' + esc(c.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
+                : '–';
+            var statusText = c.status !== 1 ? (StandplassTerminlistePage.STATUS_LABEL[c.status] || null) : null;
+            var detailAriaLabel = 'Se detaljer for ' + esc(c.title || '–') + (statusText ? ' – ' + esc(statusText) : '');
+            var orgName = allClubs.filter(function (o) { return o.id === c.organizationId; })[0];
+            var kretsName = allKretser.filter(function (k) { return k.id === c.regionOrganizationId; })[0];
+            var branchNames = (c.branches || []).map(function (bid) {
+                var b = branchlistData.branches.filter(function (x) { return x.id === bid; })[0];
+                return b ? b.name : null;
+            }).filter(Boolean).join(', ') || '–';
+            var groupNames = (c.disciplineGroups || []).map(function (gid) {
+                var g = StandplassTerminlistePage.groupsForBranches(branchlistData.branches, []).filter(function (x) { return x.id === gid; })[0];
+                return g ? g.name : null;
+            }).filter(Boolean).join(', ') || '–';
+
+            return '<tr class="terminliste-row--clickable" data-id="' + esc(c.id) + '" data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
+                + '<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="' + esc(c.id) + '" aria-label="' + detailAriaLabel + '">ⓘ</button></td>'
+                + '<td class="terminliste-date">' + esc(StandplassFormat.formatDateRange(c.startDate, c.endDate)) + '</td>'
+                + '<td><a href="' + href + '" target="_blank" rel="noopener noreferrer">' + esc(c.title || '–') + '</a>'
+                + (c.facilityName ? '<span class="terminliste-sub">' + esc(c.facilityName) + '</span>' : '') + '</td>'
+                + '<td>' + esc(c.competitionTypeName || '–') + '</td>'
+                + '<td class="terminliste-mobile-hide">' + esc(orgName ? orgName.name : (c.organizationName || '–'))
+                + (kretsName ? '<span class="terminliste-sub">' + esc(kretsName.name) + '</span>' : '') + '</td>'
+                + '<td class="terminliste-tablet-hide">' + esc(branchNames) + '</td>'
+                + '<td>' + esc(groupNames) + '</td>'
+                + '<td class="terminliste-tablet-hide terminliste-date">' + esc(frist) + '</td>'
+                + '<td class="terminliste-result-cell">' + resultCell + '</td>'
+                + '</tr>';
+        }
+
+        function renderTable(append) {
+            if (!append && !rows.length) {
+                tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen stevner funnet.</p></div>';
+                moreBtn.hidden = true;
+                return;
+            }
+            var bodyHtml = rows.map(renderRow).join('');
+            if (append) {
+                tableWrapEl.querySelector('tbody').insertAdjacentHTML('beforeend', bodyHtml);
+            } else {
+                tableWrapEl.innerHTML = '<div class="ranking-full-table"><table class="ranking-table" aria-label="Terminliste">'
+                    + '<thead><tr>'
+                    + '<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>'
+                    + '<th scope="col">Dato</th><th scope="col">Stevne</th><th scope="col">Stevnetype</th>'
+                    + '<th scope="col" class="terminliste-mobile-hide">Arrangør</th>'
+                    + '<th scope="col" class="terminliste-tablet-hide">Gren</th>'
+                    + '<th scope="col">Øvelsesgruppe</th>'
+                    + '<th scope="col" class="terminliste-tablet-hide">Påmeldingsfrist</th>'
+                    + '<th scope="col">Resultater</th>'
+                    + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+            }
+            moreBtn.hidden = !hasMore;
+        }
+
+        function fetchAndRender(reset) {
+            if (reset) { pageIndex = 0; rows = []; }
+            if (currentAbort) { currentAbort.abort(); }
+            currentAbort = new AbortController();
+            statusEl.textContent = 'Laster…';
+            var thisAbort = currentAbort;
+            var url = StandplassTerminlistePage.buildCompetitionListUrl({
+                pageIndex: pageIndex, pageSize: PAGE_SIZE,
+                fra: selectedFra, til: selectedTil,
+                branchIds: selectedBranchIds, orgIds: selectedOrgIds, kretsIds: selectedKretsIds,
+                typeIds: selectedTypeIds, groupIds: selectedGroupIds, name: selectedName
+            });
+            window.fetch(url, { signal: thisAbort.signal }).then(function (r) {
+                if (!r.ok) { throw new Error(String(r.status)); }
+                return r.json();
+            }).then(function (data) {
+                if (thisAbort !== currentAbort) { return; }
+                var items = (data && data.items) || [];
+                rows = reset ? items : rows.concat(items);
+                hasMore = !!(data && data.paging && data.paging.hasNextPage);
+                statusEl.textContent = '';
+                renderTable(!reset);
+            }, function (err) {
+                if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
+                statusEl.textContent = 'Kunne ikke hente data.';
+                statusEl.classList.add('ranking-error');
+            });
+        }
+
+        moreBtn.addEventListener('click', function () { pageIndex++; fetchAndRender(false); });
+
+        Promise.all([
+            ensureBranchlist(window.fetch.bind(window)),
+            StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)),
+            window.fetch('https://nsfapi.azurewebsites.net/competitiontype').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; })
+        ]).then(function (results) {
+            branchlistData = results[0];
+            var rawOrgs = results[1];
+            allKretser = StandplassNsfOrgs.filterKretser ? StandplassNsfOrgs.filterKretser(rawOrgs) : [];
+            allClubs = StandplassNsfOrgs.filterClubs(rawOrgs);
+            allTypes = (results[2] || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'no'); });
+            grenDropdown.rebuild(); typeDropdown.rebuild(); groupDropdown.rebuild();
+            fetchAndRender(true);
+        }, function () {
+            statusEl.textContent = 'Kunne ikke laste data fra NSF. Prøv å laste siden på nytt.';
+            statusEl.classList.add('ranking-error');
+        });
     }
 
     function buildMarkup(idPrefix, compact) {
