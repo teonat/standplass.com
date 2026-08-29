@@ -41,6 +41,10 @@ var StandplassKlubbPage = (function () {
         return 'https://nsfapi.azurewebsites.net/ranking?orderBy=totalScore:desc&' + qs.toString();
     }
 
+    function filterRankingEntries(items) {
+        return (items || []).filter(function (e) { return (e.totalScore || 0) > 0; });
+    }
+
     function init(config) {
         var root = config.root || document;
         var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
@@ -97,16 +101,97 @@ var StandplassKlubbPage = (function () {
             var matched = klubbSlug ? StandplassNsfOrgs.matchClub(clubs, klubbSlug) : null;
             if (!matched) { showPicker(clubs); return; }
             showGrid();
-            // Task 6/7 continue here: discipline resolution, ranking
-            // fetch, card rendering, program/year/num filters, person
-            // modal wiring -- this task only proves club resolution and
-            // the picker/grid toggle work.
+            var selectedYear = CURRENT_YEAR;
+            var selectedNumResults = 1;
+            var activeProgram = 'felt';
+            var rankingCache = {}; // { "discId|year|num": { time, promise } }
+            var RANKING_TTL_MS = 5 * 60 * 1000;
+            var activeAborts = [];
+            var cardState = {}; // { discId: { entries, expanded } }
+
+            function fetchRanking(disc) {
+                var key = disc.id + '|' + selectedYear + '|' + selectedNumResults;
+                var cached = rankingCache[key];
+                if (cached && (Date.now() - cached.time) < RANKING_TTL_MS) { return cached.promise; }
+                var ac = new AbortController();
+                activeAborts.push(ac);
+                var url = buildRankingUrl({ disciplineId: disc.id, orgId: matched.id, year: selectedYear, numberOfResults: selectedNumResults });
+                var promise = window.fetch(url, { signal: ac.signal }).then(function (r) {
+                    if (!r.ok) { throw new Error(String(r.status)); }
+                    return r.json();
+                }).then(function (data) {
+                    return filterRankingEntries(data && data.items);
+                });
+                rankingCache[key] = { time: Date.now(), promise: promise };
+                return promise;
+            }
+
+            function renderCard(cell, disc, entries, expanded) {
+                var TOP_N = 10;
+                var visible = expanded ? entries : entries.slice(0, TOP_N);
+                var rows = !entries.length
+                    ? '<tr><td colspan="3" class="ranking-empty">Ingen resultater for ' + selectedYear + '</td></tr>'
+                    : visible.map(function (e, i) {
+                        return '<tr><td class="ranking-rank">' + (e.position || (i + 1)) + '</td>'
+                            + '<td><button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(e.personId)
+                            + '" data-person-name="' + esc(e.fullName) + '" data-discipline="' + esc(disc.name) + '">' + esc(e.fullName) + '</button></td>'
+                            + '<td class="ranking-score">' + esc(e.totalScore != null ? Number(e.totalScore).toFixed(2) : '–') + '</td></tr>';
+                    }).join('');
+                var toggleHtml = entries.length > TOP_N
+                    ? '<button type="button" class="ranking-toggle" data-disc-id="' + esc(disc.id) + '">'
+                        + (expanded ? 'Vis topp ' + TOP_N : 'Vis alle (' + entries.length + ')') + '</button>'
+                    : '';
+                cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div>'
+                    + '<table class="ranking-table"><thead><tr><th>#</th><th>Navn</th><th>Poeng</th></tr></thead><tbody>' + rows + '</tbody></table>'
+                    + toggleHtml + '</div>';
+            }
+
+            function loadAll() {
+                activeAborts.forEach(function (ac) { ac.abort(); });
+                activeAborts = [];
+                var discs = activeProgram === 'felt'
+                    ? StandplassKlubbDisciplineGroups.resolveFelt(StandplassCompModal.getDisciplineGroups())
+                    : StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups());
+                gridWrapEl.innerHTML = '';
+                cardState = {};
+                discs.forEach(function (disc) {
+                    var cell = document.createElement('div');
+                    cell.className = 'ranking-cell';
+                    cell.setAttribute('data-disc-id', disc.id);
+                    cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div><p class="ranking-loading">Laster…</p></div>';
+                    gridWrapEl.appendChild(cell);
+                    fetchRanking(disc).then(function (entries) {
+                        cardState[disc.id] = { entries: entries, expanded: false };
+                        renderCard(cell, disc, entries, false);
+                    }, function (err) {
+                        if (err.name === 'AbortError') { return; }
+                        cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div><p class="ranking-error">Kunne ikke hente data</p></div>';
+                    });
+                });
+            }
+
+            gridWrapEl.addEventListener('click', function (e) {
+                var btn = e.target.closest('.ranking-toggle');
+                if (!btn) { return; }
+                var discId = btn.getAttribute('data-disc-id');
+                var cell = btn.closest('.ranking-cell');
+                var state = cardState[discId];
+                if (!state) { return; }
+                state.expanded = !state.expanded;
+                var discs = activeProgram === 'felt'
+                    ? StandplassKlubbDisciplineGroups.resolveFelt(StandplassCompModal.getDisciplineGroups())
+                    : StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups());
+                var disc = discs.filter(function (d) { return d.id === discId; })[0];
+                if (disc) { renderCard(cell, disc, state.entries, state.expanded); }
+            });
+
+            StandplassCompModal.ensureReferenceData(window.fetch.bind(window)).then(loadAll);
         }, function () {
             showPicker([], 'Kunne ikke laste klubbliste.');
         });
     }
 
-    return { init: init, buildRankingUrl: buildRankingUrl };
+    return { init: init, buildRankingUrl: buildRankingUrl, filterRankingEntries: filterRankingEntries };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

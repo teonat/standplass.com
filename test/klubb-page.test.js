@@ -14,4 +14,12 @@ assert.ok(url.indexOf('periodEnd=2026-12-31T22%3A59%3A59.999Z') !== -1, 'season 
 // personOrganizationId MUST be JSON-array-encoded, not a bare UUID.
 assert.ok(url.indexOf('personOrganizationId=%5B%22org1%22%5D') !== -1, 'org GUID is JSON-array-encoded, not passed bare');
 
+var filtered = KP.filterRankingEntries([
+    { position: 1, fullName: 'A', totalScore: 100 },
+    { position: 2, fullName: 'B', totalScore: 0 },
+    { position: 3, fullName: 'C', totalScore: null }
+]);
+assert.strictEqual(filtered.length, 1, 'zero and null totalScore entries are dropped');
+assert.strictEqual(filtered[0].fullName, 'A');
+
 console.log('klubb-page.test.js: all assertions passed');
