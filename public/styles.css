@@ -846,7 +846,11 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 
 .container { max-width: 960px; margin: 0 auto; }
 .section-label { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-accent); margin: 0 0 0.25rem; }
-.section-lead { color: var(--text-muted); max-width: 60ch; margin: 0.5rem 0 1.5rem; }
+/* No max-width here (was 60ch) -- roughly half the .container's own
+   960px, so a longer intro sentence (e.g. klubb/nasjonalt's attribution
+   link) wrapped well before the actual page edge, reading as an awkward
+   early cutoff rather than deliberate line-length control. */
+.section-lead { color: var(--text-muted); margin: 0.5rem 0 1.5rem; }
 /* Without this, the link falls back to the browser's UA default link color,
    including :visited (a dark purple once skyting.no has been visited) --
    unreadable on a dark surface and not something [data-mode="dark"] can

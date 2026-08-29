@@ -714,6 +714,13 @@ var StandplassTerminlistePage = (function () {
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
             + '<div id="' + idPrefix + '-table-wrap"></div>'
             + '<button class="ranking-more-btn" id="' + idPrefix + '-more-btn" type="button" hidden>Last inn flere</button>'
+            // Required by mountDirect's own embed-builder wiring in
+            // embed.js, which unconditionally does
+            // getElementById(idPrefix + '-embed-builder').innerHTML = ...
+            // after init() for every view, felt/bane included -- without
+            // this div present, that call throws on the standalone page,
+            // silently killing "Opprett innebygging" with no visible error.
+            + '<div id="' + idPrefix + '-embed-builder"></div>'
             + '</div>';
     }
 
