@@ -103,7 +103,8 @@ var StandplassKlubbPage = (function () {
             gridWrapEl.hidden = false;
         }
 
-        StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)).then(function (clubs) {
+        StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)).then(function (rawOrgs) {
+            var clubs = StandplassNsfOrgs.filterClubs(rawOrgs);
             if (clubs.length === 0) { showPicker([], 'Kunne ikke laste klubbliste.'); return; }
             var matched = klubbSlug ? StandplassNsfOrgs.matchClub(clubs, klubbSlug) : null;
             if (!matched) { showPicker(clubs); return; }

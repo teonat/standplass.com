@@ -7,12 +7,16 @@
 // docs/superpowers/nsf-skyting-api-reference.md's "GET /organization"
 // section for the response shape (a flat array, unlike branchlist) and
 // docs/superpowers/specs/2026-08-29-klubb-view-design.md's "Org GUID
-// resolution" section for the caching design.
+// resolution" section for the caching design. Changed 2026-08-30 (see
+// docs/superpowers/specs/2026-08-30-nasjonalt-view-design.md): ensureOrgs
+// now caches/returns the RAW org list, not pre-filtered clubs, so
+// nasjonalt's own need for kretser (filterKretser) can share the same
+// one fetch/cache instead of a second /organization call.
 var StandplassNsfOrgs = (function () {
     'use strict';
 
     var ORG_URL = 'https://nsfapi.azurewebsites.net/organization?pageSize=600';
-    var CACHE_KEY = 'standplass_nsf_orgs';
+    var CACHE_KEY = 'standplass_nsf_orgs_v2';
     var TTL_MS = 24 * 60 * 60 * 1000;
 
     function normalize(s) {
@@ -26,6 +30,13 @@ var StandplassNsfOrgs = (function () {
     function filterClubs(rawOrgs) {
         return (rawOrgs || [])
             .filter(function (o) { return o.organizationFederationType !== 1 && o.organizationFederationType !== 2 && o.id && o.organizationName; })
+            .map(function (o) { return { id: o.id, name: o.organizationName }; });
+    }
+
+    // organizationFederationType: 2 = Krets (region) -- see filterClubs above.
+    function filterKretser(rawOrgs) {
+        return (rawOrgs || [])
+            .filter(function (o) { return o.organizationFederationType === 2 && o.id && o.organizationName; })
             .map(function (o) { return { id: o.id, name: o.organizationName }; });
     }
 
@@ -67,9 +78,8 @@ var StandplassNsfOrgs = (function () {
                 return r.json();
             })
             .then(function (rawOrgs) {
-                var clubs = filterClubs(rawOrgs);
-                writeCache(clubs);
-                return clubs;
+                writeCache(rawOrgs);
+                return rawOrgs;
             })
             .catch(function () {
                 orgsPromise = null;  // Reset on any failure so next call retries instead of returning rejected/failed promise
@@ -80,6 +90,7 @@ var StandplassNsfOrgs = (function () {
 
     return {
         filterClubs: filterClubs,
+        filterKretser: filterKretser,
         matchClub: matchClub,
         ensureOrgs: ensureOrgs
     };

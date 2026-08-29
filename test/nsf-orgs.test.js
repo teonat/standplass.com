@@ -38,8 +38,12 @@ var mockFetch = function () {
 };
 Promise.all([NsfOrgs.ensureOrgs(mockFetch), NsfOrgs.ensureOrgs(mockFetch)]).then(function (results) {
     assert.strictEqual(fetchCount, 1, 'second ensureOrgs call reuses the in-flight/resolved promise, no second fetch');
-    assert.strictEqual(results[0].length, 2, 'ensureOrgs resolves to clubs only');
+    assert.strictEqual(results[0].length, 4, 'ensureOrgs resolves to the RAW org list now, not pre-filtered to clubs');
     assert.strictEqual(results[1], results[0], 'both calls resolve to the same array reference');
+    assert.strictEqual(NsfOrgs.filterClubs(results[0]).length, 2, 'filterClubs still works, applied by the caller now');
+    var kretser = NsfOrgs.filterKretser(results[0]);
+    assert.strictEqual(kretser.length, 1, 'filterKretser selects only organizationFederationType === 2');
+    assert.strictEqual(kretser[0].name, 'Oslo og Akershus Skyttarkrins');
 
     // Clear require cache for next scenario to reset module-level orgsPromise
     delete require.cache[require.resolve('../public/js/nsf-orgs.js')];
@@ -67,7 +71,7 @@ Promise.all([NsfOrgs.ensureOrgs(mockFetch), NsfOrgs.ensureOrgs(mockFetch)]).then
     };
     return Promise.all([NsfOrgs2.ensureOrgs(retryFetch), NsfOrgs2.ensureOrgs(retryFetch)]);
 }).then(function (results) {
-    assert.strictEqual(results[0].length, 2, 'retry after failure resolves to clubs');
+    assert.strictEqual(results[0].length, 4, 'retry after failure resolves to the raw list');
     assert.strictEqual(results[1], results[0], 'second retry call reuses promise, no second fetch');
     assert.strictEqual(retryFetchCount, 1, 'only one fetch made across both concurrent retry calls');
     assert.strictEqual(Object.keys(mockStorage).length, 1, 'successful retry writes to cache');
@@ -98,7 +102,7 @@ Promise.all([NsfOrgs.ensureOrgs(mockFetch), NsfOrgs.ensureOrgs(mockFetch)]).then
     };
     return NsfOrgs3.ensureOrgs(recoverFetch);
 }).then(function (recoverResult) {
-    assert.strictEqual(recoverResult.length, 2, 'after rejection, ensureOrgs recovers on next call');
+    assert.strictEqual(recoverResult.length, 4, 'after rejection, ensureOrgs recovers on next call');
     assert.strictEqual(recoverFetchCount, 1, 'recovery call fetches exactly once');
     console.log('nsf-orgs.test.js: all assertions passed');
 }).catch(function (err) {
