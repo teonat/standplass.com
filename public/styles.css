@@ -627,6 +627,11 @@ h1, h2, h3 {
     border-radius: var(--radius);
     box-shadow: 0 8px 24px rgba(0,0,0,0.10);
     list-style: none;
+    /* UA default <ul> padding-left (~40px) isn't removed by list-style:none
+       alone -- unlike .checkbox-dropdown-list, this was never reset here,
+       so every option rendered shifted ~40px right of its own item padding. */
+    margin: 0;
+    padding: 0;
     max-height: 240px;
     overflow-y: auto;
     z-index: 200;
@@ -838,6 +843,11 @@ h1, h2, h3 {
 
 .person-modal-shell .comp-modal-body {
     overflow-y: auto;
+    /* Same overflow-x:auto-by-default gotcha as .checkbox-dropdown-list
+       above -- without this, the chart tooltip (absolutely positioned,
+       up to 240px wide) gets clipped by this ancestor whenever it
+       overflows past the right edge, worst for the rightmost datapoints. */
+    overflow-x: hidden;
     padding: 1rem 1.5rem 0;
     flex: 1 1 auto;
 }
@@ -976,9 +986,12 @@ h1, h2, h3 {
 /* Tooltip/legend are wired now (hover/focus/click on .person-chart-dot).
    Positioned absolute within .person-chart-wrap, not fixed against the
    viewport as the source used — this modal is a plain <div>, not a native
-   <dialog>, so viewport-relative positioning with measure-then-clamp isn't
-   needed for a chart this small. The .chart-expand-btn / chart-expand-dialog
-   rules are left out — that control isn't rendered here at all. */
+   <dialog>, so viewport-relative positioning is unnecessary here. The
+   measure-then-clamp step itself is still needed though (see
+   wireChartTooltip's `show()` in person-modal.js) -- a wrap-relative
+   position still overflows the wrap's own right edge for dots near it.
+   The .chart-expand-btn / chart-expand-dialog rules are left out — that
+   control isn't rendered here at all. */
 .person-chart-wrap { position: relative; }
 .person-chart-header {
     display: flex;

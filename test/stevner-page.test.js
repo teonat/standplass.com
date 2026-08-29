@@ -79,11 +79,13 @@ assert.strictEqual(byKlubbSlug.length, 1, 'klubbUnmatched filter with slug "a" m
 assert.strictEqual(byKlubbSlug[0].stats.startere, 2, 'c1 keeps only its 2 Klubb A rows when filtered by klub slug');
 
 assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 27.4, median: 28 }),
-    '3 skyttere · 5 startere · snitt 27,4 · median 28');
+    '3 skyttere · 5 starter · snitt 27,4 · median 28');
 assert.strictEqual(SP.statsLine({ skyttere: 0, startere: 0, snitt: null, median: null }),
-    '0 skyttere · 0 startere · snitt – · median –');
+    '0 skyttere · 0 starter · snitt – · median –');
 assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 45.333333333333336, median: 44.5 }),
-    '3 skyttere · 5 startere · snitt 45,3 · median 44,5', 'repeating decimals round to one decimal');
+    '3 skyttere · 5 starter · snitt 45,3 · median 44,5', 'repeating decimals round to one decimal');
+assert.strictEqual(SP.statsLine({ skyttere: 1, startere: 1, snitt: 10, median: 10 }),
+    '1 skytter · 1 start · snitt 10 · median 10', 'singular skytter/start drop the trailing e/er');
 assert.strictEqual(SP.formatUpdated('2026-08-17T14:05:00Z'), 'Oppdatert 17.08.2026 kl. 14:05');
 assert.strictEqual(SP.formatUpdated(undefined), '', 'missing lastUpdated yields no text, not NaN');
 

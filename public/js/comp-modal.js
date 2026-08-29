@@ -282,16 +282,32 @@ var StandplassCompModal = (function () {
             return { discipline: refData.disciplines[r.disciplineId] || r.disciplineId || '–', row: r };
         }));
         var tablesHtml = groups.map(function (g) {
-            var rows = g.events.map(function (item) { return item.row; })
-                .sort(function (a, b) { return (a.position == null) - (b.position == null) || (a.position || 0) - (b.position || 0); });
+            // Same class-header sub-grouping the source's CompModal uses
+            // (_renderResultTable) -- without it, rows across different
+            // classes interleave by raw position (which resets per class),
+            // reading as an unsorted list.
+            var classMap = {}, classOrder = [];
+            g.events.forEach(function (item) {
+                var r = item.row;
+                var cname = refData.classes[r.classId] || r.classId || '–';
+                if (!classMap[cname]) { classMap[cname] = []; classOrder.push(cname); }
+                classMap[cname].push(r);
+            });
+            classOrder.sort(function (a, b) { return a.localeCompare(b, 'no'); });
+
+            var bodyHtml = classOrder.map(function (cname) {
+                var rows = classMap[cname].slice()
+                    .sort(function (a, b) { return (a.position == null) - (b.position == null) || (a.position || 0) - (b.position || 0); });
+                return '<tr class="ranking-class-header"><th scope="colgroup" colspan="5">' + esc(cname) + '</th></tr>'
+                    + rows.map(function (r) {
+                        return '<tr><td>' + esc(r.position != null ? r.position : '–') + '</td><td>' + esc(r.fullName || '–') + '</td>'
+                            + '<td>' + esc(r.organizationName || '–') + '</td><td>' + esc(cname) + '</td>'
+                            + '<td>' + esc(r.score != null ? r.score : '–') + '</td></tr>';
+                    }).join('');
+            }).join('');
             return '<p class="comp-modal-section-title">' + esc(g.discipline) + '</p>'
                 + '<table class="ranking-full-table ranking-table"><thead><tr><th>Plass</th><th>Navn</th><th>Klubb</th><th>Klasse</th><th>Poeng</th></tr></thead><tbody>'
-                + rows.map(function (r) {
-                    var className = refData.classes[r.classId] || r.classId || '–';
-                    return '<tr><td>' + esc(r.position != null ? r.position : '–') + '</td><td>' + esc(r.fullName || '–') + '</td>'
-                        + '<td>' + esc(r.organizationName || '–') + '</td><td>' + esc(className) + '</td>'
-                        + '<td>' + esc(r.score != null ? r.score : '–') + '</td></tr>';
-                }).join('') + '</tbody></table>';
+                + bodyHtml + '</tbody></table>';
         }).join('');
         return filterHtml + tablesHtml;
     }

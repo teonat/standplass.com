@@ -98,6 +98,23 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     var posC = resultsBody.indexOf('C Person');
     assert.ok(posA < posB && posB < posC, 'rows sort by position ascending, missing position sorts last');
 
+    // Rows from different classes must not interleave by raw position --
+    // each class gets its own header row and its own 1..N position sort,
+    // matching the source's _renderResultTable class sub-grouping.
+    var twoClassResults = [
+        { disciplineId: 'd1', classId: 'cB', position: 1, fullName: 'B1 Person', organizationName: 'Klubb B', score: 40 },
+        { disciplineId: 'd1', classId: 'cA', position: 2, fullName: 'A2 Person', organizationName: 'Klubb A', score: 30 },
+        { disciplineId: 'd1', classId: 'cA', position: 1, fullName: 'A1 Person', organizationName: 'Klubb A', score: 50 }
+    ];
+    var classGroupedBody = CM.renderResultsBody(twoClassResults);
+    var headerA = classGroupedBody.indexOf('ranking-class-header');
+    var posA1 = classGroupedBody.indexOf('A1 Person');
+    var posA2 = classGroupedBody.indexOf('A2 Person');
+    var posB1 = classGroupedBody.indexOf('B1 Person');
+    assert.ok(headerA >= 0, 'a class-header row is rendered');
+    assert.ok(posA1 < posA2, 'within a class, rows sort by position ascending');
+    assert.ok(posA2 < posB1, 'class cA (sorted before cB) is fully rendered before class cB starts');
+
     // the Gren filter lists every distinct discipline present, and selecting
     // one hides rows from every other discipline
     var twoDiscResults = [

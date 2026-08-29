@@ -197,7 +197,8 @@ var StandplassStevnerPage = (function () {
     function fmtNum(n) { return n == null ? '–' : String(Number(Number(n).toFixed(1))).replace('.', ','); }
 
     function statsLine(stats) {
-        return stats.skyttere + ' skyttere · ' + stats.startere + ' startere · '
+        return stats.skyttere + ' skytter' + (stats.skyttere !== 1 ? 'e' : '') + ' · '
+            + stats.startere + ' start' + (stats.startere !== 1 ? 'er' : '') + ' · '
             + 'snitt ' + fmtNum(stats.snitt) + ' · median ' + fmtNum(stats.median);
     }
 
@@ -214,8 +215,9 @@ var StandplassStevnerPage = (function () {
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
-        return '<div class="stevner-overall-stats"><span>' + cards.length + ' stevner · '
-            + totals.skyttere + ' skyttere · ' + totals.startere + ' startere</span>'
+        return '<div class="stevner-overall-stats"><span>' + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
+            + totals.skyttere + ' skytter' + (totals.skyttere !== 1 ? 'e' : '') + ' · '
+            + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
             + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
             + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
     }

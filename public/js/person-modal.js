@@ -208,7 +208,15 @@ var StandplassPersonModal = (function () {
             tooltip.innerHTML = buildTooltipContent(entry, siblingsOf(dot), metric);
             tooltip.hidden = false;
             var rect = dot.getBoundingClientRect(), wrapRect = svgContainer.getBoundingClientRect();
-            tooltip.style.left = (rect.left - wrapRect.left) + 'px';
+            // Mirrors the source's own "measure then clamp" tooltip positioning
+            // (clamped to the viewport there; clamped to this wrap here, since
+            // this modal positions the tooltip wrap-relative, not viewport-fixed)
+            // -- without this, a dot near the right edge left the tooltip's own
+            // width pushing it past the wrap's right edge entirely.
+            var left = rect.left - wrapRect.left;
+            var maxLeft = wrapRect.width - tooltip.offsetWidth;
+            if (left > maxLeft) { left = Math.max(0, maxLeft); }
+            tooltip.style.left = left + 'px';
             tooltip.style.top = (rect.top - wrapRect.top - tooltip.offsetHeight - 6) + 'px';
         }
         function hide() { if (!pinned) { tooltip.hidden = true; } }
