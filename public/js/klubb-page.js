@@ -192,6 +192,70 @@ var StandplassKlubbPage = (function () {
                 if (disc) { renderCard(cell, disc, state.entries, state.expanded); }
             });
 
+            var yearSelect = id('-year-select');
+            for (var y = CURRENT_YEAR; y >= CURRENT_YEAR - 5; y--) {
+                var opt = document.createElement('option');
+                opt.value = String(y); opt.textContent = String(y);
+                yearSelect.appendChild(opt);
+            }
+            yearSelect.value = String(selectedYear);
+            yearSelect.addEventListener('change', function () {
+                selectedYear = parseInt(yearSelect.value, 10);
+                loadAll();
+            });
+
+            var numSelect = id('-num-select');
+            numSelect.value = String(selectedNumResults);
+            numSelect.addEventListener('change', function () {
+                selectedNumResults = parseInt(numSelect.value, 10) || 1;
+                loadAll();
+            });
+
+            var feltBtn = id('-toggle-felt');
+            var baneBtn = id('-toggle-bane');
+            function setProgram(program) {
+                activeProgram = program;
+                feltBtn.classList.toggle('program-btn--active', program === 'felt');
+                feltBtn.setAttribute('aria-pressed', String(program === 'felt'));
+                baneBtn.classList.toggle('program-btn--active', program === 'bane');
+                baneBtn.setAttribute('aria-pressed', String(program === 'bane'));
+                loadAll();
+            }
+            feltBtn.addEventListener('click', function () { if (activeProgram !== 'felt') { setProgram('felt'); } });
+            baneBtn.addEventListener('click', function () { if (activeProgram !== 'bane') { setProgram('bane'); } });
+
+            var localDataFetcher = StandplassData.createFetcher(window.fetch.bind(window));
+            var personModal = StandplassPersonModalController.create({
+                idPrefix: config.idPrefix,
+                root: root,
+                urlState: urlState,
+                fetchEntriesForYear: function (personId, year) {
+                    var dataBase = activeProgram === 'felt' ? '/data/felt' : '/data/bane';
+                    return localDataFetcher.fetchYear(dataBase, year).then(function (yearData) {
+                        return StandplassStevnerPage.flattenRows(yearData).filter(function (r) { return r.personId === personId; })
+                            .map(function (r) {
+                                return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                                    competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                            });
+                    });
+                },
+                defaultYear: selectedYear,
+                firstYear: 2021,
+                currentYear: CURRENT_YEAR,
+                initialMetric: activeProgram === 'bane' ? 'score' : 'rankingScore'
+            });
+
+            gridWrapEl.addEventListener('click', function (e) {
+                var btn = e.target.closest('.stevner-person-btn');
+                if (!btn) { return; }
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: btn.dataset.discipline || null
+                });
+            });
+            personModal.openFromUrl();
+
             StandplassCompModal.ensureReferenceData(window.fetch.bind(window)).then(loadAll);
         }, function () {
             showPicker([], 'Kunne ikke laste klubbliste.');
