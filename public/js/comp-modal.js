@@ -54,8 +54,15 @@ var StandplassCompModal = (function () {
                     // Kept nested (not flattened like refData.disciplines
                     // above) -- klubb-discipline-groups.js needs to know
                     // which group a discipline belongs to, which the flat
-                    // id->name map above discards.
-                    refData.disciplineGroups = refData.disciplineGroups.concat(branch.disciplineGroups || []);
+                    // id->name map above discards. Scoped to the Pistol
+                    // branch only (case-insensitive), same as
+                    // scrape_stevneresultater.py's build_mappings() --
+                    // unlike refData.disciplines/classes above, this is a
+                    // stated Pistol-only contract, so Leirdue's groups must
+                    // not leak in here.
+                    if ((branch.name || '').toLowerCase() === 'pistol') {
+                        refData.disciplineGroups = refData.disciplineGroups.concat(branch.disciplineGroups || []);
+                    }
                 });
             })
             .catch(function () { /* best-effort; renders fall back to raw ids */ });

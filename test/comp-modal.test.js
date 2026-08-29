@@ -74,8 +74,14 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     // with the branch-prefix stripped from class names same as the source
     var mockBranchlist = {
         items: [{
+            name: 'Pistol',
             classes: [{ id: 'c1', name: 'Pistol\\A', deleted: false }],
             disciplineGroups: [{ name: 'Spesialpistol-gruppe', disciplines: [{ id: 'd1', name: 'Spesialpistol', deleted: false }] }]
+        }, {
+            // a non-Pistol branch -- its disciplineGroups must not leak into
+            // getDisciplineGroups(), which is scoped to Pistol only
+            name: 'Leirdue',
+            disciplineGroups: [{ name: 'Some Leirdue Group', disciplines: [{ id: 'x1', name: 'Leirdue Disc', deleted: false }] }]
         }]
     };
     return CM.ensureReferenceData(function () {
@@ -90,6 +96,7 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     var groups = CM.getDisciplineGroups();
     assert.ok(Array.isArray(groups) && groups.length >= 1, 'getDisciplineGroups returns the Pistol branch\'s raw disciplineGroups array');
     assert.strictEqual(groups[0].name, 'Spesialpistol-gruppe', 'group name and nested disciplines are preserved, not flattened');
+    assert.ok(groups.every(function (g) { return g.name !== 'Some Leirdue Group'; }), 'getDisciplineGroups is scoped to the Pistol branch, not other branches like Leirdue');
 
     var resultsBody = CM.renderResultsBody([
         { disciplineId: 'd1', classId: 'c1', position: 2, fullName: 'B Person', organizationName: 'Klubb B', score: 40 },

@@ -20,7 +20,8 @@ var groups = [
     { name: 'Fin-/grovpistol', disciplines: [
         { id: 'b1', name: 'Presisjon Landsdelsmatch', deleted: false },
         { id: 'b2', name: '25m finpistol', deleted: false },
-        { id: 'b3', name: '25m grovpistol', deleted: false }
+        { id: 'b3', name: '25m grovpistol', deleted: false },
+        { id: 'b-deleted', name: 'Gammel Bane', deleted: true }
     ] },
     { name: 'Hurtig', disciplines: [ { id: 'b4', name: '25m hurtigpistol fin', deleted: false } ] },
     { name: 'Standardpistol', disciplines: [ { id: 'b5', name: '25m standardpistol', deleted: false } ] },
@@ -41,5 +42,13 @@ var bane = DG.resolveBane(groups);
 // ever touched again.
 assert.strictEqual(bane.length, 7, 'Bane = union of all 5 BANE_GROUP_NAMES groups, including Presisjon Landsdelsmatch');
 assert.ok(bane.some(function (d) { return d.id === 'b1'; }), 'Presisjon Landsdelsmatch (Fin-/grovpistol group) is included -- deliberate, not a bug');
+assert.ok(bane.every(function (d) { return d.id !== 'b-deleted'; }), 'deleted entries are dropped from Bane too, not just Felt');
+
+// no matching groups / empty input -- resolves to [], never throws
+assert.deepStrictEqual(DG.resolveFelt([]), [], 'resolveFelt returns [] for an empty groups array');
+assert.deepStrictEqual(DG.resolveBane([]), [], 'resolveBane returns [] for an empty groups array');
+var noMatch = [{ name: 'PPC', disciplines: [{ id: 'p1', name: 'P1', deleted: false }] }];
+assert.deepStrictEqual(DG.resolveFelt(noMatch), [], 'resolveFelt returns [] when no group name matches');
+assert.deepStrictEqual(DG.resolveBane(noMatch), [], 'resolveBane returns [] when no group name matches');
 
 console.log('klubb-discipline-groups.test.js: all assertions passed');
