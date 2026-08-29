@@ -68,13 +68,14 @@ var StandplassKlubbPage = (function () {
             pickerEl.hidden = false;
             pickerEl.innerHTML = errorMsg
                 ? '<p class="ranking-error ranking-status-msg">' + esc(errorMsg) + '</p>'
-                : '<label for="' + config.idPrefix + '-picker-input">Velg klubb</label>'
+                : '<div class="ranking-filters"><div class="filter-group">'
+                    + '<label for="' + config.idPrefix + '-picker-input">Velg klubb</label>'
                     + '<div class="autocomplete-wrap" id="' + config.idPrefix + '-picker-wrap">'
                     + '<input type="text" id="' + config.idPrefix + '-picker-input" class="filter-input" autocomplete="off"'
                     + ' aria-autocomplete="list" aria-controls="' + config.idPrefix + '-picker-list" aria-expanded="false" placeholder="Søk klubb…">'
                     + '<button type="button" class="combo-clear" id="' + config.idPrefix + '-picker-clear" aria-label="Fjern">×</button>'
                     + '<ul class="autocomplete-list" id="' + config.idPrefix + '-picker-list" role="listbox" aria-label="Klubber" hidden></ul>'
-                    + '</div>';
+                    + '</div></div></div>';
             if (errorMsg) { return; }
             var inputEl = id('-picker-input');
             var listEl = id('-picker-list');

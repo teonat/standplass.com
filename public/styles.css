@@ -1090,7 +1090,8 @@ h1, h2, h3 {
 [data-mode="dark"] .stevner-comp-links a,
 [data-mode="dark"] .comp-modal-infocard a,
 [data-mode="dark"] .comp-modal-disc-name,
-[data-mode="dark"] .comp-modal-title { color: var(--text); }
+[data-mode="dark"] .comp-modal-title,
+[data-mode="dark"] .ranking-card-title { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
 [data-mode="dark"] .btn:not(.btn-primary) {
