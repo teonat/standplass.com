@@ -274,6 +274,32 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     .terminliste-tablet-hide { display: none; }
 }
 
+/* Compact club widget (the embeddable stevner-widget.js replacement) --
+   the year-nav button styling mirrors .filter-period-toggle's
+   [aria-pressed="true"] pattern: the active state uses var(--text), which
+   is already redefined per [data-mode="dark"] in themes.css, so (like
+   .filter-period-toggle) it needs no separate dark-mode override rule. */
+.terminliste-widget { margin: 0.5rem 0; }
+.terminliste-widget-years {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+}
+.terminliste-widget-year-btn {
+    background: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.terminliste-widget-year-btn[aria-current="true"] { color: var(--text); border-color: var(--text); font-weight: 600; }
+.terminliste-widget-link { margin-top: 0.75rem; font-size: 0.8125rem; }
+.terminliste-widget-link a { color: var(--brand-primary); text-decoration: underline; text-underline-offset: 2px; }
+.terminliste-widget-link a:hover { color: var(--brand-accent-dark); }
+
 /* ── Ranking card ─────────────────────────────────────── */
 .ranking-grid {
     display: grid;
@@ -1179,7 +1205,8 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 [data-mode="dark"] .comp-modal-title,
 [data-mode="dark"] .ranking-card-title,
 [data-mode="dark"] .ranking-full-table a,
-[data-mode="dark"] .ranking-table td a { color: var(--text); }
+[data-mode="dark"] .ranking-table td a,
+[data-mode="dark"] .terminliste-widget-link a { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
 [data-mode="dark"] .btn:not(.btn-primary) {
