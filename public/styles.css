@@ -824,8 +824,7 @@ h1, h2, h3 {
    toggled with [hidden] (stevner-page.js showModal/closePersonModal), so
    ::backdrop becomes the container's own background and [open] becomes the
    default state. */
-#felt-person-modal,
-#bane-person-modal {
+.person-modal {
     position: fixed;
     inset: 0;
     z-index: 300;
@@ -836,8 +835,7 @@ h1, h2, h3 {
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(2px);
 }
-#felt-person-modal[hidden],
-#bane-person-modal[hidden] { display: none; }
+.person-modal[hidden] { display: none; }
 
 .person-modal-shell {
     display: flex;

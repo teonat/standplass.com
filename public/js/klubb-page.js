@@ -49,11 +49,14 @@ var StandplassKlubbPage = (function () {
         var root = config.root || document;
         var id = function (suffix) { return root.getElementById(config.idPrefix + suffix); };
         var urlState = config.urlState;
-        var fetcher = config.fetcher;
         var CURRENT_YEAR = new Date().getUTCFullYear();
 
         var params = new URLSearchParams(urlState.getSearch());
         var klubbSlug = params.get('klubb');
+        var programParam = params.get('program');
+        var initialProgram = (programParam === 'felt' || programParam === 'bane') ? programParam : 'felt';
+        var numParam = parseInt(params.get('num'), 10);
+        var initialNumResults = (numParam >= 1 && numParam <= 10) ? numParam : 1;
 
         var pickerEl = id('-picker');
         var gridWrapEl = id('-grid-wrap');
@@ -98,16 +101,23 @@ var StandplassKlubbPage = (function () {
         }
 
         StandplassNsfOrgs.ensureOrgs(window.fetch.bind(window)).then(function (clubs) {
+            if (clubs.length === 0) { showPicker([], 'Kunne ikke laste klubbliste.'); return; }
             var matched = klubbSlug ? StandplassNsfOrgs.matchClub(clubs, klubbSlug) : null;
             if (!matched) { showPicker(clubs); return; }
             showGrid();
             var selectedYear = CURRENT_YEAR;
-            var selectedNumResults = 1;
-            var activeProgram = 'felt';
+            var selectedNumResults = initialNumResults;
+            var activeProgram = initialProgram;
             var rankingCache = {}; // { "discId|year|num": { time, promise } }
             var RANKING_TTL_MS = 5 * 60 * 1000;
             var activeAborts = [];
-            var cardState = {}; // { discId: { entries, expanded } }
+            var cardState = {}; // { discId: { disc, entries, expanded } }
+
+            function setUrlParam(key, value) {
+                var qs = new URLSearchParams(urlState.getSearch());
+                if (value) { qs.set(key, value); } else { qs.delete(key); }
+                urlState.setSearch('?' + qs.toString());
+            }
 
             function fetchRanking(disc) {
                 var key = disc.id + '|' + selectedYear + '|' + selectedNumResults;
@@ -161,6 +171,10 @@ var StandplassKlubbPage = (function () {
                     : StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups());
                 gridWrapEl.innerHTML = '';
                 cardState = {};
+                if (discs.length === 0) {
+                    gridWrapEl.innerHTML = '<p class="ranking-error ranking-status-msg">Kunne ikke laste øvelsesliste.</p>';
+                    return;
+                }
                 discs.forEach(function (disc) {
                     var cell = document.createElement('div');
                     cell.className = 'ranking-cell';
@@ -168,7 +182,7 @@ var StandplassKlubbPage = (function () {
                     cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div><p class="ranking-loading">Laster…</p></div>';
                     gridWrapEl.appendChild(cell);
                     fetchRanking(disc).then(function (entries) {
-                        cardState[disc.id] = { entries: entries, expanded: false };
+                        cardState[disc.id] = { disc: disc, entries: entries, expanded: false };
                         renderCard(cell, disc, entries, false);
                     }, function (err) {
                         if (err.name === 'AbortError') { return; }
@@ -185,11 +199,7 @@ var StandplassKlubbPage = (function () {
                 var state = cardState[discId];
                 if (!state) { return; }
                 state.expanded = !state.expanded;
-                var discs = activeProgram === 'felt'
-                    ? StandplassKlubbDisciplineGroups.resolveFelt(StandplassCompModal.getDisciplineGroups())
-                    : StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups());
-                var disc = discs.filter(function (d) { return d.id === discId; })[0];
-                if (disc) { renderCard(cell, disc, state.entries, state.expanded); }
+                if (state.disc) { renderCard(cell, state.disc, state.entries, state.expanded); }
             });
 
             var yearSelect = id('-year-select');
@@ -201,6 +211,8 @@ var StandplassKlubbPage = (function () {
             yearSelect.value = String(selectedYear);
             yearSelect.addEventListener('change', function () {
                 selectedYear = parseInt(yearSelect.value, 10);
+                personModal.reset({ defaultYear: selectedYear });
+                setUrlParam('year', String(selectedYear));
                 loadAll();
             });
 
@@ -208,11 +220,19 @@ var StandplassKlubbPage = (function () {
             numSelect.value = String(selectedNumResults);
             numSelect.addEventListener('change', function () {
                 selectedNumResults = parseInt(numSelect.value, 10) || 1;
+                setUrlParam('num', String(selectedNumResults));
                 loadAll();
             });
 
             var feltBtn = id('-toggle-felt');
             var baneBtn = id('-toggle-bane');
+            // Reflect a ?program=bane initial URL state in the toggle UI --
+            // the HTML markup hardcodes Felt as active, which only matched
+            // before activeProgram could start as anything but 'felt'.
+            feltBtn.classList.toggle('program-btn--active', activeProgram === 'felt');
+            feltBtn.setAttribute('aria-pressed', String(activeProgram === 'felt'));
+            baneBtn.classList.toggle('program-btn--active', activeProgram === 'bane');
+            baneBtn.setAttribute('aria-pressed', String(activeProgram === 'bane'));
             function setProgram(program) {
                 activeProgram = program;
                 feltBtn.classList.toggle('program-btn--active', program === 'felt');
@@ -220,6 +240,7 @@ var StandplassKlubbPage = (function () {
                 baneBtn.classList.toggle('program-btn--active', program === 'bane');
                 baneBtn.setAttribute('aria-pressed', String(program === 'bane'));
                 personModal.reset({ initialMetric: program === 'bane' ? 'score' : 'rankingScore' });
+                setUrlParam('program', program);
                 loadAll();
             }
             feltBtn.addEventListener('click', function () { if (activeProgram !== 'felt') { setProgram('felt'); } });

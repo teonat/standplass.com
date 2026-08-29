@@ -58,6 +58,7 @@ var StandplassPersonModalController = (function () {
                 modalEl.hidden = true;
                 (root === document ? document.body : root).appendChild(modalEl);
             }
+            modalEl.classList.add('person-modal');
             modalEl.setAttribute('role', 'dialog');
             modalEl.setAttribute('aria-labelledby', cfg.idPrefix + '-person-modal-title');
             modalEl.addEventListener('click', function (e) {
@@ -297,7 +298,8 @@ var StandplassPersonModalController = (function () {
         // the old program would otherwise be served stale) and updates the metric
         // default for the next modal opened fresh.
         function reset(newCfg) {
-            if (newCfg && newCfg.initialMetric) { modalMetric = newCfg.initialMetric; }
+            if (newCfg && newCfg.initialMetric) { modalMetric = newCfg.initialMetric; cfg.initialMetric = newCfg.initialMetric; }
+            if (newCfg && newCfg.defaultYear) { cfg.defaultYear = newCfg.defaultYear; }
             personYearCache = {};
         }
 
