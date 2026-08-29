@@ -766,6 +766,12 @@ h1, h2, h3 {
 .container { max-width: 960px; margin: 0 auto; }
 .section-label { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-accent); margin: 0 0 0.25rem; }
 .section-lead { color: var(--text-muted); max-width: 60ch; margin: 0.5rem 0 1.5rem; }
+/* Without this, the link falls back to the browser's UA default link color,
+   including :visited (a dark purple once skyting.no has been visited) --
+   unreadable on a dark surface and not something [data-mode="dark"] can
+   override since it's not one of this project's own CSS variables. */
+.section-lead a, .section-lead a:visited { color: var(--brand-accent); }
+.section-lead a:hover { color: var(--brand-accent-dark); }
 
 /* Reuses this repo's existing 700px breakpoint (already used elsewhere in
    this file, e.g. above) rather than porting the source's 900px -- this
@@ -775,10 +781,15 @@ h1, h2, h3 {
    misalign every card table. Columns: # / Navn / Klubb / Øvelse / Klasse /
    Poeng / Ranking -- Klubb is 3, Ranking is 7. Coexists with
    .stevner-hide-club-col (JS-toggled, column 3 only); display:none is
-   idempotent, so both may apply at once. */
+   idempotent, so both may apply at once.
+   Scoped to [data-comp-id] (stevner-page.js's per-competition cards only,
+   the 7-column layout this rule was written for) -- klubb-page.js reuses
+   the bare .ranking-card class for its own 3-column (#/Navn/Poeng)
+   per-discipline cards, which have no data-comp-id, so an unscoped
+   :nth-child(3) rule was hiding klubb's Poeng column on mobile instead. */
 @media (max-width: 700px) {
-    .ranking-card td:nth-child(3), .ranking-card th:nth-child(3),
-    .ranking-card td:nth-child(7), .ranking-card th:nth-child(7) { display: none; }
+    .ranking-card[data-comp-id] td:nth-child(3), .ranking-card[data-comp-id] th:nth-child(3),
+    .ranking-card[data-comp-id] td:nth-child(7), .ranking-card[data-comp-id] th:nth-child(7) { display: none; }
 }
 
 .ranking-meta {
@@ -1111,7 +1122,9 @@ h1, h2, h3 {
 [data-mode="dark"] .comp-modal-infocard a,
 [data-mode="dark"] .comp-modal-disc-name,
 [data-mode="dark"] .comp-modal-title,
-[data-mode="dark"] .ranking-card-title { color: var(--text); }
+[data-mode="dark"] .ranking-card-title,
+[data-mode="dark"] .ranking-full-table a,
+[data-mode="dark"] .ranking-table td a { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
 [data-mode="dark"] .btn:not(.btn-primary) {
