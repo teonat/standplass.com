@@ -10,6 +10,11 @@ Allow: /themes.css
 Allow: /js/
 Allow: /img/
 Allow: /favicon.ico
+Allow: /sitemap.xml
+Allow: /manifest.webmanifest
+Allow: /llms.txt
+Allow: /.well-known/
+Allow: /embed.js
 Disallow: /
 
 Sitemap: https://standplass.com/sitemap.xml
