@@ -75,11 +75,24 @@ h1, h2, h3 {
   gap: 1.5rem;
 }
 .site-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
   color: var(--white);
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-decoration: none;
+}
+.site-logo svg { flex-shrink: 0; }
+.site-logo:focus-visible,
+.nav-dropdown-btn:focus-visible,
+.nav-link:focus-visible,
+#site-mode-toggle:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 /* Header nav now holds multiple items (two dropdowns + a plain link) --
    previously just one .nav-dropdown, which relied on the header's own

@@ -1,0 +1,3 @@
+Contact: https://github.com/teonat/standplass.com/issues
+Preferred-Languages: no, en
+Canonical: https://standplass.com/.well-known/security.txt

@@ -1,0 +1,46 @@
+# standplass.com
+
+> Competitions, results, and statistics for NSF (Norges Sportsskytterforbund) pistol and revolver shooting.
+
+standplass.com is an open-source, non-profit, MIT-licensed site that scrapes and
+serves Norwegian shooting-sport competition results (skyting.no / NSF API),
+independent of any single club. Clubs can embed results on their own website
+via a Web Component instead of running their own scraper.
+
+The site is under continuous development and may change without notice.
+
+## Pages
+
+- / — Landing page
+- /felt — Feltskyting results (pistol)
+- /bane — Baneskyting results (pistol)
+- /klubb — Per-club leaderboard rankings
+- /nasjonalt — National top-list rankings across all NSF branches
+- /terminliste — Competition calendar (all branches)
+
+## Embedding
+
+Any club can embed standplass results on their own site:
+
+```html
+<script src="https://standplass.com/embed.js"></script>
+<standplass-results view="felt"></standplass-results>
+```
+
+Supported views: `felt`, `bane`, `terminliste`.
+Planned views: `klubb`, `nasjonalt`.
+
+Optional attributes: `klubb` (club name filter), `club` (brand preset),
+`mode` (light/dark theme), `sync-url` (opt-in URL sync), `compact` (terminliste widget).
+
+## Source code
+
+https://github.com/teonat/standplass.com
+
+## Data sources
+
+- skyting.no / NSF API (stevneresultater, ranking, terminliste)
+
+## License
+
+MIT

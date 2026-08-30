@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /$
+Allow: /felt
+Allow: /bane
+Allow: /klubb
+Allow: /nasjonalt
+Allow: /terminliste
+Allow: /styles.css
+Allow: /themes.css
+Allow: /js/
+Allow: /img/
+Allow: /favicon.ico
+Disallow: /
+
+Sitemap: https://standplass.com/sitemap.xml
