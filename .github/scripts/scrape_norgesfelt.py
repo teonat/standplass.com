@@ -211,9 +211,9 @@ def main():
         existing = load_existing()
         if existing and existing.get('disciplines'):
             print('WARNING: all disciplines returned 0 results - keeping existing JSON.', file=sys.stderr)
-            sys.exit(1)
         else:
-            print('WARNING: all disciplines returned 0 results and no existing data - writing empty JSON.')
+            print('WARNING: all disciplines returned 0 results and no existing data.', file=sys.stderr)
+        sys.exit(1)
 
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
