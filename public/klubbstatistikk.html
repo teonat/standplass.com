@@ -3,38 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Feltskyting – standplass.com</title>
-  <meta name="description" content="Feltskyting resultater for pistol og revolver i Norges Sportsskytterforbund (NSF). Stevneresultater samlet og søkbart på standplass.com.">
+  <title>Klubbstatistikk – standplass.com</title>
+  <meta name="description" content="Statistikk for skytteklubber i Norges Sportsskytterforbund (NSF). Topplister for flest skyttere, starter og stevner. Detaljert statistikk per klubb.">
   <link rel="icon" href="/img/favicon-light.png" media="(prefers-color-scheme: light)">
   <link rel="icon" href="/img/favicon-dark.png" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="canonical" href="https://standplass.com/felt">
+  <link rel="canonical" href="https://standplass.com/klubbstatistikk">
   <meta name="theme-color" content="#f6f3ea" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17151a" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="standplass.com">
   <meta property="og:locale" content="no_NO">
-  <meta property="og:title" content="Feltskyting – standplass.com">
-  <meta property="og:description" content="Feltskyting resultater for pistol og revolver i Norges Sportsskytterforbund (NSF). Stevneresultater samlet og søkbart på standplass.com.">
-  <meta property="og:url" content="https://standplass.com/felt">
+  <meta property="og:title" content="Klubbstatistikk – standplass.com">
+  <meta property="og:description" content="Statistikk for skytteklubber i Norges Sportsskytterforbund (NSF). Topplister for flest skyttere, starter og stevner. Detaljert statistikk per klubb.">
+  <meta property="og:url" content="https://standplass.com/klubbstatistikk">
   <meta property="og:image" content="https://standplass.com/img/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="standplass.com logo">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Feltskyting – standplass.com">
-  <meta name="twitter:description" content="Feltskyting resultater for pistol og revolver i Norges Sportsskytterforbund (NSF). Stevneresultater samlet og søkbart på standplass.com.">
+  <meta name="twitter:title" content="Klubbstatistikk – standplass.com">
+  <meta name="twitter:description" content="Statistikk for skytteklubber i Norges Sportsskytterforbund (NSF). Topplister for flest skyttere, starter og stevner. Detaljert statistikk per klubb.">
   <meta name="twitter:image" content="https://standplass.com/img/og-image.png">
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"WebPage","name":"Feltskyting","url":"https://standplass.com/felt","description":"Feltskyting resultater for pistol og revolver i Norges Sportsskytterforbund (NSF).","inLanguage":"no","isPartOf":{"@type":"WebSite","name":"standplass.com","url":"https://standplass.com/"}}
+  {"@context":"https://schema.org","@type":"WebPage","name":"Klubbstatistikk","url":"https://standplass.com/klubbstatistikk","description":"Statistikk for skytteklubber i NSF. Topplister og detaljert statistikk per klubb.","inLanguage":"no","isPartOf":{"@type":"WebSite","name":"standplass.com","url":"https://standplass.com/"}}
   </script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/themes.css">
 </head>
 <body>
-  <a href="#felt-root" class="skip-link">Hopp til hovedinnhold</a>
+  <a href="#klubbstatistikk-root" class="skip-link">Hopp til hovedinnhold</a>
   <header class="site-header">
     <div class="site-header-inner">
       <a href="/" class="site-logo"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="15" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="2" fill="#c1272d"/></svg>STANDPLASS</a>
@@ -60,10 +60,30 @@
       <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
     </div>
   </header>
-  <main id="felt-root" class="ranking-section" tabindex="-1"></main>
+  <main id="klubbstatistikk-root" class="ranking-section" tabindex="-1">
+    <div class="container">
+      <p class="section-label">Statistikk</p>
+      <h1 class="section-title" id="klubbstatistikk-title">Klubbstatistikk</h1>
+      <p class="section-lead" id="klubbstatistikk-lead">Topplister og statistikk for skytteklubber.
+        Data fra skyting.no – kun pistol og revolver (feltskyting og baneskyting).</p>
+      <div id="klubbstatistikk-filters"></div>
+      <p class="ranking-status-msg" id="klubbstatistikk-status" aria-live="polite"></p>
+      <div id="klubbstatistikk-content"></div>
+    </div>
+  </main>
   <script src="/js/mode-resolve.js"></script>
   <script src="/js/site-chrome.js"></script>
-  <script src="/embed.js"></script>
-  <script>StandplassEmbed.mountDirect({ view: 'felt', idPrefix: 'felt' });</script>
+  <script src="/js/data-fetch-cache.js"></script>
+  <script src="/js/stevner-page.js"></script>
+  <script src="/js/filter-widgets.js"></script>
+  <script src="/js/url-state.js"></script>
+  <script src="/js/club-stats-page.js"></script>
+  <script>
+    StandplassClubStats.init({
+      idPrefix: 'klubbstatistikk',
+      root: document,
+      urlState: StandplassUrlState.createController({ namespace: null })
+    });
+  </script>
 </body>
 </html>

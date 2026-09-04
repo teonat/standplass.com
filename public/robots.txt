@@ -6,6 +6,7 @@ Allow: /klubb
 Allow: /nasjonalt
 Allow: /terminliste
 Allow: /norgesfelt
+Allow: /klubbstatistikk
 Allow: /styles.css
 Allow: /themes.css
 Allow: /js/
