@@ -83,10 +83,12 @@ var qsBefore = new URLSearchParams();
 qsBefore.set('type', 'total');
 qsBefore.set('q', 'ola');
 qsBefore.set('clubs', 'Oslo%20Pistolklubb,Bergen%20Pistolklubb');
+qsBefore.set('subtype', 'total');
 c5.setSearch('?' + qsBefore.toString());
 var qsAfter = new URLSearchParams(c5.getSearch());
 assert.strictEqual(qsAfter.get('type'), 'total', 'type must round-trip');
 assert.strictEqual(qsAfter.get('q'), 'ola', 'q must round-trip');
 assert.strictEqual(qsAfter.get('clubs'), 'Oslo%20Pistolklubb,Bergen%20Pistolklubb', 'clubs must round-trip untouched -- url-state.js treats it as an opaque string');
+assert.strictEqual(qsAfter.get('subtype'), 'total', 'subtype (toppliste tab sub-toggle) must round-trip');
 
 console.log('url-state.test.js: all assertions passed');

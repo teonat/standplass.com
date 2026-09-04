@@ -133,6 +133,7 @@ var StandplassNorgesfeltPage = (function () {
         var activeQuery = params.get('q') || '';
         var klubbSlug = params.get('klubb');
         var activeClubs = parseClubsParam(params.get('clubs'));
+        var activeSubType = params.get('subtype') === 'total' ? 'total' : 'individual';
 
         var statusEl = id('-status');
         var updatedEl = id('-updated');
@@ -155,7 +156,6 @@ var StandplassNorgesfeltPage = (function () {
         var data = null;
         var debounceTimer = null;
         var cardState = {}; // { discName: expanded }
-        var activeSubType = 'individual';
         var clubWidget = null;
 
         function setUrl() {
@@ -165,6 +165,7 @@ var StandplassNorgesfeltPage = (function () {
             if (activeDisc) { qs.set('disc', activeDisc); }
             if (activeQuery) { qs.set('q', activeQuery); }
             if (activeClubs.length) { qs.set('clubs', buildClubsParam(activeClubs)); }
+            if (activeSubType !== 'individual') { qs.set('subtype', activeSubType); }
             urlState.setSearch('?' + qs.toString());
         }
 
@@ -309,10 +310,12 @@ var StandplassNorgesfeltPage = (function () {
             subIndividualBtn.setAttribute('aria-pressed', String(type === 'individual'));
             subTotalBtn.classList.toggle('program-btn--active', type === 'total');
             subTotalBtn.setAttribute('aria-pressed', String(type === 'total'));
+            setUrl();
             renderCards();
         }
         subIndividualBtn.addEventListener('click', function () { if (activeSubType !== 'individual') { setSubType('individual'); } });
         subTotalBtn.addEventListener('click', function () { if (activeSubType !== 'total') { setSubType('total'); } });
+        setSubType(activeSubType); // sync button state (and URL) with a ?subtype= deep link before data arrives, same as setTab(activeTab, false) above -- renderCards() no-ops until data loads
 
         function onClubsChanged() {
             setUrl();
@@ -355,7 +358,7 @@ var StandplassNorgesfeltPage = (function () {
             if (data.lastUpdated) { updatedEl.textContent = 'Oppdatert ' + StandplassFormat.formatDate(data.lastUpdated); }
             if (klubbSlug && !activeClubs.length) {
                 var matched = enumerateClubs(data).filter(function (name) { return matchesClub(name, klubbSlug); });
-                if (matched.length) { activeClubs = matched; }
+                if (matched.length) { activeClubs = matched; setUrl(); }
             }
             populateDiscSelect();
             renderSearchTable();

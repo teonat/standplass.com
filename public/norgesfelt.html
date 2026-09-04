@@ -92,14 +92,16 @@
         <div id="norgesfelt-search-table-wrap"></div>
       </div>
       <div id="norgesfelt-panel-toppliste" tabindex="-1" hidden>
-        <div class="filter-group">
-          <label for="norgesfelt-club-input">Klubb (velg én eller flere)</label>
-          <ul class="tag-list" id="norgesfelt-club-tags" aria-label="Valgte klubber" aria-live="polite"></ul>
-          <div class="autocomplete-wrap" id="norgesfelt-club-wrap">
-            <input type="text" id="norgesfelt-club-input" class="filter-input" autocomplete="off"
-              aria-autocomplete="list" aria-controls="norgesfelt-club-list" aria-expanded="false" placeholder="Søk klubb…">
-            <button type="button" class="combo-clear" id="norgesfelt-club-clear" aria-label="Fjern alle klubber">×</button>
-            <ul class="autocomplete-list" id="norgesfelt-club-list" role="listbox" aria-label="Klubber" hidden></ul>
+        <div class="ranking-filters">
+          <div class="filter-group">
+            <label for="norgesfelt-club-input">Klubb (velg én eller flere)</label>
+            <ul class="tag-list" id="norgesfelt-club-tags" aria-label="Valgte klubber" aria-live="polite"></ul>
+            <div class="autocomplete-wrap" id="norgesfelt-club-wrap">
+              <input type="text" id="norgesfelt-club-input" class="filter-input" autocomplete="off"
+                aria-autocomplete="list" aria-controls="norgesfelt-club-list" aria-expanded="false" placeholder="Søk klubb…">
+              <button type="button" class="combo-clear" id="norgesfelt-club-clear" aria-label="Fjern alle klubber">×</button>
+              <ul class="autocomplete-list" id="norgesfelt-club-list" role="listbox" aria-label="Klubber" hidden></ul>
+            </div>
           </div>
         </div>
         <div class="program-toggle" role="group" aria-label="Resultattype">

@@ -18,7 +18,7 @@ var StandplassUrlState = (function () {
     // param; nasjonalt's own Periode-mode toggle uses 'periode' instead so
     // it can never collide with it (see nasjonalt-page.js).
     var TRACKED_PARAMS = ['year', 'klubb', 'person', 'tab', 'group', 'disc', 'name', 'organizer', 'comp',
-        'program', 'num', 'class', 'krets', 'org', 'periode', 'fra', 'til', 'type', 'q', 'clubs',
+        'program', 'num', 'class', 'krets', 'org', 'periode', 'fra', 'til', 'type', 'q', 'clubs', 'subtype',
         't_name', 't_fra', 't_til', 't_gren', 't_org', 't_krets', 't_type', 't_group',
         'p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
 
