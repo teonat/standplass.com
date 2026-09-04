@@ -17,6 +17,7 @@ The site is under continuous development and may change without notice.
 - /klubb — Per-club leaderboard rankings
 - /nasjonalt — National top-list rankings across all NSF branches
 - /terminliste — Competition calendar (all branches)
+- /norgesfelt — Norgesfelt results (national field-pistol series)
 
 ## Embedding
 
@@ -40,6 +41,7 @@ https://github.com/teonat/standplass.com
 ## Data sources
 
 - skyting.no / NSF API (stevneresultater, ranking, terminliste)
+- norgesfelt.no (Norgesfelt field-pistol series results)
 
 ## License
 
