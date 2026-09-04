@@ -379,6 +379,13 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     gap: 1.5rem;
 }
 
+/* Norgesfelt's own cards are far denser (up to 6 columns, needing a
+   horizontal scroll) than klubb/nasjonalt's simple 3-column ones, which
+   share the base .ranking-grid gap above -- the same 1.5rem costs more
+   here than there, so this narrows it specifically rather than shrinking
+   the shared rule for pages that don't need it. */
+#norgesfelt-cards-wrap { gap: 0.75rem; }
+
 .ranking-card {
     background: var(--surface-card);
     border: 1px solid var(--brand-accent-border-accent);
