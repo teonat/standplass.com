@@ -5,6 +5,7 @@ Allow: /bane
 Allow: /klubb
 Allow: /nasjonalt
 Allow: /terminliste
+Allow: /klubbstatistikk
 Allow: /styles.css
 Allow: /themes.css
 Allow: /js/

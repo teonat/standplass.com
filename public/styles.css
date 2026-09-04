@@ -48,6 +48,28 @@ body {
   font-family: var(--font-family);
 }
 
+/* WCAG 2.4.1 Bypass Blocks — skip-link visible on focus only */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  background: var(--brand-primary);
+  color: var(--white);
+  padding: 0.75rem 1.25rem;
+  text-decoration: none;
+  z-index: 1000;
+  border-radius: 0 0 var(--radius-sm) 0;
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 0;
+}
+/* Programmatic focus (tabindex="-1") on <main> via skip-link or drilldown
+   load — must not show a focus outline around the whole page. */
+main[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* A shadow root has no <body>, so the rule above never reaches an embed —
    the host element carries the same page-level surface/text/font. Matches
    nothing outside a shadow tree, so felt.html/bane.html are unaffected. */
@@ -172,6 +194,8 @@ h1, h2, h3 {
     background: var(--surface-base);
     border-bottom: 1px solid var(--border-faint);
 }
+.ranking-table th.ranking-score { text-align: right; }
+.ranking-table th.ranking-rank { text-align: center; }
 
 .ranking-table td {
     padding: 0.4375rem 0.875rem;
@@ -262,6 +286,8 @@ h1, h2, h3 {
 }
 
 /* ── Terminliste ──────────────────────────────────────── */
+.terminliste-row--clickable { cursor: pointer; }
+.terminliste-row--clickable:hover td, .terminliste-row--clickable:active td { background: var(--surface-hover); }
 .terminliste-detail-col { width: 2.5rem; text-align: center; }
 .comp-detail-btn {
     background: none;
@@ -1358,3 +1384,117 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     word-break: break-all;
 }
 .embed-snippet:empty { display: none; }
+
+/* ── Club statistics ─────────────────────────────────────────────────── */
+
+.club-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+@media (max-width: 700px) {
+  .club-stats-grid { grid-template-columns: 1fr; }
+}
+
+.club-stats-toplist .ranking-table { margin: 0; }
+.club-stats-toplist .ranking-toggle { margin: 0.5rem 0 0; }
+
+.club-stats-note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0.75rem 0 0;
+  line-height: 1.5;
+}
+
+.club-stats-back {
+  display: inline-block;
+  font-size: 0.875rem;
+  color: var(--brand-accent);
+  text-decoration: none;
+  margin-bottom: 0.5rem;
+}
+.club-stats-back:hover { text-decoration: underline; }
+
+.club-stats-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+@media (max-width: 700px) {
+  .club-stats-summary { grid-template-columns: repeat(2, 1fr); }
+}
+
+.club-stats-summary-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.club-stats-summary-value {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+.club-stats-summary-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.club-stats-section { margin-top: 1rem; }
+.club-stats-section .ranking-table { margin: 0; }
+.club-stats-section > .ranking-card-header ~ * {
+  padding-left: 1.125rem;
+  padding-right: 1.125rem;
+}
+
+.club-chart-wrap {
+  padding: 0.5rem 0;
+}
+.club-stats-chart-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0.75rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.club-chart-dot:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+/* <details> data-table alternative under the chart — reset browser defaults */
+.club-stats-section details {
+  border: none;
+  padding: 0;
+  margin-top: 0.5rem;
+}
+.club-stats-section details > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  list-style: none;
+}
+.club-stats-section details > summary::-webkit-details-marker { display: none; }
+.club-stats-section details > summary::before { content: '▸ '; }
+.club-stats-section details[open] > summary::before { content: '▾ '; }
+
+/* Dark mode fixes — --brand-primary is mode-invariant, needs explicit override */
+:root[data-mode="dark"] .club-stats-back,
+:host([data-mode="dark"]) .club-stats-back {
+  color: var(--brand-accent);
+}
+:root[data-mode="dark"] .club-stats-summary-value,
+:host([data-mode="dark"]) .club-stats-summary-value {
+  color: var(--text);
+}

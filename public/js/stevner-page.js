@@ -47,6 +47,7 @@ var StandplassStevnerPage = (function () {
             rankingScore: r.rankingScore,
             competitionType: comp.competitionTypeName || '',
             competition: comp.title,
+            competitionId: comp.id,
             // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
             // date" on this string and parses it as UTC midnight, both of which break on
             // a full datetime.
