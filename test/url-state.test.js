@@ -75,4 +75,18 @@ var qs2 = new URLSearchParams(filters.getSearch());
 assert.strictEqual(qs2.get('organizer'), 'Klubb A');
 assert.strictEqual(qs2.get('comp'), 'høst');
 
+// norgesfelt's own new params -- tab/disc are already shared with other
+// pages, type/q/clubs are new to this file.
+var c5 = StandplassUrlState.createController({ namespace: null });
+assert.ok(c5); // controller creation must not throw once these are tracked
+var qsBefore = new URLSearchParams();
+qsBefore.set('type', 'total');
+qsBefore.set('q', 'ola');
+qsBefore.set('clubs', 'Oslo%20Pistolklubb,Bergen%20Pistolklubb');
+c5.setSearch('?' + qsBefore.toString());
+var qsAfter = new URLSearchParams(c5.getSearch());
+assert.strictEqual(qsAfter.get('type'), 'total', 'type must round-trip');
+assert.strictEqual(qsAfter.get('q'), 'ola', 'q must round-trip');
+assert.strictEqual(qsAfter.get('clubs'), 'Oslo%20Pistolklubb,Bergen%20Pistolklubb', 'clubs must round-trip untouched -- url-state.js treats it as an opaque string');
+
 console.log('url-state.test.js: all assertions passed');
