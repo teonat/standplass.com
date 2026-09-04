@@ -578,6 +578,13 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     background: var(--surface-card);
     font-family: inherit;
     width: 100%;
+    /* Without this, width:100% + padding + border (content-box default)
+       overflows the flex item by the padding+border amount. Every prior
+       text input in this pattern sat inside .autocomplete-wrap (flex:1;
+       min-width:0), which never hit this -- norgesfelt's plain Søk field
+       is the first bare input[type="text"] in a .filter-group, and it
+       overflowed into the next filter field. */
+    box-sizing: border-box;
 }
 
 .filter-group select {
