@@ -168,7 +168,7 @@ var StandplassNorgesfeltPage = (function () {
             urlState.setSearch('?' + qs.toString());
         }
 
-        function setTab(tab) {
+        function setTab(tab, moveFocus) {
             activeTab = tab;
             tabSokBtn.classList.toggle('program-btn--active', tab === 'sok');
             tabSokBtn.setAttribute('aria-pressed', String(tab === 'sok'));
@@ -176,13 +176,13 @@ var StandplassNorgesfeltPage = (function () {
             tabToppBtn.setAttribute('aria-pressed', String(tab === 'toppliste'));
             panelSok.hidden = tab !== 'sok';
             panelTopp.hidden = tab !== 'toppliste';
-            (tab === 'sok' ? panelSok : panelTopp).focus();
+            if (moveFocus) { (tab === 'sok' ? panelSok : panelTopp).focus(); }
             setUrl();
         }
 
-        tabSokBtn.addEventListener('click', function () { if (activeTab !== 'sok') { setTab('sok'); } });
-        tabToppBtn.addEventListener('click', function () { if (activeTab !== 'toppliste') { setTab('toppliste'); } });
-        setTab(activeTab); // wire tab switching before data arrives, so it works even mid-load
+        tabSokBtn.addEventListener('click', function () { if (activeTab !== 'sok') { setTab('sok', true); } });
+        tabToppBtn.addEventListener('click', function () { if (activeTab !== 'toppliste') { setTab('toppliste', true); } });
+        setTab(activeTab, false); // wire tab switching before data arrives, so it works even mid-load -- never move focus on initial setup, only on a real user click
 
         // --- "Alle resultater" tab ---
 
