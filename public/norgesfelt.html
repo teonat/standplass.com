@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Norgesfelt – standplass.com</title>
+  <meta name="description" content="Norgesfelt-resultater: nasjonal toppliste og søk i feltskytingsserien for pistol og revolver. Data fra norgesfelt.no, oppdatert daglig.">
+  <link rel="icon" href="/img/favicon-light.png" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="/img/favicon-dark.png" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="canonical" href="https://standplass.com/norgesfelt">
+  <meta name="theme-color" content="#f6f3ea" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17151a" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="standplass.com">
+  <meta property="og:locale" content="no_NO">
+  <meta property="og:title" content="Norgesfelt – standplass.com">
+  <meta property="og:description" content="Norgesfelt-resultater: nasjonal toppliste og søk i feltskytingsserien for pistol og revolver. Data fra norgesfelt.no, oppdatert daglig.">
+  <meta property="og:url" content="https://standplass.com/norgesfelt">
+  <meta property="og:image" content="https://standplass.com/img/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="standplass.com logo">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Norgesfelt – standplass.com">
+  <meta name="twitter:description" content="Norgesfelt-resultater: nasjonal toppliste og søk i feltskytingsserien for pistol og revolver. Data fra norgesfelt.no, oppdatert daglig.">
+  <meta name="twitter:image" content="https://standplass.com/img/og-image.png">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebPage","name":"Norgesfelt","url":"https://standplass.com/norgesfelt","description":"Norgesfelt-resultater: nasjonal toppliste og søk i feltskytingsserien for pistol og revolver.","inLanguage":"no","isPartOf":{"@type":"WebSite","name":"standplass.com","url":"https://standplass.com/"}}
+  </script>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/themes.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="site-logo"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="15" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="2" fill="#c1272d"/></svg>STANDPLASS</a>
+      <nav aria-label="Hovedmeny">
+        <div class="nav-dropdown">
+          <button type="button" class="nav-dropdown-btn" aria-expanded="false" aria-controls="nav-resultater-menu">Resultater ▾</button>
+          <div class="nav-dropdown-menu" id="nav-resultater-menu" hidden>
+            <a href="/felt">Feltskyting</a>
+            <a href="/bane">Baneskyting</a>
+          </div>
+        </div>
+        <div class="nav-dropdown">
+          <button type="button" class="nav-dropdown-btn" aria-expanded="false" aria-controls="nav-topplister-menu">Topplister ▾</button>
+          <div class="nav-dropdown-menu" id="nav-topplister-menu" hidden>
+            <a href="/klubb">Klubb</a>
+            <a href="/nasjonalt">Nasjonalt</a>
+            <a href="/norgesfelt">Norgesfelt</a>
+          </div>
+        </div>
+        <a href="/terminliste?t_gren=0beff7e2-94f7-4284-b76e-fc3e17b29e4f" class="nav-link">Terminliste</a>
+      </nav>
+      <button type="button" id="site-mode-toggle" aria-label="Bytt mellom lyst og mørkt tema" aria-pressed="false">◐</button>
+    </div>
+  </header>
+  <main id="norgesfelt-root" class="ranking-section">
+    <div class="container">
+      <p class="section-label">Topplister</p>
+      <h1 class="section-title">Norgesfelt</h1>
+      <p class="section-lead">Norgesfelt er en nasjonal feltskytingsserie for pistol og revolver, med en fast,
+        standardisert løype som gjør resultater direkte sammenlignbare på tvers av klubber. Data hentes fra
+        <a href="https://www.norgesfelt.no/" target="_blank" rel="noopener noreferrer">norgesfelt.no</a> og oppdateres daglig.</p>
+      <p id="norgesfelt-updated" class="ranking-meta"></p>
+      <p id="norgesfelt-status" class="ranking-status-msg" aria-live="polite"></p>
+      <div class="program-toggle" role="group" aria-label="Visning">
+        <button type="button" id="norgesfelt-tab-sok" class="program-btn program-btn--active" aria-pressed="true">Alle resultater</button>
+        <button type="button" id="norgesfelt-tab-toppliste" class="program-btn" aria-pressed="false">Toppliste klubb</button>
+      </div>
+      <div id="norgesfelt-panel-sok" tabindex="-1">
+        <div class="ranking-filters">
+          <div class="filter-group">
+            <label for="norgesfelt-search-input">Søk (navn eller forening)</label>
+            <input type="text" id="norgesfelt-search-input" class="filter-input" autocomplete="off">
+          </div>
+          <div class="filter-group">
+            <label for="norgesfelt-disc-select">Gren</label>
+            <select id="norgesfelt-disc-select"></select>
+          </div>
+          <div class="filter-group">
+            <label for="norgesfelt-type-select">Type</label>
+            <select id="norgesfelt-type-select">
+              <option value="individual">Enkeltresultater</option>
+              <option value="total">Sammenlagt</option>
+            </select>
+          </div>
+        </div>
+        <div id="norgesfelt-search-table-wrap"></div>
+      </div>
+      <div id="norgesfelt-panel-toppliste" tabindex="-1" hidden>
+        <div class="filter-group">
+          <label for="norgesfelt-club-input">Klubb (velg én eller flere)</label>
+          <ul class="tag-list" id="norgesfelt-club-tags" aria-label="Valgte klubber" aria-live="polite"></ul>
+          <div class="autocomplete-wrap" id="norgesfelt-club-wrap">
+            <input type="text" id="norgesfelt-club-input" class="filter-input" autocomplete="off"
+              aria-autocomplete="list" aria-controls="norgesfelt-club-list" aria-expanded="false" placeholder="Søk klubb…">
+            <button type="button" class="combo-clear" id="norgesfelt-club-clear" aria-label="Fjern alle klubber">×</button>
+            <ul class="autocomplete-list" id="norgesfelt-club-list" role="listbox" aria-label="Klubber" hidden></ul>
+          </div>
+        </div>
+        <div class="program-toggle" role="group" aria-label="Resultattype">
+          <button type="button" id="norgesfelt-sub-individual" class="program-btn program-btn--active" aria-pressed="true">Enkeltresultater</button>
+          <button type="button" id="norgesfelt-sub-total" class="program-btn" aria-pressed="false">Sammenlagt</button>
+        </div>
+        <div id="norgesfelt-cards-wrap" class="ranking-grid"></div>
+      </div>
+    </div>
+  </main>
+  <script src="/js/mode-resolve.js"></script>
+  <script src="/js/site-chrome.js"></script>
+  <script src="/js/format.js"></script>
+  <script src="/js/filter-widgets.js"></script>
+  <script src="/js/url-state.js"></script>
+  <script src="/js/norgesfelt-page.js"></script>
+  <script>
+    StandplassNorgesfeltPage.init({
+      idPrefix: 'norgesfelt',
+      root: document,
+      urlState: StandplassUrlState.createController({ namespace: null })
+    });
+  </script>
+</body>
+</html>

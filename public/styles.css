@@ -306,6 +306,16 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     .terminliste-tablet-hide { display: none; }
 }
 
+/* Norgesfelt uses its own semantic hide classes for the same documented
+   reason terminliste does (see above) -- never nth-child on a shared
+   .ranking-card/.ranking-table class. */
+@media (max-width: 700px) {
+    .norgesfelt-mobile-hide { display: none; }
+}
+@media (max-width: 900px) {
+    .norgesfelt-tablet-hide { display: none; }
+}
+
 /* Compact club widget (the embeddable stevner-widget.js replacement) --
    the year-nav button styling mirrors .filter-period-toggle's
    [aria-pressed="true"] pattern: the active state uses var(--text), which
