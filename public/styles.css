@@ -899,7 +899,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* ── Ranking meta / section / status / blank state ────── */
 .ranking-section { background: var(--surface-page); padding: 3rem 1.5rem 5rem; }
 
-.container { max-width: 960px; margin: 0 auto; }
+.container { max-width: 1100px; margin: 0 auto; }
 .section-label { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-accent); margin: 0 0 0.25rem; }
 /* No max-width here (was 60ch) -- roughly half the .container's own
    960px, so a longer intro sentence (e.g. klubb/nasjonalt's attribution
