@@ -169,7 +169,7 @@ var StandplassTerminlistePage = (function () {
             var resultCell = (c.hasResult && c.resultFileUrl)
                 ? '<a href="' + esc(c.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
                 : '–';
-            return '<tr data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
+            return '<tr class="terminliste-row--clickable" data-id="' + esc(c.id) + '" data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
                 + '<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="' + esc(c.id) + '" aria-label="Se detaljer for ' + esc(c.title || '–') + '">ⓘ</button></td>'
                 + '<td class="terminliste-date">' + esc(StandplassFormat.formatDateRange(c.startDate, c.endDate)) + '</td>'
                 + '<td>' + esc(c.title || '–') + '</td>'
@@ -195,18 +195,31 @@ var StandplassTerminlistePage = (function () {
         }
         compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
         compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
-        tableWrapEl.addEventListener('click', function (e) {
-            var btn = e.target.closest('.comp-detail-btn');
-            if (!btn) { return; }
+
+        function openCompactModal(compId) {
             var bodyEl = compDialog.querySelector('.comp-modal-body');
             bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
             compDialog.showModal();
-            StandplassCompModal.fetchDetailWithFacility(btn.dataset.id, window.fetch.bind(window)).then(function (result) {
+            StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
                 compDialog.querySelector('.comp-modal-title').textContent = result.comp.title || '';
                 bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
             });
+        }
+
+        // Whole row opens the modal, matching the source's own widget
+        // (stevner-widget.js's own click handler) -- only an actual
+        // <a>/<button> inside the row (the PDF result link, the ⓘ button
+        // itself) is excluded, same guard as the full page's own delegation.
+        tableWrapEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.comp-detail-btn');
+            if (btn) { openCompactModal(btn.dataset.id); return; }
+            var row = e.target.closest('tr.terminliste-row--clickable');
+            if (!row) { return; }
+            if (e.target.closest('a, button')) { return; }
+            if (window.getSelection && window.getSelection().toString()) { return; }
+            openCompactModal(row.dataset.id);
         });
 
         var klubbSlug = config.klubb || (new URLSearchParams(window.location.search)).get('klubb');
@@ -654,12 +667,25 @@ var StandplassTerminlistePage = (function () {
                 StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
         });
 
+        // Whole row opens the modal, matching the source's own delegation
+        // (terminliste.js's setupModalDelegation) -- only an actual <a>/
+        // <button> inside the row (the skyting.no title link, the PDF
+        // result link, the ⓘ button itself) is excluded, and an active text
+        // selection is respected rather than hijacked into opening a modal.
         tableWrapEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.comp-detail-btn');
-            if (!btn) { return; }
-            var tr = btn.closest('tr');
-            var titleLink = tr && tr.querySelector('td:nth-child(3) a');
-            openCompModal(btn.dataset.id, titleLink ? titleLink.textContent : '');
+            if (btn) {
+                var tr = btn.closest('tr');
+                var titleLink = tr && tr.querySelector('td:nth-child(3) a');
+                openCompModal(btn.dataset.id, titleLink ? titleLink.textContent : '');
+                return;
+            }
+            var row = e.target.closest('tr.terminliste-row--clickable');
+            if (!row) { return; }
+            if (e.target.closest('a, button')) { return; }
+            if (window.getSelection && window.getSelection().toString()) { return; }
+            var rowTitleLink = row.querySelector('td:nth-child(3) a');
+            openCompModal(row.dataset.id, rowTitleLink ? rowTitleLink.textContent : '');
         });
     }
 

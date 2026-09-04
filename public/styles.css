@@ -262,6 +262,8 @@ h1, h2, h3 {
 }
 
 /* ── Terminliste ──────────────────────────────────────── */
+.terminliste-row--clickable { cursor: pointer; }
+.terminliste-row--clickable:hover td, .terminliste-row--clickable:active td { background: var(--surface-hover); }
 .terminliste-detail-col { width: 2.5rem; text-align: center; }
 .comp-detail-btn {
     background: none;

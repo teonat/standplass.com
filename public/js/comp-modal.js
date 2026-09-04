@@ -99,7 +99,19 @@ var StandplassCompModal = (function () {
                 entryFee: e.entryFee
             });
         });
-        return groupEventsByDiscipline(deduped);
+        var groups = groupEventsByDiscipline(deduped);
+        // Classes within each discipline group sorted by name -- matches the
+        // source's own competition-modal rendering (nsf-ui.js's classes.sort
+        // in its Detaljer-tab renderer), dropped when this was first ported.
+        // groupEventsByDiscipline itself only orders the discipline groups,
+        // never each group's own class list, and only affects this
+        // function's one caller (the Detaljer tab) -- renderResultsBody's
+        // own separate use of groupEventsByDiscipline (grouping real result
+        // rows, not class definitions) is untouched.
+        groups.forEach(function (g) {
+            g.events.sort(function (a, b) { return a.class.localeCompare(b.class, 'no'); });
+        });
+        return groups;
     }
 
     // 30-entry cap + 5-min TTL, matching the source's own resultlist cache
@@ -131,7 +143,15 @@ var StandplassCompModal = (function () {
         if (cached && cached.data) { return Promise.resolve(cached.data); }
         return fetchFn('https://app.skyting.no/api/competition/' + encodeURIComponent(id))
             .then(function (r) { if (!r.ok) { throw new Error('competition fetch failed: ' + r.status); } return r.json(); })
-            .then(function (data) { cacheSet(id, { data: data }); return data; });
+            .then(function (data) {
+                // The API's own competition-detail response never echoes back
+                // the id it was fetched with -- without this, renderDetailBody's
+                // "Åpne på app.skyting.no" link had no id to build a URL from
+                // and silently pointed at .../p/c//details.
+                data.id = id;
+                cacheSet(id, { data: data });
+                return data;
+            });
     }
 
     // Facility (venue address/coordinates for the map link) is a second,
