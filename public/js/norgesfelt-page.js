@@ -272,10 +272,10 @@ var StandplassNorgesfeltPage = (function () {
                     + (expanded ? 'Vis topp ' + TOP_N : 'Vis alle (' + filtered.length + ')') + '</button>'
                 : '';
             cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(discName) + '</h2></div>'
-                + '<table class="ranking-table"><thead><tr><th>#</th><th>Navn</th>'
+                + '<div class="ranking-card-table-wrap"><table class="ranking-table"><thead><tr><th>#</th><th>Navn</th>'
                 + (showClubCol ? '<th class="norgesfelt-tablet-hide">Klubb</th>' : '')
                 + (activeSubType === 'individual' ? '<th class="norgesfelt-mobile-hide">Dato</th>' : '')
-                + '<th>Poeng</th><th class="norgesfelt-tablet-hide">Innertreff</th></tr></thead><tbody>' + body + '</tbody></table>'
+                + '<th>Poeng</th><th class="norgesfelt-tablet-hide">Innertreff</th></tr></thead><tbody>' + body + '</tbody></table></div>'
                 + toggleHtml + '</div>';
         }
 

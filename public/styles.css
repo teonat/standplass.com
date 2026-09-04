@@ -370,6 +370,18 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     align-items: flex-start;
     gap: 0.5rem;
 }
+
+/* Same pattern as .ranking-full-table (overflow-x:auto + a floor on the
+   table's own width) -- a 2-column card grid gives each card roughly half
+   the viewport, which can be narrower than a 6-column table needs even on
+   a normal desktop width where .norgesfelt-tablet-hide/-mobile-hide's own
+   viewport-width breakpoints don't fire (they react to the *viewport*,
+   not the card, so they can't tell a 2-up desktop card apart from a
+   comfortably wide one). Scrolling avoids both silent clipping
+   (.ranking-card's own overflow:hidden) and forced column/header
+   wrapping when the card itself is the constraint, not the viewport. */
+.ranking-card-table-wrap { overflow-x: auto; }
+.ranking-card-table-wrap .ranking-table { min-width: 400px; }
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
