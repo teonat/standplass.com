@@ -345,7 +345,13 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* ── Ranking card ─────────────────────────────────────── */
 .ranking-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    /* minmax(0, 1fr), not bare 1fr -- a bare 1fr track's minimum size is
+       "auto" (content-based), so a wide card (e.g. a table with a Klubb
+       column showing) refuses to shrink below its own min-content width
+       and blows the grid out past its container instead. minmax(0, 1fr)
+       lets tracks shrink to fit, so the table wraps/compresses within its
+       column instead of pushing the next one off-screen. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1.5rem;
 }
 
@@ -624,7 +630,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .clear-all-filters-btn:hover { border-color: var(--brand-accent); color: var(--text); }
 
 @media (max-width: 700px) {
-    .ranking-grid { grid-template-columns: 1fr; }
+    .ranking-grid { grid-template-columns: minmax(0, 1fr); }
     .filter-group--narrow { flex: 1; }
 }
 
