@@ -20,9 +20,28 @@ var StandplassFormat = (function () {
         return formatDate(startIso) + '–' + formatDate(endIso);
     }
 
+    // Multi-value URL params: per-element encode -> join on ","; split on raw
+    // "," -> per-element decode. The order is load-bearing: splitting before
+    // decoding keeps a legacy single value whose %2C-encoded commas are part of
+    // the value intact as ONE element. decodeURIComponent can throw on crafted
+    // input ("%E0%A4%A", "100%"), so each element decodes under try/catch and
+    // falls back to the raw part — a malformed URL must never dead-end init().
+    function encodeIdList(values) {
+        return (values || []).map(function (v) { return encodeURIComponent(String(v)); }).join(',');
+    }
+
+    function decodeIdList(raw) {
+        if (!raw) { return []; }
+        return String(raw).split(',').map(function (part) {
+            try { return decodeURIComponent(part); } catch (err) { return part; }
+        }).filter(function (v) { return v !== ''; });
+    }
+
     return {
         formatDate: formatDate,
-        formatDateRange: formatDateRange
+        formatDateRange: formatDateRange,
+        encodeIdList: encodeIdList,
+        decodeIdList: decodeIdList
     };
 })();
 
