@@ -1520,6 +1520,11 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   background: var(--brand-accent); border-color: var(--brand-accent); color: var(--white);
 }
 
+/* Top-3 card: alternate-column shading for the ovelse columns, matching the
+   row-header treatment (.ranking-table th / var(--surface-base)). Class-based,
+   never nth-child — see the nth-child collision notes above in this file. */
+[data-card="top3"] .top3-col-alt { background: var(--surface-base); }
+
 .club-chart-wrap {
   padding: 0.5rem 0;
 }

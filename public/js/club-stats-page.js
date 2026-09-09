@@ -327,15 +327,15 @@ var StandplassClubStats = (function () {
             .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
         var visibleShooters = showAllShooters ? ranking : ranking.slice(0, TOP3_ROW_PAGE);
         var headers = showOvelser
-            ? comboOrder.map(function (k) {
+            ? comboOrder.map(function (k, ci) {
                 var parts = k.split('|');
-                return '<th scope="col" class="ranking-score">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
+                return '<th scope="col" class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
             }).join('')
             : '';
         var rowsHtml = visibleShooters.map(function (s, i) {
             var cells = showOvelser
-                ? comboOrder.map(function (k) {
-                    return '<td class="ranking-score">' + (s.combos[k] || '') + '</td>';
+                ? comboOrder.map(function (k, ci) {
+                    return '<td class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + (s.combos[k] || '') + '</td>';
                 }).join('')
                 : '';
             return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'

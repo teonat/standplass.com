@@ -446,6 +446,20 @@ var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { showOvelser: 
 assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
 assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
 assert.ok(ovelserHtml.indexOf('Skjul øvelser') >= 0, 'label flips when shown');
+// Alternating-column shading on øvelse columns (class-based, never nth-child):
+// odd-index visible combos get .top3-col-alt on their th and every td.
+var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
+var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { showOvelser: true });
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Grovfelt B') >= 0, 'odd-index combo header shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Finfelt A') >= 0, 'first combo header unshaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Finfelt A') < 0, 'first combo header never shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Militærfelt C') >= 0, 'third combo header unshaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Militærfelt C') < 0, 'third combo header never shaded');
+assert.ok(altHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0, 'shaded combo column body cells carry the class');
+assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded combo body cells stay plain');
+assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
+assert.strictEqual((altHtml.match(/top3-col-alt/g) || []).length, 2, 'exactly one th and one td shaded (single shooter, one odd combo)');
+assert.strictEqual(CS.renderTopThreeHtml(altRanking, 'K1', 2026, {}).indexOf('top3-col-alt'), -1, 'no shading when øvelser hidden');
 // Row paging: 10 shown, toggle appears beyond that
 var manyRows = [];
 for (var ri = 0; ri < 14; ri++) {
