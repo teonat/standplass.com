@@ -1,4 +1,8 @@
 var assert = require('assert');
+// TP's id-list helpers delegate to format.js's hardened implementations —
+// shim the browser global before requiring, the same way
+// stevner-page.test.js does.
+global.StandplassFormat = require('../public/js/format.js');
 var TP = require('../public/js/terminliste-page.js');
 
 // Shape mirrors the live branchlist response -- see
@@ -37,6 +41,8 @@ assert.strictEqual(TP.encodeIdList(null), '', 'null/undefined input is treated a
 assert.deepStrictEqual(TP.decodeIdList('a,b'), ['a', 'b']);
 assert.deepStrictEqual(TP.decodeIdList(''), []);
 assert.deepStrictEqual(TP.decodeIdList(null), []);
+assert.deepStrictEqual(TP.decodeIdList('%E0%A4%A'), ['%E0%A4%A'],
+    'malformed escape falls back to raw via format.js instead of dead-ending init');
 
 // Status maps
 assert.strictEqual(TP.STATUS_LABEL[0], 'Søknad');

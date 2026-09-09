@@ -134,4 +134,23 @@ assert.deepStrictEqual(SP.resolveKlubbParam(',,,', names), { clubs: [',,,'], has
 assert.deepStrictEqual(SP.resolveKlubbParam('%20%20', names), { clubs: ['  '], hasUnmatched: true },
     'whitespace-only slug normalizes to empty and must never widen the view');
 
+// ── resolveSlugElements ────────────────────────────────────────────────
+// The shared slug→club resolver behind resolveKlubbParam and loadYear's
+// re-resolution pass: matched elements become club names, unmatched stay
+// verbatim (never widen), duplicates dedupe preserving first occurrence.
+var s1 = SP.resolveSlugElements(['kongsvinger', 'nosuchclub'], names);
+assert.strictEqual(s1.clubs.length, 2, 'mixed: matched resolves, unmatched kept verbatim');
+assert.ok(s1.clubs.indexOf('Kongsvinger Sportsskyttere') >= 0 && s1.clubs.indexOf('nosuchclub') >= 0);
+assert.strictEqual(s1.hasUnmatched, true, 'mixed: unmatched flagged');
+assert.deepStrictEqual(SP.resolveSlugElements(['  '], names), { clubs: ['  '], hasUnmatched: true },
+    'empty-normalizing element kept verbatim, never widens');
+var s3 = SP.resolveSlugElements(['oslo', 'poltiselskap'], names);
+assert.deepStrictEqual(s3, { clubs: ['Oslo Poltiselskap'], hasUnmatched: false },
+    'two slugs matching one club dedupe, first occurrence wins');
+var s4 = SP.resolveSlugElements(['Kongsvinger Sportsskyttere', 'kongsvinger'], names);
+assert.deepStrictEqual(s4, { clubs: ['Kongsvinger Sportsskyttere'], hasUnmatched: false },
+    'exact name passes through and dedupes with its own slug');
+assert.deepStrictEqual(SP.resolveSlugElements([], names), { clubs: [], hasUnmatched: false }, 'empty elements -> empty');
+assert.deepStrictEqual(SP.resolveSlugElements(null, names), { clubs: [], hasUnmatched: false }, 'null elements -> empty');
+
 console.log('stevner-page.test.js: all assertions passed');

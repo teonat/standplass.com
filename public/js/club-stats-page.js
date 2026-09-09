@@ -226,7 +226,9 @@ var StandplassClubStats = (function () {
                 + '<td class="ranking-score">' + dc.shooters + '</td>'
                 + '<td class="ranking-score">' + dc.starts + '</td></tr>';
         }).join('');
-        var apenList = ALWAYS_OPEN_DISCIPLINES.map(function (d) { return esc(d); }).join(', ');
+        // '; ' rather than ', ': "10m luftsprint, pistol" itself contains a
+        // comma, which would read as two separate øvelser.
+        var apenList = ALWAYS_OPEN_DISCIPLINES.map(function (d) { return esc(d); }).join('; ');
         return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
             + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
             + rowsHtml + '</tbody></table>'
@@ -1125,8 +1127,12 @@ var StandplassClubStats = (function () {
             var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
 
             top3Rows = rows;
+            // Reset the placement-mode/øvelser toggles ONLY when the club
+            // changes — a year/program re-render for the same club must keep
+            // the user's toggles. top3Club starts '' so the first entry still
+            // resets.
+            if (resolved !== top3Club) { top3State = { mode: 'top3', showOvelser: false, showAllShooters: false }; }
             top3Club = resolved;
-            top3State = { mode: 'top3', showOvelser: false, showAllShooters: false };
             var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
             var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 

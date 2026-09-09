@@ -35,42 +35,41 @@ var StandplassStevnerPage = (function () {
         return normalizeClub(rowClub).indexOf(normalizeClub(slug)) !== -1;
     }
 
+    // Resolves slug-like elements against known club names. Matched elements
+    // become club-name selections; unmatched elements are kept verbatim so a
+    // crafted or stale URL never silently widens to an unfiltered view.
+    // Empty-normalizing elements (normalizeClub === '') substring-match every
+    // club via indexOf('') and are therefore kept verbatim as unmatched.
+    // Duplicate resolutions are dropped preserving first occurrence — two
+    // slugs can match the same club. `clubNames` must be an Array (both
+    // callers pass Object.keys(masterClubs)); the exact-name fast path uses
+    // indexOf because hasOwnProperty on an array matches indices, not values.
+    function resolveSlugElements(elements, clubNames) {
+        var clubs = [];
+        var hasUnmatched = false;
+        function pushUnique(name) {
+            if (clubs.indexOf(name) < 0) { clubs.push(name); }
+        }
+        (elements || []).forEach(function (el) {
+            if (!normalizeClub(el)) { pushUnique(el); hasUnmatched = true; return; }
+            if (clubNames.indexOf(el) >= 0) { pushUnique(el); return; }
+            var matched = clubNames.filter(function (c) { return matchesClub(c, el); });
+            if (matched.length) { matched.forEach(pushUnique); }
+            else { pushUnique(el); hasUnmatched = true; }
+        });
+        return { clubs: clubs, hasUnmatched: hasUnmatched };
+    }
+
     // Resolves a (possibly comma-joined, per-element-encoded) ?klubb= value
-    // against the known club names. Matched elements become club-name
-    // selections; unmatched elements are KEPT verbatim in the result so an
-    // embed URL never silently widens to an unfiltered view. Comma-containing
-    // values survive as one element because decodeIdList splits before decode.
-    // Duplicate names are dropped preserving first occurrence — two slugs can
-    // match the same club.
+    // against the known club names; the matching rules live in
+    // resolveSlugElements.
     function resolveKlubbParam(raw, clubNames) {
         var elements = StandplassFormat.decodeIdList(raw);
         // A non-empty raw that decodes to zero elements (e.g. ",,,") must not
         // widen the view: keep the raw verbatim so it matches nothing and the
         // embed stays empty, like any other unmatched slug.
         if (raw && !elements.length) { return { clubs: [String(raw)], hasUnmatched: true }; }
-        var clubs = [];
-        var hasUnmatched = false;
-        function pushUnique(name) {
-            if (clubs.indexOf(name) < 0) { clubs.push(name); }
-        }
-        elements.forEach(function (el) {
-            if (!normalizeClub(el)) {
-                // An empty-normalizing slug (e.g. whitespace-only) substring-
-                // matches every club via indexOf('') — keep it verbatim, so
-                // the embed never silently widens to the national view.
-                pushUnique(el);
-                hasUnmatched = true;
-                return;
-            }
-            var matched = clubNames.filter(function (name) { return matchesClub(name, el); });
-            if (matched.length) {
-                matched.forEach(pushUnique);
-            } else {
-                pushUnique(el);
-                hasUnmatched = true;
-            }
-        });
-        return { clubs: clubs, hasUnmatched: hasUnmatched };
+        return resolveSlugElements(elements, clubNames);
     }
 
     function decorateRow(comp, r) {
@@ -268,7 +267,11 @@ var StandplassStevnerPage = (function () {
         }, { skyttere: 0, startere: 0 });
         var allRows = [];
         cards.forEach(function (c) {
-            (c.groups || []).forEach(function (g) { allRows = allRows.concat(g.rows); });
+            var groups = c.groups || [];
+            for (var gi = 0; gi < groups.length; gi++) {
+                var rows = groups[gi].rows || [];
+                for (var ri = 0; ri < rows.length; ri++) { allRows.push(rows[ri]); }
+            }
         });
         var unike = countUniqueShooters(allRows);
         return '<div class="stevner-overall-stats"><span>'
@@ -479,30 +482,14 @@ var StandplassStevnerPage = (function () {
                 }
                 // Re-resolve unmatched slug elements against this year's
                 // clubs: a deep-linked slug that matched nothing in one year
-                // can match in another. Exact club names pass through
-                // untouched; two elements can resolve to the same club, so
-                // the result is deduped preserving first occurrence.
+                // can match in another. Only runs while unmatched elements
+                // remain — already-real club names must pass through
+                // untouched, since a club legitimately absent from this
+                // year's data must stay as a chip.
                 if (klubbUnmatched) {
-                    var stillUnmatched = false;
-                    var reResolved = [];
-                    function pushUniqueClub(name) {
-                        if (reResolved.indexOf(name) < 0) { reResolved.push(name); }
-                    }
-                    activeClubs.forEach(function (el) {
-                        if (!normalizeClub(el)) {
-                            // Empty-normalizing slug: substring-matches every
-                            // club via indexOf('') — keep verbatim, never widen.
-                            pushUniqueClub(el);
-                            stillUnmatched = true;
-                            return;
-                        }
-                        if (Object.prototype.hasOwnProperty.call(masterClubs, el)) { pushUniqueClub(el); return; }
-                        var matched = Object.keys(masterClubs).filter(function (c) { return matchesClub(c, el); });
-                        if (matched.length) { matched.forEach(pushUniqueClub); }
-                        else { pushUniqueClub(el); stillUnmatched = true; }
-                    });
-                    activeClubs = reResolved;
-                    klubbUnmatched = stillUnmatched;
+                    var reResolved = resolveSlugElements(activeClubs, Object.keys(masterClubs));
+                    activeClubs = reResolved.clubs;
+                    klubbUnmatched = reResolved.hasUnmatched;
                 }
                 discDropdown.rebuild();
                 clubCombo.rebuild();
@@ -576,10 +563,14 @@ var StandplassStevnerPage = (function () {
         }
 
         function syncKlubbParam() {
-            // An explicit chip change supersedes an incoming slug that matched
-            // no club, otherwise the stale slug filter would keep applying on
-            // top of the new selection.
-            klubbUnmatched = false;
+            // The flag truthfully reports whether any non-club element
+            // remains in activeClubs — an explicit chip change no longer
+            // supersedes it wholesale, so a slug that matched no club stays
+            // as a chip and loadYear keeps retrying it against later years'
+            // data. Removing that chip (or every chip) is what clears it.
+            klubbUnmatched = activeClubs.some(function (el) {
+                return !Object.prototype.hasOwnProperty.call(masterClubs, el);
+            });
             setUrlParam('klubb', activeClubs.length ? StandplassFormat.encodeIdList(activeClubs) : null);
         }
 
@@ -981,7 +972,8 @@ var StandplassStevnerPage = (function () {
         personModal.openFromUrl();
     }
 
-    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, resolveKlubbParam: resolveKlubbParam,
+    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub,
+        resolveKlubbParam: resolveKlubbParam, resolveSlugElements: resolveSlugElements,
         flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
