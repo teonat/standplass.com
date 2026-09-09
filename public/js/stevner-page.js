@@ -35,6 +35,43 @@ var StandplassStevnerPage = (function () {
         return normalizeClub(rowClub).indexOf(normalizeClub(slug)) !== -1;
     }
 
+    // Resolves slug-like elements against known club names. Matched elements
+    // become club-name selections; unmatched elements are kept verbatim so a
+    // crafted or stale URL never silently widens to an unfiltered view.
+    // Empty-normalizing elements (normalizeClub === '') substring-match every
+    // club via indexOf('') and are therefore kept verbatim as unmatched.
+    // Duplicate resolutions are dropped preserving first occurrence — two
+    // slugs can match the same club. `clubNames` must be an Array (both
+    // callers pass Object.keys(masterClubs)); the exact-name fast path uses
+    // indexOf because hasOwnProperty on an array matches indices, not values.
+    function resolveSlugElements(elements, clubNames) {
+        var clubs = [];
+        var hasUnmatched = false;
+        function pushUnique(name) {
+            if (clubs.indexOf(name) < 0) { clubs.push(name); }
+        }
+        (elements || []).forEach(function (el) {
+            if (!normalizeClub(el)) { pushUnique(el); hasUnmatched = true; return; }
+            if (clubNames.indexOf(el) >= 0) { pushUnique(el); return; }
+            var matched = clubNames.filter(function (c) { return matchesClub(c, el); });
+            if (matched.length) { matched.forEach(pushUnique); }
+            else { pushUnique(el); hasUnmatched = true; }
+        });
+        return { clubs: clubs, hasUnmatched: hasUnmatched };
+    }
+
+    // Resolves a (possibly comma-joined, per-element-encoded) ?klubb= value
+    // against the known club names; the matching rules live in
+    // resolveSlugElements.
+    function resolveKlubbParam(raw, clubNames) {
+        var elements = StandplassFormat.decodeIdList(raw);
+        // A non-empty raw that decodes to zero elements (e.g. ",,,") must not
+        // widen the view: keep the raw verbatim so it matches nothing and the
+        // embed stays empty, like any other unmatched slug.
+        if (raw && !elements.length) { return { clubs: [String(raw)], hasUnmatched: true }; }
+        return resolveSlugElements(elements, clubNames);
+    }
+
     function decorateRow(comp, r) {
         return {
             position: r.position,
@@ -77,7 +114,6 @@ var StandplassStevnerPage = (function () {
         if (filters.activeTab === 'ikke' && row.applicableForClassification) { return false; }
         if (filters.activeDiscs.length && filters.activeDiscs.indexOf(row.discipline) < 0) { return false; }
         if (filters.activeClubs.length && filters.activeClubs.indexOf(row.club) < 0) { return false; }
-        if (filters.klubbUnmatched && !matchesClub(row.club, filters.klubb)) { return false; }
         if (filters.nameQuery && !(row.name && row.name.toLowerCase().indexOf(filters.nameQuery) >= 0)) { return false; }
         return true;
     }
@@ -92,6 +128,14 @@ var StandplassStevnerPage = (function () {
             ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2)
             : null;
         return { skyttere: Object.keys(byPerson).length, startere: rows.length, snitt: snitt, median: median };
+    }
+
+    // Distinct shooters across a row set. Rows without personId can only
+    // ever count in raw sums, never here.
+    function countUniqueShooters(rows) {
+        var seen = {};
+        (rows || []).forEach(function (r) { if (r.personId) { seen[r.personId] = true; } });
+        return Object.keys(seen).length;
     }
 
     // Mirrors resultatliste-stevner.js:794-850: 'klasse' groups by
@@ -125,7 +169,7 @@ var StandplassStevnerPage = (function () {
 
     function buildCompetitionCards(competitions, filters) {
         var withLowerQuery = { activeTab: filters.activeTab, activeDiscs: filters.activeDiscs, activeClubs: filters.activeClubs,
-            klubbUnmatched: filters.klubbUnmatched, klubb: filters.klubb, nameQuery: (filters.nameQuery || '').toLowerCase(),
+            nameQuery: (filters.nameQuery || '').toLowerCase(),
             activeOrganizers: filters.activeOrganizers || [], compQuery: (filters.compQuery || '').toLowerCase() };
         var cards = [];
         (competitions || []).forEach(function (comp) {
@@ -211,13 +255,29 @@ var StandplassStevnerPage = (function () {
             + ' kl. ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
     }
 
+    // Bar reflects the FULL filtered set (caller passes all filtered cards,
+    // not the paginated slice), so the numbers are stable while "Last flere"
+    // loads more cards. X (deltakelser) is the sum of per-competition unique
+    // shooters — person-stevne pairs, not people; Y is the deduplicated
+    // count. Rows without personId count in Z (startere) only.
     function overallStatsBar(cards, lastUpdated, idPrefix) {
         if (cards.length < 2) { return ''; }
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
-        return '<div class="stevner-overall-stats"><span>' + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
-            + totals.skyttere + ' skytter' + (totals.skyttere !== 1 ? 'e' : '') + ' · '
+        var allRows = [];
+        cards.forEach(function (c) {
+            var groups = c.groups || [];
+            for (var gi = 0; gi < groups.length; gi++) {
+                var rows = groups[gi].rows || [];
+                for (var ri = 0; ri < rows.length; ri++) { allRows.push(rows[ri]); }
+            }
+        });
+        var unike = countUniqueShooters(allRows);
+        return '<div class="stevner-overall-stats"><span>'
+            + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
+            + totals.skyttere + ' deltakelse' + (totals.skyttere !== 1 ? 'r' : '') + ' · '
+            + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
             + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
             + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
             + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
@@ -300,11 +360,11 @@ var StandplassStevnerPage = (function () {
         var groupParam = params.get('group');
         if (groupParam && COMPARATORS[groupParam]) { activeGroupMode = groupParam; }
         var discParam = params.get('disc');
-        if (discParam) { activeDiscs = [discParam]; }
+        if (discParam) { activeDiscs = StandplassFormat.decodeIdList(discParam); }
         var nameParamInit = params.get('name');
         if (nameParamInit) { nameQuery = nameParamInit; }
         var organizerParam = params.get('organizer');
-        if (organizerParam) { activeOrganizers = [organizerParam]; }
+        if (organizerParam) { activeOrganizers = StandplassFormat.decodeIdList(organizerParam); }
         var compParam = params.get('comp');
         if (compParam) { compQuery = compParam; }
         var masterClubs = {};                      // accumulates across loaded years (stevner.js:353-373)
@@ -314,9 +374,10 @@ var StandplassStevnerPage = (function () {
         var currentCompetitions = [];               // raw competitions of activeYear, feeds card pagination
         var visibleCards = [];                      // after filters, built into cards
         var lastUpdated = null;                     // yearData.lastUpdated, for the overall stats bar
-        // ?klubb= is a slug; it is resolved against real club names once data is
-        // loaded so it shows as a removable chip. If it matches nothing we keep
-        // filtering by the slug, so an embed never silently widens to a
+        // ?klubb= is a comma-joined, per-element-encoded list of slugs; each
+        // element is resolved against real club names once data is loaded so
+        // it shows as a removable chip. Elements that match nothing are kept
+        // verbatim in the filter set, so an embed never silently widens to a
         // national list.
         var klubbResolved = false;
         var klubbUnmatched = false;
@@ -339,7 +400,7 @@ var StandplassStevnerPage = (function () {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
-                rowsEl.innerHTML = overallStatsBar(pagination.state.items, lastUpdated, config.idPrefix)
+                rowsEl.innerHTML = overallStatsBar(visibleCards, lastUpdated, config.idPrefix)
                     + pagination.state.items.map(function (card) {
                         return renderCard(card, activeTab === 'alle');
                     }).join('');
@@ -382,7 +443,7 @@ var StandplassStevnerPage = (function () {
 
         function currentFilters() {
             return { activeTab: activeTab, activeDiscs: activeDiscs, activeClubs: activeClubs,
-                klubbUnmatched: klubbUnmatched, klubb: klubb, nameQuery: nameQuery, groupMode: activeGroupMode,
+                nameQuery: nameQuery, groupMode: activeGroupMode,
                 activeOrganizers: activeOrganizers, compQuery: compQuery };
         }
 
@@ -412,10 +473,23 @@ var StandplassStevnerPage = (function () {
                 });
                 if (klubb && !klubbResolved) {
                     klubbResolved = true;
-                    activeClubs = Object.keys(masterClubs).filter(function (c) {
-                        return matchesClub(c, klubb);
-                    });
-                    klubbUnmatched = activeClubs.length === 0;
+                    // klubb is passed exactly as read from the URL params —
+                    // resolveKlubbParam decodes each comma-joined element
+                    // itself, so it must not be pre-decoded here.
+                    var resolved = resolveKlubbParam(klubb, Object.keys(masterClubs));
+                    activeClubs = resolved.clubs;
+                    klubbUnmatched = resolved.hasUnmatched;
+                }
+                // Re-resolve unmatched slug elements against this year's
+                // clubs: a deep-linked slug that matched nothing in one year
+                // can match in another. Only runs while unmatched elements
+                // remain — already-real club names must pass through
+                // untouched, since a club legitimately absent from this
+                // year's data must stay as a chip.
+                if (klubbUnmatched) {
+                    var reResolved = resolveSlugElements(activeClubs, Object.keys(masterClubs));
+                    activeClubs = reResolved.clubs;
+                    klubbUnmatched = reResolved.hasUnmatched;
                 }
                 discDropdown.rebuild();
                 clubCombo.rebuild();
@@ -462,7 +536,7 @@ var StandplassStevnerPage = (function () {
                     activeDiscs = activeDiscs.filter(function (x) { return x !== id_; });
                 }
                 discDropdown.rebuild();
-                setUrlParam('disc', activeDiscs.length === 1 ? activeDiscs[0] : null);
+                setUrlParam('disc', activeDiscs.length ? StandplassFormat.encodeIdList(activeDiscs) : null);
                 applyFilters();
             },
             onClearAll: function () {
@@ -478,7 +552,9 @@ var StandplassStevnerPage = (function () {
         // builds its snippet from the current query string (its ALLOWED_PARAMS
         // whitelist is klubb/club/mode) — without this, "Opprett iframe" would
         // hand a club admin an unfiltered national embed. ?klubb= is
-        // single-valued, so 0 or 2+ chips means no param. tab/group/disc/name/
+        // comma-joined multi-value (per-element encoded, like organizer/disc),
+        // so N chips become N comma-joined elements and a multi-klubb embed
+        // filters to any of the selected clubs. tab/group/disc/name/
         // organizer/comp are URL-synced too, via setUrlParam below.
         function setUrlParam(key, value) {
             var qs = new URLSearchParams(urlState.getSearch());
@@ -487,11 +563,15 @@ var StandplassStevnerPage = (function () {
         }
 
         function syncKlubbParam() {
-            // An explicit chip change supersedes an incoming slug that matched
-            // no club, otherwise the stale slug filter would keep applying on
-            // top of the new selection.
-            klubbUnmatched = false;
-            setUrlParam('klubb', activeClubs.length === 1 ? activeClubs[0] : null);
+            // The flag truthfully reports whether any non-club element
+            // remains in activeClubs — an explicit chip change no longer
+            // supersedes it wholesale, so a slug that matched no club stays
+            // as a chip and loadYear keeps retrying it against later years'
+            // data. Removing that chip (or every chip) is what clears it.
+            klubbUnmatched = activeClubs.some(function (el) {
+                return !Object.prototype.hasOwnProperty.call(masterClubs, el);
+            });
+            setUrlParam('klubb', activeClubs.length ? StandplassFormat.encodeIdList(activeClubs) : null);
         }
 
         var clubCombo = FW.makeTagComboHandlers({
@@ -532,7 +612,7 @@ var StandplassStevnerPage = (function () {
 
         // ── Organizer combo (competition-level filter, mirrors clubCombo) ─
         function syncOrganizerParam() {
-            setUrlParam('organizer', activeOrganizers.length === 1 ? activeOrganizers[0] : null);
+            setUrlParam('organizer', activeOrganizers.length ? StandplassFormat.encodeIdList(activeOrganizers) : null);
         }
 
         var organizerCombo = FW.makeTagComboHandlers({
@@ -892,10 +972,12 @@ var StandplassStevnerPage = (function () {
         personModal.openFromUrl();
     }
 
-    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
+    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub,
+        resolveKlubbParam: resolveKlubbParam, resolveSlugElements: resolveSlugElements,
+        flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
-        competitionStats: competitionStats, columns: columns,
+        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,
         statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 

@@ -1,6 +1,7 @@
 'use strict';
 var assert = require('node:assert');
 var CS = require('../public/js/club-stats-page.js');
+global.StandplassStevnerPage = require('../public/js/stevner-page.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
 
@@ -257,5 +258,258 @@ assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1
 
 // Empty series → message
 assert.ok(CS.renderMultiSeriesChart([]).indexOf('Ikke nok data') !== -1, 'empty series → message');
+
+// ── effectiveClass / computeClassDistribution ─────────────────────────
+
+var distRows = [
+    // Gisle-pattern: klasseførende A starts + ikke-klasseførende A starts
+    // (the latter remap to Åpen). Additive Åpen: he appears in both rows.
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: true },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: true },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    // Modal wins over lowest: 3 B starts + 1 spurious C start (klasseførende)
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'C', applicableForClassification: true },
+    // Tie (1 start each) -> lowest (C) wins
+    { personId: 't1', name: 'Tie', club: 'Odda PK', discipline: 'Grovfelt', class: 'B', applicableForClassification: true },
+    { personId: 't1', name: 'Tie', club: 'Odda PK', discipline: 'Grovfelt', class: 'C', applicableForClassification: true },
+    // Age class passes through untouched, even at ikke-klasseførende stevner
+    { personId: 'a1', name: 'Age', club: 'Odda PK', discipline: 'Finfelt', class: 'Veteran 55', applicableForClassification: false },
+    // Always-open øvelser: dummy-A remaps to Åpen even at klasseførende stevner
+    { personId: 's1', name: 'Spes', club: 'Odda PK', discipline: 'Spesialpistol', class: 'A', applicableForClassification: true },
+    { personId: 's2', name: 'T96', club: 'Odda PK', discipline: 'T96 fin', class: 'A', applicableForClassification: true },
+    // Other club must be ignored; missing class skipped
+    { personId: 'x1', name: 'X', club: 'Anna klubb', discipline: 'Finfelt', class: 'C', applicableForClassification: true },
+    { personId: 'x2', name: 'Y', club: 'Odda PK', discipline: 'Finfelt', class: '', applicableForClassification: true }
+];
+
+var dist = CS.computeClassDistribution(distRows, 'Odda PK');
+
+function distCell(disc, cls) {
+    var hit = dist.filter(function (d) { return d.discipline === disc && d.class === cls; })[0];
+    return hit || null;
+}
+
+// Finfelt: g1 has 2 klasseførende A starts (modal A); m1 has 3 B + 1 C (modal B);
+// m1's starts are all attributed to his modal class B, and C (no modal
+// shooters left) is not displayed at all.
+assert.strictEqual(distCell('Finfelt', 'A').shooters, 1, 'Finfelt A: g1 (modal)');
+assert.strictEqual(distCell('Finfelt', 'A').starts, 2, 'Finfelt A: g1 skill-class starts');
+assert.strictEqual(distCell('Finfelt', 'B').shooters, 1, 'Finfelt B: m1 modal B (3 > 1)');
+assert.strictEqual(distCell('Finfelt', 'B').starts, 4, 'Finfelt B: m1 starts attributed to modal (3 B + 1 C)');
+assert.strictEqual(distCell('Finfelt', 'C'), null, 'Finfelt C: no modal shooters, no row');
+assert.strictEqual(distCell('Finfelt', 'Åpen').shooters, 1, 'Finfelt Åpen: g1 additive (remapped starts)');
+assert.strictEqual(distCell('Finfelt', 'Åpen').starts, 3, 'Finfelt Åpen: remapped starts raw');
+assert.strictEqual(distCell('Finfelt', 'Veteran 55').shooters, 1, 'age class passes through at ikke-klasseførende');
+assert.strictEqual(distCell('Finfelt', 'Veteran 55').starts, 1, 'age class starts raw');
+
+// Grovfelt tie: lowest (C) wins -> C gets both starts attributed, B row gone
+assert.strictEqual(distCell('Grovfelt', 'B'), null, 'Grovfelt B: no modal shooters, no row');
+assert.strictEqual(distCell('Grovfelt', 'C').shooters, 1, 'Grovfelt C: tie-break lowest wins');
+assert.strictEqual(distCell('Grovfelt', 'C').starts, 2, 'Grovfelt C: both starts attributed to modal');
+
+// Always-open øvelser: no A row survives
+assert.strictEqual(distCell('Spesialpistol', 'A'), null, 'Spesialpistol dummy-A remapped');
+assert.strictEqual(distCell('Spesialpistol', 'Åpen').shooters, 1, 'Spesialpistol Åpen');
+assert.strictEqual(distCell('T96 fin', 'A'), null, 'T96 fin dummy-A remapped');
+assert.strictEqual(distCell('T96 fin', 'Åpen').shooters, 1, 'T96 fin Åpen');
+
+// Other club and empty-class rows excluded (x1 is another club -> no
+// Finfelt C row at all, asserted above; x2 skipped entirely)
+assert.ok(!dist.some(function (d) { return d.starts === 0; }), 'empty-class row skipped entirely');
+
+// Sorted by starts desc
+for (var di = 1; di < dist.length; di++) {
+    assert.ok(dist[di - 1].starts >= dist[di].starts, 'sorted by starts desc');
+}
+
+// effectiveClass is pure + exact about skill classes
+assert.strictEqual(CS.effectiveClass({ class: 'A', applicableForClassification: false, discipline: 'Finfelt' }), 'Åpen');
+assert.strictEqual(CS.effectiveClass({ class: 'D', applicableForClassification: true, discipline: 'Spesialrevolver' }), 'Åpen');
+assert.strictEqual(CS.effectiveClass({ class: 'C', applicableForClassification: true, discipline: 'Finfelt' }), 'C');
+assert.strictEqual(CS.effectiveClass({ class: 'Veteran 65', applicableForClassification: false, discipline: 'Finfelt' }), 'Veteran 65');
+assert.strictEqual(CS.effectiveClass({ class: 'Åpen2', applicableForClassification: true, discipline: 'Revolverfelt-Rødpunkt' }), 'Åpen2');
+
+// ── renderClassDistributionHtml ───────────────────────────────────────
+
+var distHtml = CS.renderClassDistributionHtml([
+    { discipline: 'Finfelt', class: 'A', shooters: 2, starts: 5 },
+    { discipline: 'Finfelt', class: 'Åpen', shooters: 1, starts: 3 }
+], 'Odda PK');
+assert.ok(distHtml.indexOf('Klassefordeling') >= 0, 'card title present');
+assert.ok(distHtml.indexOf('aria-label="Klassefordeling for Odda PK"') >= 0, 'table aria-label names club');
+assert.ok(distHtml.indexOf('<details') >= 0 && distHtml.indexOf('årsskiftet') >= 0, 'disclaimer as details, year-free');
+assert.ok(distHtml.indexOf('starter deres føres til samme klasse, og klasser uten tildelte skyttere vises ikke') >= 0, 'disclaimer notes starts follow modal class and empty classes are hidden');
+assert.ok(distHtml.indexOf('Spesialpistol') >= 0 && distHtml.indexOf('T96 fin') >= 0, 'øvelse list generated from constant');
+var tagsStart = distHtml.indexOf('apen-disc-tags');
+assert.ok(tagsStart >= 0, 'chip block present in disclaimer');
+var tagsBlock = distHtml.substring(tagsStart, distHtml.indexOf('</div>', tagsStart));
+assert.ok(tagsBlock.indexOf(';') < 0, 'no separator garbage inside chip block');
+assert.strictEqual(distHtml.split('class="apen-disc-tag"').length - 1, CS.ALWAYS_OPEN_DISCIPLINES.length,
+    'one chip per always-open øvelse');
+assert.ok(distHtml.indexOf('2026') < 0, 'no edition year in UI text');
+assert.strictEqual(CS.renderClassDistributionHtml([], 'X'), '', 'empty distribution -> no card');
+
+var evilDist = CS.renderClassDistributionHtml([
+    { discipline: '<img src=x onerror=alert(1)>', class: 'A', shooters: 1, starts: 1 }
+], 'Odda PK');
+assert.ok(evilDist.indexOf('&lt;img') >= 0 && evilDist.indexOf('<img') < 0, 'discipline string is escaped');
+
+// ── computeTopThreeRanking ────────────────────────────────────────────
+
+var topRows = [
+    // Alice: 2 in Finfelt A + 1 in Spesialpistol (dummy-A -> Åpen column)
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: true },
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true },
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Spesialpistol', class: 'A', position: 3, applicableForClassification: true },
+    // Bob: podiums are NOT deduped — A podium + remapped-Åpen podium both count
+    { personId: 'p2', name: 'Bob', club: 'K1', discipline: 'Finfelt', class: 'A', position: 3, applicableForClassification: true },
+    { personId: 'p2', name: 'Bob', club: 'K1', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: false },
+    // Carol: 4th place — not a top-3
+    { personId: 'p3', name: 'Carol', club: 'K1', discipline: 'Finfelt', class: 'B', position: 4, applicableForClassification: true },
+    // Other club ignored
+    { personId: 'p9', name: 'X', club: 'K2', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: true }
+];
+
+var ranking = CS.computeTopThreeRanking(topRows, 'K1', null);
+assert.strictEqual(ranking.length, 2, 'only K1 shooters, only top-3');
+assert.strictEqual(ranking[0].name, 'Alice');
+assert.strictEqual(ranking[0].total, 3, 'Alice: 3 podiums');
+assert.strictEqual(ranking[0].combos['Finfelt|A'], 2, 'per-combo counts');
+assert.strictEqual(ranking[0].combos['Spesialpistol|Åpen'], 1, 'effective class names the combo');
+assert.strictEqual(ranking[1].total, 2, 'Bob: no dedup — both podiums count');
+assert.strictEqual(ranking[1].combos['Finfelt|Åpen'], 1, 'remapped podium lands in Åpen column');
+
+// Position filter: 1/2/3 counts only that exact placement; null = all top-3
+var p1Ranking = CS.computeTopThreeRanking(topRows, 'K1', 1);
+assert.strictEqual(p1Ranking.length, 2, 'position 1: Alice and Bob each have one');
+assert.strictEqual(p1Ranking[0].name, 'Alice');
+assert.strictEqual(p1Ranking[0].total, 1, 'Alice: her position-1 Finfelt A row only');
+assert.deepStrictEqual(p1Ranking[0].combos, { 'Finfelt|A': 1 }, 'Alice position-1 combo');
+assert.strictEqual(p1Ranking[1].name, 'Bob');
+assert.strictEqual(p1Ranking[1].total, 1, "Bob: ikke-klasseførende position-1 counts");
+assert.strictEqual(p1Ranking[1].combos['Finfelt|Åpen'], 1, 'Bob position-1 combo');
+
+var p2Ranking = CS.computeTopThreeRanking(topRows, 'K1', 2);
+assert.strictEqual(p2Ranking.length, 1, 'zero-total shooters are not in the ranking');
+assert.strictEqual(p2Ranking[0].name, 'Alice');
+assert.strictEqual(p2Ranking[0].total, 1, 'Alice: her position-2 Finfelt A row');
+
+var p3Ranking = CS.computeTopThreeRanking(topRows, 'K1', 3);
+assert.strictEqual(p3Ranking.length, 2, 'position 3: both shooters present');
+assert.strictEqual(p3Ranking[0].total, 1, 'Alice position-3 total');
+assert.strictEqual(p3Ranking[0].combos['Spesialpistol|Åpen'], 1, 'Alice position-3 combo');
+assert.strictEqual(p3Ranking[1].total, 1, 'Bob position-3 total');
+assert.strictEqual(p3Ranking[1].combos['Finfelt|A'], 1, 'Bob position-3 combo');
+
+// Tied positions both count (delt 2. plass)
+var tieRanking = CS.computeTopThreeRanking([
+    { personId: 'd1', name: 'D1', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true },
+    { personId: 'd2', name: 'D2', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true }
+], 'K1', null);
+assert.strictEqual(tieRanking.length, 2, 'tied placement counts for both shooters');
+assert.strictEqual(tieRanking[0].total, 1);
+assert.strictEqual(tieRanking[1].total, 1);
+
+// Ties in total sort by name
+var sortRanking = CS.computeTopThreeRanking([
+    { personId: 'z', name: 'Zed', club: 'K1', discipline: 'Finfelt', class: 'A', position: 3, applicableForClassification: true },
+    { personId: 'a', name: 'Abe', club: 'K1', discipline: 'Grovfelt', class: 'B', position: 3, applicableForClassification: true }
+], 'K1', null);
+assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
+
+// ── renderTopThreeHtml ────────────────────────────────────────────────
+
+var top3Ranking = [
+    { personId: 'p1', name: 'Alice', total: 3, combos: { 'Finfelt|A': 2, 'Spesialpistol|Åpen': 1 } },
+    { personId: 'p2', name: 'Bob', total: 2, combos: { 'Finfelt|A': 1, 'Finfelt|Åpen': 1 } }
+];
+var top3Html = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, {});
+assert.ok(top3Html.indexOf('Flest topp-3 plasseringer') >= 0, 'card title');
+assert.ok(top3Html.indexOf('aria-label="Flest topp-3 plasseringer i 2026 for K1"') >= 0, 'table aria-label names club and year');
+assert.ok(top3Html.indexOf('ranking-card-table-wrap') >= 0, 'scroll wrapper present');
+assert.ok(top3Html.indexOf('Totalt') >= 0, 'Totalt column header');
+assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
+assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
+assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
+assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
+assert.ok(top3Html.indexOf('Vis øvelser') >= 0, 'øvelser reveal toggle present');
+// Placement-mode group: 4 buttons, aria-pressed only on the active one
+assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
+assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
+assert.strictEqual((top3Html.match(/aria-pressed="true"/g) || []).length, 1, 'only active mode pressed');
+assert.ok(top3Html.indexOf('data-mode="top3" aria-pressed="true"') >= 0, 'default mode active');
+assert.ok(top3Html.indexOf('data-mode="p1" aria-pressed="false"') >= 0, 'inactive mode unpressed');
+var p2ModeHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { mode: 'p2' });
+assert.ok(p2ModeHtml.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'selected mode pressed');
+assert.ok(p2ModeHtml.indexOf('data-mode="top3" aria-pressed="true"') < 0, 'default mode unpressed when p2 selected');
+// showOvelser: true reveals ALL combo headers
+var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { showOvelser: true });
+assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
+assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
+assert.ok(ovelserHtml.indexOf('Skjul øvelser') >= 0, 'label flips when shown');
+// Alternating-column shading on øvelse columns (class-based, never nth-child):
+// odd-index visible combos get .top3-col-alt on their th and every td.
+var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
+var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { showOvelser: true });
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Grovfelt B') >= 0, 'odd-index combo header shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Finfelt A') >= 0, 'first combo header unshaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Finfelt A') < 0, 'first combo header never shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Militærfelt C') >= 0, 'third combo header unshaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Militærfelt C') < 0, 'third combo header never shaded');
+assert.ok(altHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0, 'shaded combo column body cells carry the class');
+assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded combo body cells stay plain');
+assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
+assert.strictEqual((altHtml.match(/top3-col-alt/g) || []).length, 2, 'exactly one th and one td shaded (single shooter, one odd combo)');
+assert.strictEqual(CS.renderTopThreeHtml(altRanking, 'K1', 2026, {}).indexOf('top3-col-alt'), -1, 'no shading when øvelser hidden');
+// Row paging: 10 shown, toggle appears beyond that
+var manyRows = [];
+for (var ri = 0; ri < 14; ri++) {
+    manyRows.push({ personId: 'r' + ri, name: 'Skytter ' + ri, total: 1, combos: { 'Finfelt|A': 1 } });
+}
+var pagedHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, {});
+assert.ok(pagedHtml.indexOf('Vis alle (14)') >= 0, 'row paging toggle');
+assert.ok(pagedHtml.indexOf('Skytter 13') < 0, 'only first 10 rows shown');
+var expandedRowsHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, { showAllShooters: true });
+assert.ok(expandedRowsHtml.indexOf('aria-expanded="true"') >= 0, 'row toggle exposes state');
+assert.ok(expandedRowsHtml.indexOf('Skytter 13') >= 0, 'expanded shows all rows');
+// No combo cap: 14 combos all rendered when øvelser shown (zero-padding makes
+// the alphabetical tie order deterministic)
+var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
+for (var ci = 0; ci < 14; ci++) {
+    manyCombos[0].combos['Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = 1;
+}
+var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { showOvelser: true });
+for (var ai = 0; ai < 14; ai++) {
+    assert.ok(allCombosHtml.indexOf('Øvelse ' + (ai < 10 ? '0' + ai : ai) + ' A') >= 0, 'all combo headers shown, no cap (' + ai + ')');
+}
+assert.ok(allCombosHtml.indexOf('Vis alle øvelser') < 0 && allCombosHtml.indexOf('Vis færre øvelser') < 0, 'cap toggles removed entirely');
+assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking -> no card');
+
+var evilTop3 = CS.renderTopThreeHtml(
+    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026, { showOvelser: true });
+assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
+assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
+
+// ── empty ranking in a non-default mode keeps the card shell ──────────
+// (mode buttons and øvelser toggle must stay reachable in-card)
+var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false, showAllShooters: false });
+assert.ok(emptyP2Html.indexOf('data-card="top3"') >= 0, 'empty p2 mode keeps card shell');
+assert.ok(emptyP2Html.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'shell keeps current mode pressed');
+assert.ok(emptyP2Html.indexOf('data-mode="top3" aria-pressed="false"') >= 0, 'shell keeps other modes unpressed');
+assert.ok(emptyP2Html.indexOf('Vis øvelser') >= 0, 'shell keeps øvelser toggle');
+assert.ok(emptyP2Html.indexOf('ranking-status-msg') >= 0, 'empty-state uses status msg class');
+assert.ok(emptyP2Html.indexOf('Ingen 2. plasser for denne klubben i 2026.') >= 0, 'empty-state line names mode and year');
+var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false, showAllShooters: false });
+assert.ok(emptyP3Html.indexOf('Ingen 3. plasser for denne klubben i 2026.') >= 0, 'p3 empty-state names 3. plasser');
+assert.ok(emptyP3Html.indexOf('data-mode="p3" aria-pressed="true"') >= 0, 'p3 shell keeps mode pressed');
+// Initial render (default mode, øvelser hidden) with no data: no card at all
+assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + øvelser hidden -> no card');
+// øvelser toggle carries a stable id so the delegated handler can refocus it
+assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
 
 console.log('club-stats.test.js: all tests passed');

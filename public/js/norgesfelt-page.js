@@ -104,17 +104,18 @@ var StandplassNorgesfeltPage = (function () {
         });
     }
 
-    // Page-local comma-join/split for the multi-value `clubs` URL param --
+    // Multi-value `clubs` URL param, comma-joined per-element encoded --
     // url-state.js's tracked params are opaque strings with no shape
-    // assumption, same pattern terminliste-page.js already uses for its
-    // own multi-selects.
+    // assumption. Encoding/decoding is format.js's hardened implementation
+    // (per-element try/catch decode fallback, String()-coerced encode) --
+    // exposed here as thin delegates so callers and tests keep using the
+    // page's own names; a malformed ?clubs= must never dead-end init().
     function parseClubsParam(raw) {
-        if (!raw) { return []; }
-        return raw.split(',').map(function (s) { return decodeURIComponent(s); }).filter(Boolean);
+        return StandplassFormat.decodeIdList(raw);
     }
 
     function buildClubsParam(clubs) {
-        return clubs.map(encodeURIComponent).join(',');
+        return StandplassFormat.encodeIdList(clubs);
     }
 
     function init(config) {

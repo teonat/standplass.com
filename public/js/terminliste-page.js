@@ -44,17 +44,11 @@ var StandplassTerminlistePage = (function () {
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };
 
     // Comma-joined id lists for both the competitionlist API's `in:` JSON-
-    // array params and this page's own multi-value URL params -- url-state.js
-    // itself needs no changes (every tracked param is already an opaque
-    // string; see this plan's "Corrections to the approved spec"), this is
-    // just the page-local encode/decode terminliste needs that no other
-    // view has needed yet, since felt/bane's own multi-select filters
-    // choose not to URL-sync past a single selection.
-    function encodeIdList(ids) { return (ids || []).map(encodeURIComponent).join(','); }
-    function decodeIdList(param) {
-        if (!param) { return []; }
-        return param.split(',').map(decodeURIComponent).filter(Boolean);
-    }
+    // array params and this page's own multi-value URL params. Encoding/
+    // decoding is format.js's hardened implementation (per-element
+    // try/catch decode fallback, String()-coerced encode) -- exposed here
+    // as thin delegates so callers and tests keep using the page's own
+    // names; a malformed ?t_gren= must never dead-end init().
 
     // ponytail: orderBy kept as a literal string, not via qs.set(), same
     // reason as klubb-page.js/nasjonalt-page.js's own URL builders --
@@ -754,8 +748,8 @@ var StandplassTerminlistePage = (function () {
         processBranchlist: processBranchlist,
         ensureBranchlist: ensureBranchlist,
         STATUS_LABEL: STATUS_LABEL,
-        encodeIdList: encodeIdList,
-        decodeIdList: decodeIdList,
+        encodeIdList: function (ids) { return StandplassFormat.encodeIdList(ids); },
+        decodeIdList: function (raw) { return StandplassFormat.decodeIdList(raw); },
         buildCompetitionListUrl: buildCompetitionListUrl,
         groupsForBranches: groupsForBranches,
         buildMarkup: buildMarkup,

@@ -1,5 +1,8 @@
 'use strict';
 var assert = require('node:assert');
+// resolveKlubbParam decodes ?klubb= via StandplassFormat.decodeIdList, a
+// browser global -- shim it here the same way comp-modal.test.js does.
+global.StandplassFormat = require('../public/js/format.js');
 var SP = require('../public/js/stevner-page.js');
 var PM = require('../public/js/person-modal.js');
 
@@ -43,7 +46,7 @@ var comps = [
         results: [{ personId: '2', name: 'Kari', club: 'Klubb B', discipline: 'Grovfelt', class: 'B', position: 1, score: 29, rankingScore: 92 }]
     }
 ];
-var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], klubbUnmatched: false, klubb: null, nameQuery: '', groupMode: 'klasse',
+var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], nameQuery: '', groupMode: 'klasse',
     activeOrganizers: [], compQuery: '' };
 
 var cards = SP.buildCompetitionCards(comps, baseFilters);
@@ -74,9 +77,9 @@ assert.strictEqual(ovelseMode[0].groups.length, 2, 'ovelse mode groups by discip
 
 assert.ok(cards[0].groups[0].rows[0].nameHtml.indexOf('data-discipline="') !== -1, 'nameHtml now carries the row discipline for Task 7');
 
-var byKlubbSlug = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { klubbUnmatched: true, klubb: 'a' }));
-assert.strictEqual(byKlubbSlug.length, 1, 'klubbUnmatched filter with slug "a" matches "Klubb A" and drops "Klubb B" competitions entirely');
-assert.strictEqual(byKlubbSlug[0].stats.startere, 2, 'c1 keeps only its 2 Klubb A rows when filtered by klub slug');
+// Mixed-value ?klubb= semantics are init-bound in the page (activeClubs is
+// exact-membership), so the keep-unmatched-alongside-matched guarantee is
+// asserted through resolveKlubbParam instead (r3 above).
 
 assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 27.4, median: 28 }),
     '3 skyttere · 5 starter · snitt 27,4 · median 28');
@@ -99,5 +102,55 @@ assert.strictEqual(byTitle[0].id, 'c2');
 
 var noMatch = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { compQuery: 'nonexistent' }));
 assert.strictEqual(noMatch.length, 0);
+
+// ── countUniqueShooters ────────────────────────────────────────────────
+assert.strictEqual(SP.countUniqueShooters([]), 0, 'no rows -> 0');
+assert.strictEqual(SP.countUniqueShooters([{ personId: 'p1' }, { personId: 'p2' }, { personId: 'p1' }]),
+    2, 'distinct personIds counted once');
+assert.strictEqual(SP.countUniqueShooters([{ name: 'A' }, { personId: null }]),
+    0, 'rows without personId are not counted');
+
+// ── resolveKlubbParam ──────────────────────────────────────────────────
+// matchesClub is a normalized substring match — use realistic names.
+var names = ['Kongsvinger Sportsskyttere', 'Oslo Poltiselskap', 'Aron Skytterklubb, Drammen'];
+var r1 = SP.resolveKlubbParam('kongsvinger', names);
+assert.deepStrictEqual(r1, { clubs: ['Kongsvinger Sportsskyttere'], hasUnmatched: false }, 'single slug resolves');
+var r2 = SP.resolveKlubbParam('kongsvinger,oslo', names);
+assert.strictEqual(r2.clubs.length, 2, 'two slugs resolve to two clubs');
+assert.ok(r2.clubs.indexOf('Kongsvinger Sportsskyttere') >= 0 && r2.clubs.indexOf('Oslo Poltiselskap') >= 0, 'both matched');
+assert.strictEqual(r2.hasUnmatched, false, 'no unmatched when both match');
+var r3 = SP.resolveKlubbParam('kongsvinger,nosuchclub', names);
+assert.strictEqual(r3.clubs.length, 2, 'unmatched element kept, never widen');
+assert.ok(r3.clubs.indexOf('nosuchclub') >= 0, 'unmatched slug present verbatim');
+assert.strictEqual(r3.hasUnmatched, true, 'unmatched flagged');
+assert.deepStrictEqual(SP.resolveKlubbParam('', names), { clubs: [], hasUnmatched: false }, 'empty raw -> empty');
+var r4 = SP.resolveKlubbParam('oslo,poltiselskap', names);
+assert.deepStrictEqual(r4.clubs, ['Oslo Poltiselskap'], 'two slugs matching one club dedupe, first occurrence wins');
+assert.strictEqual(r4.hasUnmatched, false, 'a fully deduped match is not unmatched');
+var r5 = SP.resolveKlubbParam('Aron%20Skytterklubb%2C%20Drammen', names);
+assert.deepStrictEqual(r5, { clubs: ['Aron Skytterklubb, Drammen'], hasUnmatched: false }, 'encoded comma survives as one element and resolves');
+assert.deepStrictEqual(SP.resolveKlubbParam(',,,', names), { clubs: [',,,'], hasUnmatched: true },
+    'degenerate raw decodes to zero elements but must never widen the view');
+assert.deepStrictEqual(SP.resolveKlubbParam('%20%20', names), { clubs: ['  '], hasUnmatched: true },
+    'whitespace-only slug normalizes to empty and must never widen the view');
+
+// ── resolveSlugElements ────────────────────────────────────────────────
+// The shared slug→club resolver behind resolveKlubbParam and loadYear's
+// re-resolution pass: matched elements become club names, unmatched stay
+// verbatim (never widen), duplicates dedupe preserving first occurrence.
+var s1 = SP.resolveSlugElements(['kongsvinger', 'nosuchclub'], names);
+assert.strictEqual(s1.clubs.length, 2, 'mixed: matched resolves, unmatched kept verbatim');
+assert.ok(s1.clubs.indexOf('Kongsvinger Sportsskyttere') >= 0 && s1.clubs.indexOf('nosuchclub') >= 0);
+assert.strictEqual(s1.hasUnmatched, true, 'mixed: unmatched flagged');
+assert.deepStrictEqual(SP.resolveSlugElements(['  '], names), { clubs: ['  '], hasUnmatched: true },
+    'empty-normalizing element kept verbatim, never widens');
+var s3 = SP.resolveSlugElements(['oslo', 'poltiselskap'], names);
+assert.deepStrictEqual(s3, { clubs: ['Oslo Poltiselskap'], hasUnmatched: false },
+    'two slugs matching one club dedupe, first occurrence wins');
+var s4 = SP.resolveSlugElements(['Kongsvinger Sportsskyttere', 'kongsvinger'], names);
+assert.deepStrictEqual(s4, { clubs: ['Kongsvinger Sportsskyttere'], hasUnmatched: false },
+    'exact name passes through and dedupes with its own slug');
+assert.deepStrictEqual(SP.resolveSlugElements([], names), { clubs: [], hasUnmatched: false }, 'empty elements -> empty');
+assert.deepStrictEqual(SP.resolveSlugElements(null, names), { clubs: [], hasUnmatched: false }, 'null elements -> empty');
 
 console.log('stevner-page.test.js: all assertions passed');

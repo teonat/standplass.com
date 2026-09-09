@@ -121,6 +121,243 @@ var StandplassClubStats = (function () {
         });
     }
 
+    // ── Klasse semantics (Klassefordeling / topp-3) ────────────────────
+    // Skill classes are exactly A–D, single letters. Age/gender classes
+    // (Menn, Kvinner, Ungdom 14, Veteran 55, SH Åpen, Åpen2, …) are
+    // fact-based, not klassering-based, and pass through untouched.
+
+    var SKILL_CLASSES = ['A', 'B', 'C', 'D'];
+
+    // Øvelser without ferdighetsklasser: any A–D entry there is a
+    // mis-entry and remaps to "Åpen" regardless of stevne status.
+    // Exact data strings (verified against public/data/felt + bane);
+    // cross-check against NSF vedlegg 1 when touching this list.
+    var ALWAYS_OPEN_DISCIPLINES = [
+        'Spesialpistol', 'Spesialrevolver', 'Magnumfelt 1', 'Magnumfelt 2',
+        'Militærfelt-Rødpunkt', 'Revolverfelt-Rødpunkt',
+        'T96 fin', 'T96 grov', 'T96 militær', 'T96 revolver',
+        'T96 spesialpistol', 'T96 spesialrevolver',
+        'T96 spesial Magnum 1', 'T96 spesial Magnum 2',
+        '25m NAIS fin', '25m NAIS grov', '10m luftsprint, pistol'
+    ];
+
+    // Pure: returns the row's effective class without mutating the row.
+    function effectiveClass(row) {
+        var cls = row.class;
+        if (!cls || SKILL_CLASSES.indexOf(cls) < 0) { return cls; }
+        if (!row.applicableForClassification) { return 'Åpen'; }
+        if (ALWAYS_OPEN_DISCIPLINES.indexOf(row.discipline) >= 0) { return 'Åpen'; }
+        return cls;
+    }
+
+    // Per-øvelse class distribution for one club.
+    // - A–D rows: emitted only for classes where ≥1 shooter's modal class
+    //   (most starts; tie-break lowest: D < C < B < A) equals that class.
+    //   A shooter counts ONLY in their modal class — their skill-class
+    //   starts are attributed to that class too, and a class whose
+    //   shooters were all deduped elsewhere is not displayed at all.
+    // - "Åpen" counts additively: any shooter with Åpen participation
+    //   (literal Åpen, remapped A–D) counts once more in Åpen.
+    // - All other class values (age/gender, Åpen2, …) pass through with
+    //   their own unique-shooter counts.
+    // - Pass-through rows use raw row counts; rows without a class value
+    //   are skipped (unchanged behavior).
+    function computeClassDistribution(rows, clubName) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var cells = {};               // disc -> class -> { shooters: {pid: true}, starts: n }
+        var shooterClassStarts = {};  // disc -> pid -> class -> startCount
+        (rows || []).forEach(function (r) {
+            if (!r.club || StandplassStevnerPage.normalizeClub(r.club) !== target) { return; }
+            if (!r.discipline || !r.class) { return; }
+            var cls = effectiveClass(r);
+            var d = cells[r.discipline] || (cells[r.discipline] = {});
+            var cell = d[cls] || (d[cls] = { shooters: {}, starts: 0 });
+            cell.starts++;
+            if (r.personId) {
+                cell.shooters[r.personId] = true;
+                if (SKILL_CLASSES.indexOf(cls) >= 0) {
+                    var byClass = shooterClassStarts[r.discipline] || (shooterClassStarts[r.discipline] = {});
+                    var sc = byClass[r.personId] || (byClass[r.personId] = {});
+                    sc[cls] = (sc[cls] || 0) + 1;
+                }
+            }
+        });
+
+        var out = [];
+        Object.keys(cells).forEach(function (disc) {
+            var d = cells[disc];
+            var byClass = shooterClassStarts[disc] || {};
+            var modal = {};
+            Object.keys(byClass).forEach(function (pid) {
+                var sc = byClass[pid];
+                var best = null, bestN = -1;
+                ['D', 'C', 'B', 'A'].forEach(function (cls) {
+                    if (sc[cls] && sc[cls] > bestN) { best = cls; bestN = sc[cls]; }
+                });
+                if (best) { modal[pid] = best; }
+            });
+            SKILL_CLASSES.forEach(function (cls) {
+                var pids = Object.keys(byClass).filter(function (pid) { return modal[pid] === cls; });
+                if (!pids.length) { return; }
+                var starts = 0;
+                pids.forEach(function (pid) {
+                    var sc = byClass[pid];
+                    Object.keys(sc).forEach(function (c) { starts += sc[c]; });
+                });
+                out.push({ discipline: disc, class: cls, shooters: pids.length, starts: starts });
+            });
+            Object.keys(d).forEach(function (cls) {
+                if (SKILL_CLASSES.indexOf(cls) >= 0) { return; }
+                var cell = d[cls];
+                out.push({ discipline: disc, class: cls, shooters: Object.keys(cell.shooters).length, starts: cell.starts });
+            });
+        });
+        out.sort(function (a, b) { return b.starts - a.starts; });
+        return out;
+    }
+
+    // Pure HTML builder for the Klassefordeling card. The disclaimer's
+    // øvelse list is generated from ALWAYS_OPEN_DISCIPLINES so text and
+    // behavior cannot drift apart.
+    function renderClassDistributionHtml(dist, clubName) {
+        if (!dist || !dist.length) { return ''; }
+        var rowsHtml = dist.map(function (dc) {
+            return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td>'
+                + '<td class="ranking-score">' + dc.shooters + '</td>'
+                + '<td class="ranking-score">' + dc.starts + '</td></tr>';
+        }).join('');
+        return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
+            + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
+            + rowsHtml + '</tbody></table>'
+            + '<details class="club-stats-note"><summary>Om klassene</summary>'
+            + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
+            + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
+            + 'merket nedenfor, vises klassene A–D som «Åpen».</p>'
+            + '<div class="apen-disc-tags">' + ALWAYS_OPEN_DISCIPLINES.map(function (d) {
+                return '<span class="apen-disc-tag">' + esc(d) + '</span>';
+            }).join('') + '</div>'
+            + '<p>Skyttere telles én gang per øvelse, '
+            + 'i klassen med flest starter (laveste klasse ved likt) — starter deres føres til '
+            + 'samme klasse, og klasser uten tildelte skyttere vises ikke; deltakelse uten '
+            + 'ferdighetsklasse telles i tillegg som «Åpen». Alders- og kjønnsklasser vises som egne rader. '
+            + 'Klasseringen føres per øvelse, og kildedata kan inneholde registreringsfeil — '
+            + 'fordelingen er et beste-estimat.</p>'
+            + '</details></section>';
+    }
+
+    // Shooter top-list of most top-3 placements. Podiums are NOT deduped:
+    // every top-3 result row counts in its own øvelse–klasse column
+    // (positions are class-relative facts of the result lists). Tied
+    // positions ("delt 2. plass") count for both shooters. Combo keys use
+    // the effective (post-remap) class so columns match Klassefordeling.
+    // position: null/undefined counts all top-3 rows; 1, 2, or 3 counts only
+    // rows with that exact placement.
+    function computeTopThreeRanking(rows, clubName, position) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var shooters = {};
+        (rows || []).forEach(function (r) {
+            if (!r.club || StandplassStevnerPage.normalizeClub(r.club) !== target) { return; }
+            if (r.position == null) { return; }
+            var pos = Number(r.position);
+            if (isNaN(pos) || pos < 1 || pos > 3) { return; }
+            if (position != null && pos !== position) { return; }
+            if (!r.personId) { return; }
+            var s = shooters[r.personId];
+            if (!s) { s = shooters[r.personId] = { personId: r.personId, name: r.name || 'Ukjent', total: 0, combos: {} }; }
+            if (r.name) { s.name = r.name; }
+            var key = (r.discipline || '–') + '|' + (effectiveClass(r) || '–');
+            s.combos[key] = (s.combos[key] || 0) + 1;
+            s.total++;
+        });
+        return Object.keys(shooters).map(function (pid) { return shooters[pid]; })
+            .sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name, 'no'); });
+    }
+
+    function modePosition(mode) {
+        if (mode === 'p1') { return 1; }
+        if (mode === 'p2') { return 2; }
+        if (mode === 'p3') { return 3; }
+        return null;
+    }
+
+    function top3ModeLabel(mode) {
+        if (mode === 'p1') { return '1. plasser'; }
+        if (mode === 'p2') { return '2. plasser'; }
+        if (mode === 'p3') { return '3. plasser'; }
+        return 'topp-3 plasseringer';
+    }
+
+    var TOP3_ROW_PAGE = 10;
+
+    // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
+    // .ranking-card-table-wrap (overflow-x: auto) — .ranking-card itself is
+    // overflow: hidden and would silently clip columns.
+    function renderTopThreeHtml(ranking, clubName, year, opts) {
+        opts = opts || {};
+        var mode = opts.mode || 'top3';
+        var showOvelser = !!opts.showOvelser;
+        var showAllShooters = !!opts.showAllShooters;
+        var empty = !ranking || !ranking.length;
+        // Initial render only: no ranking in the default view means the card
+        // has never shown anything — omit it entirely. In every other empty
+        // state the shell MUST stay so the mode buttons and øvelser toggle
+        // remain reachable in-card.
+        if (empty && mode === 'top3' && !showOvelser) { return ''; }
+        var MODES = [
+            { key: 'top3', label: 'Topp-3' },
+            { key: 'p1', label: '1. plass' },
+            { key: 'p2', label: '2. plass' },
+            { key: 'p3', label: '3. plass' }
+        ];
+        var modeHtml = '<div class="top3-mode" id="top3-mode" role="group" aria-label="Plasseringstype">'
+            + MODES.map(function (m) {
+                return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
+                    + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
+            }).join('')
+            + '<button type="button" class="top3-mode-btn top3-ovelser-btn" id="top3-ovelser-btn" aria-pressed="' + (showOvelser ? 'true' : 'false') + '">'
+            + (showOvelser ? 'Skjul øvelser' : 'Vis øvelser') + '</button></div>';
+        if (empty) {
+            return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
+                + modeHtml
+                + '<p class="ranking-status-msg">Ingen ' + esc(top3ModeLabel(mode)) + ' for denne klubben i ' + esc(String(year)) + '.</p>'
+                + '</section>';
+        }
+        var comboTotals = {};
+        ranking.forEach(function (s) {
+            Object.keys(s.combos).forEach(function (k) { comboTotals[k] = (comboTotals[k] || 0) + s.combos[k]; });
+        });
+        var comboOrder = Object.keys(comboTotals)
+            .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
+        var visibleShooters = showAllShooters ? ranking : ranking.slice(0, TOP3_ROW_PAGE);
+        var headers = showOvelser
+            ? comboOrder.map(function (k, ci) {
+                var parts = k.split('|');
+                return '<th scope="col" class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
+            }).join('')
+            : '';
+        var rowsHtml = visibleShooters.map(function (s, i) {
+            var cells = showOvelser
+                ? comboOrder.map(function (k, ci) {
+                    return '<td class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + (s.combos[k] || '') + '</td>';
+                }).join('')
+                : '';
+            return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'
+                + '<th scope="row">' + esc(s.name) + '</th>' + cells
+                + '<td class="ranking-score">' + s.total + '</td></tr>';
+        }).join('');
+        var rowToggle = ranking.length > TOP3_ROW_PAGE
+            ? '<button type="button" class="ranking-toggle" id="top3-row-toggle" aria-expanded="' + (showAllShooters ? 'true' : 'false') + '" aria-controls="top3-table">'
+                + (showAllShooters ? 'Vis færre' : 'Vis alle (' + ranking.length + ')') + '</button>'
+            : '';
+        return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
+            + modeHtml
+            + '<div class="ranking-card-table-wrap">'
+            + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + ' for ' + esc(clubName) + '">'
+            + '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th>' + headers + '<th scope="col" class="ranking-score">Totalt</th></tr></thead>'
+            + '<tbody>' + rowsHtml + '</tbody></table></div>'
+            + rowToggle + '</section>';
+    }
+
     // ── SVG line chart ─────────────────────────────────────────────────
 
     // Pure function: returns an SVG string. data: [{ year, shooters, starts }, ...].
@@ -349,25 +586,6 @@ var StandplassClubStats = (function () {
         return svg;
     }
 
-    // Class ranking for "Beste plasseringer" sort priority — lower number = higher priority.
-    // A always ranks top. Åpen ranks with A when klasseførende, below Junior when not.
-    // Then Kvinner/Junior/Ungdom, then B, C, D, then everything else.
-    var CLASS_PRIORITY = {
-        'A': 1,
-        'Kvinner': 2, 'Junior kvinner': 2, 'Junior menn': 2, 'Junior åpen': 2, 'Junior åpen-NM': 2,
-        'Ungdom': 2, 'Ungdom 12': 2, 'Ungdom 14': 2, 'Ungdom 16': 2, 'Ungdom-NM': 2,
-        'B': 4,
-        'C': 5,
-        'D': 6
-    };
-
-    function classPriority(cls, applicableForClassification) {
-        if (cls === 'Åpen') {
-            return applicableForClassification ? 1 : 3;
-        }
-        return CLASS_PRIORITY[cls] || 9;
-    }
-
     // ── init / DOM wiring ──────────────────────────────────────────────
 
     var TOPLIST_PAGE_SIZE = 10;
@@ -399,6 +617,9 @@ var StandplassClubStats = (function () {
         // allClubNames accumulated across all loaded years
         var allClubNames = {};
         var dataLoaded = false;
+        var top3State = { mode: 'top3', showOvelser: false, showAllShooters: false };
+        var top3Rows = [];
+        var top3Club = '';
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -681,8 +902,8 @@ var StandplassClubStats = (function () {
                     'Flest aktive skyttere ' + activeYear)
                 + buildToplistTable('Flest starter', byStarts, 'totalStarts', 'starter',
                     'Flest starter ' + activeYear)
-                + buildToplistTable('Flest stevner', byCompetitions, 'competitionsAttended', 'stevner',
-                    'Flest stevner ' + activeYear)
+                + buildToplistTable('Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner',
+                    'Flest stevnedeltakelser ' + activeYear)
                 + buildToplistTable('Flest topp-3 plasseringer', byTopThree, 'topThree', 'plasseringer',
                     'Flest topp-3 plasseringer ' + activeYear)
                 + yoyHtml
@@ -730,7 +951,7 @@ var StandplassClubStats = (function () {
             var opts = { minShooters: 0, minStarts: 0 };
             if (title === 'Flest aktive skyttere') { return rankClubs(stats, 'uniqueShooters', opts); }
             if (title === 'Flest starter') { return rankClubs(stats, 'totalStarts', opts); }
-            if (title === 'Flest stevner') { return rankClubs(stats, 'competitionsAttended', opts); }
+            if (title === 'Flest stevnedeltakelser') { return rankClubs(stats, 'competitionsAttended', opts); }
             if (title === 'Flest topp-3 plasseringer') { return rankClubs(stats, 'topThree', opts); }
             if (title === 'Størst økning av skyttere') {
                 var prevStats = getStatsForYear(activeYear - 1, activeProgram);
@@ -745,7 +966,7 @@ var StandplassClubStats = (function () {
         function getValueKeyForTitle(title) {
             if (title === 'Flest aktive skyttere') { return 'uniqueShooters'; }
             if (title === 'Flest starter') { return 'totalStarts'; }
-            if (title === 'Flest stevner') { return 'competitionsAttended'; }
+            if (title === 'Flest stevnedeltakelser') { return 'competitionsAttended'; }
             if (title === 'Flest topp-3 plasseringer') { return 'topThree'; }
             if (title === 'Størst økning av skyttere') { return 'delta'; }
             if (title === 'Flest stevner arrangert') { return 'delta'; }
@@ -820,34 +1041,6 @@ var StandplassClubStats = (function () {
                 if (r.personId) { discData[r.discipline].shooters[r.personId] = true; }
             });
             var discRows = Object.keys(discData).sort(function (a, b) { return discData[b].starts - discData[a].starts; });
-
-            // Øvelse+klasse-fordeling — track starts AND unique shooters per discipline+class combo.
-            // Reclassify: class "A" in non-klasseførende stevner is actually "Åpen" (clubs use A loosely).
-            var discClassData = {};
-            rows.forEach(function (r) {
-                if (StandplassStevnerPage.normalizeClub(r.club) !== StandplassStevnerPage.normalizeClub(resolved)) { return; }
-                if (!r.discipline || !r.class) { return; }
-                var effectiveClass = r.class;
-                if (effectiveClass === 'A' && !r.applicableForClassification) { effectiveClass = 'Åpen'; }
-                var key = r.discipline + ' – ' + effectiveClass;
-                if (!discClassData[key]) { discClassData[key] = { discipline: r.discipline, class: effectiveClass, starts: 0, shooters: {} }; }
-                discClassData[key].starts++;
-                if (r.personId) { discClassData[key].shooters[r.personId] = true; }
-            });
-            var discClassRows = Object.keys(discClassData).sort(function (a, b) { return discClassData[b].starts - discClassData[a].starts; });
-
-            // Beste plasseringer — only top 3 (position 1-3), sort by class priority then position
-            var TOP3_LIMIT = 10;
-            var allTop3 = rows
-                .filter(function (r) {
-                    return StandplassStevnerPage.normalizeClub(r.club) === StandplassStevnerPage.normalizeClub(resolved)
-                        && r.position != null && !isNaN(Number(r.position)) && Number(r.position) >= 1 && Number(r.position) <= 3;
-                })
-                .sort(function (a, b) {
-                    var posDiff = Number(a.position) - Number(b.position);
-                    if (posDiff !== 0) { return posDiff; }
-                    return classPriority(a.class, a.applicableForClassification) - classPriority(b.class, b.applicableForClassification);
-                });
 
             // Arrangerte stevner
             var organizedComps = [];
@@ -932,36 +1125,17 @@ var StandplassClubStats = (function () {
                 + '</tbody></table></section>'
                 : '';
 
-            var classHtml = discClassRows.length
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
-                + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(resolved) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
-                + discClassRows.map(function (key) {
-                    var dc = discClassData[key];
-                    return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td><td class="ranking-score">' + Object.keys(dc.shooters).length + '</td><td class="ranking-score">' + dc.starts + '</td></tr>';
-                }).join('')
-                + '</tbody></table>'
-                + '<p class="club-stats-note">Klasse «A» i ikke-klasseførende stevner er vist som «Åpen», '
-                + 'siden dette i praksis er åpen klasse.</p>'
-                + '</section>'
-                : '';
+            var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
 
-            var bestResults = allTop3.slice(0, TOP3_LIMIT);
-            var bestHtml = bestResults.length
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Beste plasseringer (top 3)</h2></div>'
-                + '<table class="ranking-table" aria-label="Beste plasseringer (top 3) for ' + esc(resolved) + '"><thead><tr><th scope="col" class="ranking-rank">Plass</th><th scope="col">Skytter</th><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col">Stevne</th></tr></thead><tbody>'
-                + bestResults.map(function (r) {
-                    return '<tr><td class="ranking-rank">' + esc(String(r.position)) + '</td><td>' + esc(r.name || '–') + '</td><td>' + esc(r.discipline || '–') + '</td><td>' + esc(r.class || '–') + '</td><td>' + esc(r.competition || '–') + '</td></tr>';
-                }).join('')
-                + '</tbody></table>'
-                + (allTop3.length > TOP3_LIMIT ? '<button type="button" class="ranking-toggle" id="' + config.idPrefix + '-best-toggle">Vis alle (' + allTop3.length + ')</button>' : '')
-                + '</section>'
-                : '';
-
-            function renderBestRows(list) {
-                return list.map(function (r) {
-                    return '<tr><td class="ranking-rank">' + esc(String(r.position)) + '</td><td>' + esc(r.name || '–') + '</td><td>' + esc(r.discipline || '–') + '</td><td>' + esc(r.class || '–') + '</td><td>' + esc(r.competition || '–') + '</td></tr>';
-                }).join('');
-            }
+            top3Rows = rows;
+            // Reset the placement-mode/øvelser toggles ONLY when the club
+            // changes — a year/program re-render for the same club must keep
+            // the user's toggles. top3Club starts '' so the first entry still
+            // resets.
+            if (resolved !== top3Club) { top3State = { mode: 'top3', showOvelser: false, showAllShooters: false }; }
+            top3Club = resolved;
+            var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
+            var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 
             var orgHtml = organizedComps.length
                 ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Arrangerte stevner</h2></div>'
@@ -977,44 +1151,63 @@ var StandplassClubStats = (function () {
                 : '';
 
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
-
-            // "Vis alle" toggle for Beste plasseringer
-            var bestToggle = id('-best-toggle');
-            if (bestToggle) {
-                bestToggle.addEventListener('click', function () {
-                    var section = bestToggle.closest('.club-stats-section');
-                    var tbody = section.querySelector('tbody');
-                    var expanded = bestToggle.textContent.indexOf('Vis alle') === -1;
-                    if (expanded) {
-                        tbody.innerHTML = renderBestRows(allTop3.slice(0, TOP3_LIMIT));
-                        bestToggle.textContent = 'Vis alle (' + allTop3.length + ')';
-                    } else {
-                        tbody.innerHTML = renderBestRows(allTop3);
-                        bestToggle.textContent = 'Vis færre';
-                    }
-                });
-            }
-
-            // Focus management for screen readers
-            var mainEl = id('-root') || id('-title');
-            if (mainEl && mainEl.focus) { mainEl.focus(); }
         }
 
         // ── Main render ────────────────────────────────────────────────
 
+        var lastView = null;
+
         function render() {
             statusEl.textContent = '';
+            var view = klubbParam || null;
+            var viewChanged = view !== lastView;
+            lastView = view;
             if (klubbParam) {
                 renderDrilldown(klubbParam);
             } else {
                 document.title = 'Klubbstatistikk – standplass.com';
                 renderToplists();
             }
+            if (viewChanged) {
+                var mainEl = id('-root') || id('-title');
+                if (mainEl && mainEl.focus) { mainEl.focus(); }
+            } else {
+                statusEl.textContent = 'Viser statistikk for ' + activeYear + ' (' + activeProgram + ').';
+            }
         }
 
         // ── Init ───────────────────────────────────────────────────────
 
         buildFilters();
+
+        // Top-3 card toggles: one delegated listener for the drilldown's
+        // top-3 card. Registered once here — the section's inner HTML is
+        // replaced on toggle, so per-render bindings would be lost and
+        // per-render listener adds would stack.
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.top3-mode-btn, #top3-row-toggle') : null;
+            if (!btn) { return; }
+            if (btn.classList.contains('top3-ovelser-btn')) {
+                top3State.showOvelser = !top3State.showOvelser;
+            } else if (btn.getAttribute('data-mode')) {
+                top3State.mode = btn.getAttribute('data-mode');
+            } else {
+                top3State.showAllShooters = !top3State.showAllShooters;
+            }
+            var top3Section = contentEl.querySelector('[data-card="top3"]');
+            if (top3Section) {
+                top3Section.outerHTML = renderTopThreeHtml(
+                    computeTopThreeRanking(top3Rows, top3Club, modePosition(top3State.mode)),
+                    top3Club, activeYear, top3State);
+                var refocus = btn.classList.contains('top3-ovelser-btn')
+                    ? contentEl.querySelector('#top3-ovelser-btn')
+                    : (btn.id
+                        ? contentEl.querySelector('#' + btn.id)
+                        : contentEl.querySelector('.top3-mode [aria-pressed="true"]'));
+                if (refocus) { refocus.focus(); }
+            }
+        });
+
         statusEl.textContent = 'Laster data…';
 
         loadAllYears().then(function () {
@@ -1038,6 +1231,12 @@ var StandplassClubStats = (function () {
         computeClubStats: computeClubStats,
         rankClubs: rankClubs,
         computeYearOverYear: computeYearOverYear,
+        ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
+        effectiveClass: effectiveClass,
+        computeClassDistribution: computeClassDistribution,
+        renderClassDistributionHtml: renderClassDistributionHtml,
+        computeTopThreeRanking: computeTopThreeRanking,
+        renderTopThreeHtml: renderTopThreeHtml,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         init: init

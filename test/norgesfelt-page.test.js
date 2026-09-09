@@ -1,4 +1,8 @@
 var assert = require('assert');
+// NP's club-param helpers delegate to format.js's hardened implementations —
+// shim the browser global before requiring, the same way
+// terminliste-page.test.js does.
+global.StandplassFormat = require('../public/js/format.js');
 var NP = require('../public/js/norgesfelt-page.js');
 
 // normalizeClub / matchesClub -- same substring-match convention as
@@ -62,5 +66,7 @@ assert.deepStrictEqual(NP.parseClubsParam(''), []);
 assert.deepStrictEqual(NP.parseClubsParam('Oslo%20Pistolklubb,Bergen%20Pistolklubb'), ['Oslo Pistolklubb', 'Bergen Pistolklubb']);
 assert.strictEqual(NP.buildClubsParam(['Oslo Pistolklubb', 'Bergen Pistolklubb']), 'Oslo%20Pistolklubb,Bergen%20Pistolklubb');
 assert.deepStrictEqual(NP.parseClubsParam(NP.buildClubsParam(['Ås Skytterlag'])), ['Ås Skytterlag'], 'round-trip through encode/decode preserves æøå');
+assert.deepStrictEqual(NP.parseClubsParam('%E0%A4%A'), ['%E0%A4%A'],
+    'malformed escape falls back to raw instead of dead-ending init');
 
 console.log('norgesfelt-page.test.js: all assertions passed');

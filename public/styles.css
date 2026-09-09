@@ -124,6 +124,13 @@ h1, h2, h3 {
   align-items: center;
   gap: 0.25rem;
 }
+/* Below ~720px the header's min-content width exceeds the viewport; let
+   the ribbon stack instead of overflowing the page (nowrap above keeps
+   each label on one line). */
+@media (max-width: 720px) {
+  .site-header-inner { flex-wrap: wrap; row-gap: 0.25rem; }
+  .site-header-inner nav { flex-wrap: wrap; row-gap: 0.25rem; }
+}
 .nav-dropdown { position: relative; }
 .nav-dropdown-btn {
   background: none;
@@ -133,6 +140,7 @@ h1, h2, h3 {
   font-size: 0.9375rem;
   cursor: pointer;
   padding: 0.4rem 0.6rem;
+  white-space: nowrap;
 }
 .nav-dropdown-btn:hover { color: var(--brand-accent); }
 /* Plain nav item (Terminliste) alongside the dropdowns -- one page, no
@@ -1388,7 +1396,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   margin: 0 0 1.5rem;
 }
 .hero-cta { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.hero-note { font-size: 0.8125rem; color: var(--text-muted); margin: 1rem 0 0; max-width: 40ch; }
+.hero-copy .hero-note { font-size: 0.8125rem; color: var(--text-muted); margin: 1.5rem 0 0; max-width: 40ch; }
 .btn {
   display: inline-block;
   padding: 0.625rem 1.25rem;
@@ -1449,6 +1457,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   line-height: 1.5;
 }
 
+.club-stats-note summary { cursor: pointer; }
+
+.apen-disc-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0; }
+.apen-disc-tag {
+  display: inline-block; background: var(--surface-card); border: 1px solid var(--border-strong);
+  border-radius: 4px; padding: 0.1rem 0.45rem; font-size: 0.775rem; color: var(--text);
+}
+
 .club-stats-back {
   display: inline-block;
   font-size: 0.875rem;
@@ -1498,6 +1514,22 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   padding-left: 1.125rem;
   padding-right: 1.125rem;
 }
+
+/* Top-3 card placement-mode / øvelser-visibility toggle group */
+.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0; }
+.top3-mode-btn {
+  background: none; border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text-muted); font: inherit; font-size: 0.8125rem;
+  cursor: pointer; padding: 0.2rem 0.6rem;
+}
+.top3-mode-btn[aria-pressed="true"] {
+  background: var(--brand-accent); border-color: var(--brand-accent); color: var(--white);
+}
+
+/* Top-3 card: alternate-column shading for the ovelse columns, matching the
+   row-header treatment (.ranking-table th / var(--surface-base)). Class-based,
+   never nth-child — see the nth-child collision notes above in this file. */
+[data-card="top3"] .top3-col-alt { background: var(--surface-base); }
 
 .club-chart-wrap {
   padding: 0.5rem 0;
