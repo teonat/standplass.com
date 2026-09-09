@@ -1,6 +1,7 @@
 'use strict';
 var assert = require('node:assert');
 var CS = require('../public/js/club-stats-page.js');
+global.StandplassStevnerPage = require('../public/js/stevner-page.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
 
@@ -257,5 +258,81 @@ assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1
 
 // Empty series → message
 assert.ok(CS.renderMultiSeriesChart([]).indexOf('Ikke nok data') !== -1, 'empty series → message');
+
+// ── effectiveClass / computeClassDistribution ─────────────────────────
+
+var distRows = [
+    // Gisle-pattern: klasseførende A starts + ikke-klasseførende A starts
+    // (the latter remap to Åpen). Additive Åpen: he appears in both rows.
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: true },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: true },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    { personId: 'g1', name: 'Gisle', club: 'Odda PK', discipline: 'Finfelt', class: 'A', applicableForClassification: false },
+    // Modal wins over lowest: 3 B starts + 1 spurious C start (klasseførende)
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'B', applicableForClassification: true },
+    { personId: 'm1', name: 'Modal', club: 'Odda PK', discipline: 'Finfelt', class: 'C', applicableForClassification: true },
+    // Tie (1 start each) -> lowest (C) wins
+    { personId: 't1', name: 'Tie', club: 'Odda PK', discipline: 'Grovfelt', class: 'B', applicableForClassification: true },
+    { personId: 't1', name: 'Tie', club: 'Odda PK', discipline: 'Grovfelt', class: 'C', applicableForClassification: true },
+    // Age class passes through untouched, even at ikke-klasseførende stevner
+    { personId: 'a1', name: 'Age', club: 'Odda PK', discipline: 'Finfelt', class: 'Veteran 55', applicableForClassification: false },
+    // Always-open øvelser: dummy-A remaps to Åpen even at klasseførende stevner
+    { personId: 's1', name: 'Spes', club: 'Odda PK', discipline: 'Spesialpistol', class: 'A', applicableForClassification: true },
+    { personId: 's2', name: 'T96', club: 'Odda PK', discipline: 'T96 fin', class: 'A', applicableForClassification: true },
+    // Other club must be ignored; missing class skipped
+    { personId: 'x1', name: 'X', club: 'Anna klubb', discipline: 'Finfelt', class: 'C', applicableForClassification: true },
+    { personId: 'x2', name: 'Y', club: 'Odda PK', discipline: 'Finfelt', class: '', applicableForClassification: true }
+];
+
+var dist = CS.computeClassDistribution(distRows, 'Odda PK');
+
+function distCell(disc, cls) {
+    var hit = dist.filter(function (d) { return d.discipline === disc && d.class === cls; })[0];
+    return hit || null;
+}
+
+// Finfelt: g1 has 2 klasseførende A starts (modal A); m1 has 3 B + 1 C (modal B);
+// m1's spurious C row keeps its start but loses the shooter to B.
+assert.strictEqual(distCell('Finfelt', 'A').shooters, 1, 'Finfelt A: g1 (modal)');
+assert.strictEqual(distCell('Finfelt', 'A').starts, 2, 'Finfelt A: raw starts (g1 only)');
+assert.strictEqual(distCell('Finfelt', 'B').shooters, 1, 'Finfelt B: m1 modal B (3 > 1)');
+assert.strictEqual(distCell('Finfelt', 'B').starts, 3, 'Finfelt B: raw starts kept');
+assert.strictEqual(distCell('Finfelt', 'C').shooters, 0, 'Finfelt C: m1 counted in B, not C');
+assert.strictEqual(distCell('Finfelt', 'C').starts, 1, 'Finfelt C: raw starts kept');
+assert.strictEqual(distCell('Finfelt', 'Åpen').shooters, 1, 'Finfelt Åpen: g1 additive (remapped starts)');
+assert.strictEqual(distCell('Finfelt', 'Åpen').starts, 3, 'Finfelt Åpen: remapped starts raw');
+assert.strictEqual(distCell('Finfelt', 'Veteran 55').shooters, 1, 'age class passes through at ikke-klasseførende');
+assert.strictEqual(distCell('Finfelt', 'Veteran 55').starts, 1, 'age class starts raw');
+
+// Grovfelt tie: lowest (C) wins -> B row has 0 shooters, 1 start
+assert.strictEqual(distCell('Grovfelt', 'B').shooters, 0, 'Grovfelt B: tie lost to lowest');
+assert.strictEqual(distCell('Grovfelt', 'B').starts, 1, 'Grovfelt B: raw starts kept');
+assert.strictEqual(distCell('Grovfelt', 'C').shooters, 1, 'Grovfelt C: tie-break lowest wins');
+assert.strictEqual(distCell('Grovfelt', 'C').starts, 1, 'Grovfelt C: raw starts kept');
+
+// Always-open øvelser: no A row survives
+assert.strictEqual(distCell('Spesialpistol', 'A'), null, 'Spesialpistol dummy-A remapped');
+assert.strictEqual(distCell('Spesialpistol', 'Åpen').shooters, 1, 'Spesialpistol Åpen');
+assert.strictEqual(distCell('T96 fin', 'A'), null, 'T96 fin dummy-A remapped');
+assert.strictEqual(distCell('T96 fin', 'Åpen').shooters, 1, 'T96 fin Åpen');
+
+// Other club and empty-class rows excluded (x1 filtered out -> Finfelt C
+// stays at 0 shooters from the assertion above; x2 skipped entirely)
+assert.ok(!dist.some(function (d) { return d.starts === 0; }), 'empty-class row skipped entirely');
+
+// Sorted by starts desc
+for (var di = 1; di < dist.length; di++) {
+    assert.ok(dist[di - 1].starts >= dist[di].starts, 'sorted by starts desc');
+}
+
+// effectiveClass is pure + exact about skill classes
+assert.strictEqual(CS.effectiveClass({ class: 'A', applicableForClassification: false, discipline: 'Finfelt' }), 'Åpen');
+assert.strictEqual(CS.effectiveClass({ class: 'D', applicableForClassification: true, discipline: 'Spesialrevolver' }), 'Åpen');
+assert.strictEqual(CS.effectiveClass({ class: 'C', applicableForClassification: true, discipline: 'Finfelt' }), 'C');
+assert.strictEqual(CS.effectiveClass({ class: 'Veteran 65', applicableForClassification: false, discipline: 'Finfelt' }), 'Veteran 65');
+assert.strictEqual(CS.effectiveClass({ class: 'Åpen2', applicableForClassification: true, discipline: 'Revolverfelt-Rødpunkt' }), 'Åpen2');
 
 console.log('club-stats.test.js: all tests passed');

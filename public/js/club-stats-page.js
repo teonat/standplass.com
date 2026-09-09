@@ -121,6 +121,95 @@ var StandplassClubStats = (function () {
         });
     }
 
+    // ── Klasse semantics (Klassefordeling / topp-3) ────────────────────
+    // Skill classes are exactly A–D, single letters. Age/gender classes
+    // (Menn, Kvinner, Ungdom 14, Veteran 55, SH Åpen, Åpen2, …) are
+    // fact-based, not klassering-based, and pass through untouched.
+
+    var SKILL_CLASSES = ['A', 'B', 'C', 'D'];
+
+    // Øvelser without ferdighetsklasser: any A–D entry there is a
+    // mis-entry and remaps to "Åpen" regardless of stevne status.
+    // Exact data strings (verified against public/data/felt + bane);
+    // cross-check against NSF vedlegg 1 when touching this list.
+    var ALWAYS_OPEN_DISCIPLINES = [
+        'Spesialpistol', 'Spesialrevolver', 'Magnumfelt 1', 'Magnumfelt 2',
+        'Militærfelt-Rødpunkt', 'Revolverfelt-Rødpunkt',
+        'T96 fin', 'T96 grov', 'T96 militær', 'T96 revolver',
+        'T96 spesialpistol', 'T96 spesialrevolver',
+        'T96 spesial Magnum 1', 'T96 spesial Magnum 2',
+        '25m NAIS fin', '25m NAIS grov', '10m luftsprint, pistol'
+    ];
+
+    // Pure: returns the row's effective class without mutating the row.
+    function effectiveClass(row) {
+        var cls = row.class;
+        if (!cls || SKILL_CLASSES.indexOf(cls) < 0) { return cls; }
+        if (!row.applicableForClassification) { return 'Åpen'; }
+        if (ALWAYS_OPEN_DISCIPLINES.indexOf(row.discipline) >= 0) { return 'Åpen'; }
+        return cls;
+    }
+
+    // Per-øvelse class distribution for one club.
+    // - A–D rows: shooter counts ONCE per øvelse, in their modal class
+    //   (most starts; tie-break lowest: D < C < B < A).
+    // - "Åpen" counts additively: any shooter with Åpen participation
+    //   (literal Åpen, remapped A–D) counts once more in Åpen.
+    // - All other class values (age/gender, Åpen2, …) pass through with
+    //   their own unique-shooter counts.
+    // - Starts are raw row counts everywhere; rows without a class value
+    //   are skipped (unchanged behavior).
+    function computeClassDistribution(rows, clubName) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var cells = {};               // disc -> class -> { shooters: {pid: true}, starts: n }
+        var shooterClassStarts = {};  // disc -> pid -> class -> startCount
+        (rows || []).forEach(function (r) {
+            if (!r.club || StandplassStevnerPage.normalizeClub(r.club) !== target) { return; }
+            if (!r.discipline || !r.class) { return; }
+            var cls = effectiveClass(r);
+            var d = cells[r.discipline] || (cells[r.discipline] = {});
+            var cell = d[cls] || (d[cls] = { shooters: {}, starts: 0 });
+            cell.starts++;
+            if (r.personId) {
+                cell.shooters[r.personId] = true;
+                if (SKILL_CLASSES.indexOf(cls) >= 0) {
+                    var byClass = shooterClassStarts[r.discipline] || (shooterClassStarts[r.discipline] = {});
+                    var sc = byClass[r.personId] || (byClass[r.personId] = {});
+                    sc[cls] = (sc[cls] || 0) + 1;
+                }
+            }
+        });
+
+        var out = [];
+        Object.keys(cells).forEach(function (disc) {
+            var d = cells[disc];
+            var byClass = shooterClassStarts[disc] || {};
+            var modal = {};
+            Object.keys(byClass).forEach(function (pid) {
+                var sc = byClass[pid];
+                var best = null, bestN = -1;
+                ['D', 'C', 'B', 'A'].forEach(function (cls) {
+                    if (sc[cls] && sc[cls] > bestN) { best = cls; bestN = sc[cls]; }
+                });
+                if (best) { modal[pid] = best; }
+            });
+            SKILL_CLASSES.forEach(function (cls) {
+                var cell = d[cls];
+                if (!cell) { return; }
+                var count = 0;
+                Object.keys(cell.shooters).forEach(function (pid) { if (modal[pid] === cls) { count++; } });
+                out.push({ discipline: disc, class: cls, shooters: count, starts: cell.starts });
+            });
+            Object.keys(d).forEach(function (cls) {
+                if (SKILL_CLASSES.indexOf(cls) >= 0) { return; }
+                var cell = d[cls];
+                out.push({ discipline: disc, class: cls, shooters: Object.keys(cell.shooters).length, starts: cell.starts });
+            });
+        });
+        out.sort(function (a, b) { return b.starts - a.starts; });
+        return out;
+    }
+
     // ── SVG line chart ─────────────────────────────────────────────────
 
     // Pure function: returns an SVG string. data: [{ year, shooters, starts }, ...].
@@ -1038,6 +1127,9 @@ var StandplassClubStats = (function () {
         computeClubStats: computeClubStats,
         rankClubs: rankClubs,
         computeYearOverYear: computeYearOverYear,
+        ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
+        effectiveClass: effectiveClass,
+        computeClassDistribution: computeClassDistribution,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         init: init
