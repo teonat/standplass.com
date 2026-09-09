@@ -235,6 +235,31 @@ var StandplassClubStats = (function () {
             + '</details></section>';
     }
 
+    // Shooter top-list of most top-3 placements. Podiums are NOT deduped:
+    // every top-3 result row counts in its own øvelse–klasse column
+    // (positions are class-relative facts of the result lists). Tied
+    // positions ("delt 2. plass") count for both shooters. Combo keys use
+    // the effective (post-remap) class so columns match Klassefordeling.
+    function computeTopThreeRanking(rows, clubName) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var shooters = {};
+        (rows || []).forEach(function (r) {
+            if (!r.club || StandplassStevnerPage.normalizeClub(r.club) !== target) { return; }
+            if (r.position == null) { return; }
+            var pos = Number(r.position);
+            if (isNaN(pos) || pos < 1 || pos > 3) { return; }
+            if (!r.personId) { return; }
+            var s = shooters[r.personId];
+            if (!s) { s = shooters[r.personId] = { personId: r.personId, name: r.name || 'Ukjent', total: 0, combos: {} }; }
+            if (r.name) { s.name = r.name; }
+            var key = (r.discipline || '–') + '|' + (effectiveClass(r) || '–');
+            s.combos[key] = (s.combos[key] || 0) + 1;
+            s.total++;
+        });
+        return Object.keys(shooters).map(function (pid) { return shooters[pid]; })
+            .sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name, 'no'); });
+    }
+
     // ── SVG line chart ─────────────────────────────────────────────────
 
     // Pure function: returns an SVG string. data: [{ year, shooters, starts }, ...].
@@ -1130,6 +1155,7 @@ var StandplassClubStats = (function () {
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
         renderClassDistributionHtml: renderClassDistributionHtml,
+        computeTopThreeRanking: computeTopThreeRanking,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         init: init

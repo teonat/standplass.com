@@ -352,4 +352,45 @@ var evilDist = CS.renderClassDistributionHtml([
 ]);
 assert.ok(evilDist.indexOf('&lt;img') >= 0 && evilDist.indexOf('<img') < 0, 'discipline string is escaped');
 
+// ── computeTopThreeRanking ────────────────────────────────────────────
+
+var topRows = [
+    // Alice: 2 in Finfelt A + 1 in Spesialpistol (dummy-A -> Åpen column)
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: true },
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true },
+    { personId: 'p1', name: 'Alice', club: 'K1', discipline: 'Spesialpistol', class: 'A', position: 3, applicableForClassification: true },
+    // Bob: podiums are NOT deduped — A podium + remapped-Åpen podium both count
+    { personId: 'p2', name: 'Bob', club: 'K1', discipline: 'Finfelt', class: 'A', position: 3, applicableForClassification: true },
+    { personId: 'p2', name: 'Bob', club: 'K1', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: false },
+    // Carol: 4th place — not a top-3
+    { personId: 'p3', name: 'Carol', club: 'K1', discipline: 'Finfelt', class: 'B', position: 4, applicableForClassification: true },
+    // Other club ignored
+    { personId: 'p9', name: 'X', club: 'K2', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: true }
+];
+
+var ranking = CS.computeTopThreeRanking(topRows, 'K1');
+assert.strictEqual(ranking.length, 2, 'only K1 shooters, only top-3');
+assert.strictEqual(ranking[0].name, 'Alice');
+assert.strictEqual(ranking[0].total, 3, 'Alice: 3 podiums');
+assert.strictEqual(ranking[0].combos['Finfelt|A'], 2, 'per-combo counts');
+assert.strictEqual(ranking[0].combos['Spesialpistol|Åpen'], 1, 'effective class names the combo');
+assert.strictEqual(ranking[1].total, 2, 'Bob: no dedup — both podiums count');
+assert.strictEqual(ranking[1].combos['Finfelt|Åpen'], 1, 'remapped podium lands in Åpen column');
+
+// Tied positions both count (delt 2. plass)
+var tieRanking = CS.computeTopThreeRanking([
+    { personId: 'd1', name: 'D1', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true },
+    { personId: 'd2', name: 'D2', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true }
+], 'K1');
+assert.strictEqual(tieRanking.length, 2, 'tied placement counts for both shooters');
+assert.strictEqual(tieRanking[0].total, 1);
+assert.strictEqual(tieRanking[1].total, 1);
+
+// Ties in total sort by name
+var sortRanking = CS.computeTopThreeRanking([
+    { personId: 'z', name: 'Zed', club: 'K1', discipline: 'Finfelt', class: 'A', position: 3, applicableForClassification: true },
+    { personId: 'a', name: 'Abe', club: 'K1', discipline: 'Grovfelt', class: 'B', position: 3, applicableForClassification: true }
+], 'K1');
+assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
+
 console.log('club-stats.test.js: all tests passed');
