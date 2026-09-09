@@ -213,7 +213,7 @@ var StandplassClubStats = (function () {
     // Pure HTML builder for the Klassefordeling card. The disclaimer's
     // øvelse list is generated from ALWAYS_OPEN_DISCIPLINES so text and
     // behavior cannot drift apart.
-    function renderClassDistributionHtml(dist) {
+    function renderClassDistributionHtml(dist, clubName) {
         if (!dist || !dist.length) { return ''; }
         var rowsHtml = dist.map(function (dc) {
             return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td>'
@@ -222,7 +222,7 @@ var StandplassClubStats = (function () {
         }).join('');
         var apenList = ALWAYS_OPEN_DISCIPLINES.map(function (d) { return esc(d); }).join(', ');
         return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
-            + '<table class="ranking-table" aria-label="Klassefordeling"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
+            + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
             + rowsHtml + '</tbody></table>'
             + '<details class="club-stats-note"><summary>Om klassene</summary>'
             + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
@@ -266,7 +266,7 @@ var StandplassClubStats = (function () {
     // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
     // .ranking-card-table-wrap (overflow-x: auto) — .ranking-card itself is
     // overflow: hidden and would silently clip columns.
-    function renderTopThreeHtml(ranking, year, opts) {
+    function renderTopThreeHtml(ranking, clubName, year, opts) {
         opts = opts || {};
         var showAllCombos = !!opts.showAllCombos;
         var showAllShooters = !!opts.showAllShooters;
@@ -301,7 +301,7 @@ var StandplassClubStats = (function () {
             : '';
         return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
             + '<div class="ranking-card-table-wrap">'
-            + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + '">'
+            + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + ' for ' + esc(clubName) + '">'
             + '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th>' + headers + '<th scope="col" class="ranking-score">Totalt</th></tr></thead>'
             + '<tbody>' + rowsHtml + '</tbody></table></div>'
             + comboToggle + rowToggle + '</section>';
@@ -568,6 +568,7 @@ var StandplassClubStats = (function () {
         var dataLoaded = false;
         var top3State = { showAllCombos: false, showAllShooters: false };
         var top3Ranking = [];
+        var top3Club = '';
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -1073,11 +1074,12 @@ var StandplassClubStats = (function () {
                 + '</tbody></table></section>'
                 : '';
 
-            var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved));
+            var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
 
             top3Ranking = computeTopThreeRanking(rows, resolved);
+            top3Club = resolved;
             top3State = { showAllCombos: false, showAllShooters: false };
-            var bestHtml = renderTopThreeHtml(top3Ranking, activeYear, top3State);
+            var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 
             var orgHtml = organizedComps.length
                 ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Arrangerte stevner</h2></div>'
@@ -1132,7 +1134,11 @@ var StandplassClubStats = (function () {
             if (btn.id === 'top3-combo-toggle') { top3State.showAllCombos = !top3State.showAllCombos; }
             else { top3State.showAllShooters = !top3State.showAllShooters; }
             var top3Section = contentEl.querySelector('[data-card="top3"]');
-            if (top3Section) { top3Section.outerHTML = renderTopThreeHtml(top3Ranking, activeYear, top3State); }
+            if (top3Section) {
+                top3Section.outerHTML = renderTopThreeHtml(top3Ranking, top3Club, activeYear, top3State);
+                var refocus = contentEl.querySelector('#' + btn.id);
+                if (refocus) { refocus.focus(); }
+            }
         });
 
         statusEl.textContent = 'Laster data…';

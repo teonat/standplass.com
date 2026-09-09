@@ -223,7 +223,7 @@ var StandplassStevnerPage = (function () {
     // not the paginated slice), so the numbers are stable while "Last flere"
     // loads more cards. X (deltakelser) is the sum of per-competition unique
     // shooters — person-stevne pairs, not people; Y is the deduplicated
-    // count. Rows without personId count in X and Z only.
+    // count. Rows without personId count in Z (startere) only.
     function overallStatsBar(cards, lastUpdated, idPrefix) {
         if (cards.length < 2) { return ''; }
         var totals = cards.reduce(function (acc, c) {
