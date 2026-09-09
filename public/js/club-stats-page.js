@@ -681,8 +681,8 @@ var StandplassClubStats = (function () {
                     'Flest aktive skyttere ' + activeYear)
                 + buildToplistTable('Flest starter', byStarts, 'totalStarts', 'starter',
                     'Flest starter ' + activeYear)
-                + buildToplistTable('Flest stevner', byCompetitions, 'competitionsAttended', 'stevner',
-                    'Flest stevner ' + activeYear)
+                + buildToplistTable('Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner',
+                    'Flest stevnedeltakelser ' + activeYear)
                 + buildToplistTable('Flest topp-3 plasseringer', byTopThree, 'topThree', 'plasseringer',
                     'Flest topp-3 plasseringer ' + activeYear)
                 + yoyHtml
@@ -730,7 +730,7 @@ var StandplassClubStats = (function () {
             var opts = { minShooters: 0, minStarts: 0 };
             if (title === 'Flest aktive skyttere') { return rankClubs(stats, 'uniqueShooters', opts); }
             if (title === 'Flest starter') { return rankClubs(stats, 'totalStarts', opts); }
-            if (title === 'Flest stevner') { return rankClubs(stats, 'competitionsAttended', opts); }
+            if (title === 'Flest stevnedeltakelser') { return rankClubs(stats, 'competitionsAttended', opts); }
             if (title === 'Flest topp-3 plasseringer') { return rankClubs(stats, 'topThree', opts); }
             if (title === 'Størst økning av skyttere') {
                 var prevStats = getStatsForYear(activeYear - 1, activeProgram);
@@ -745,7 +745,7 @@ var StandplassClubStats = (function () {
         function getValueKeyForTitle(title) {
             if (title === 'Flest aktive skyttere') { return 'uniqueShooters'; }
             if (title === 'Flest starter') { return 'totalStarts'; }
-            if (title === 'Flest stevner') { return 'competitionsAttended'; }
+            if (title === 'Flest stevnedeltakelser') { return 'competitionsAttended'; }
             if (title === 'Flest topp-3 plasseringer') { return 'topThree'; }
             if (title === 'Størst økning av skyttere') { return 'delta'; }
             if (title === 'Flest stevner arrangert') { return 'delta'; }
