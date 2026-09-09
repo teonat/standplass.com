@@ -44,6 +44,10 @@ var StandplassStevnerPage = (function () {
     // match the same club.
     function resolveKlubbParam(raw, clubNames) {
         var elements = StandplassFormat.decodeIdList(raw);
+        // A non-empty raw that decodes to zero elements (e.g. ",,,") must not
+        // widen the view: keep the raw verbatim so it matches nothing and the
+        // embed stays empty, like any other unmatched slug.
+        if (raw && !elements.length) { return { clubs: [String(raw)], hasUnmatched: true }; }
         var clubs = [];
         var hasUnmatched = false;
         function pushUnique(name) {
@@ -103,7 +107,6 @@ var StandplassStevnerPage = (function () {
         if (filters.activeTab === 'ikke' && row.applicableForClassification) { return false; }
         if (filters.activeDiscs.length && filters.activeDiscs.indexOf(row.discipline) < 0) { return false; }
         if (filters.activeClubs.length && filters.activeClubs.indexOf(row.club) < 0) { return false; }
-        if (filters.klubbUnmatched && !matchesClub(row.club, filters.klubb)) { return false; }
         if (filters.nameQuery && !(row.name && row.name.toLowerCase().indexOf(filters.nameQuery) >= 0)) { return false; }
         return true;
     }
@@ -159,7 +162,7 @@ var StandplassStevnerPage = (function () {
 
     function buildCompetitionCards(competitions, filters) {
         var withLowerQuery = { activeTab: filters.activeTab, activeDiscs: filters.activeDiscs, activeClubs: filters.activeClubs,
-            klubbUnmatched: filters.klubbUnmatched, klubb: filters.klubb, nameQuery: (filters.nameQuery || '').toLowerCase(),
+            nameQuery: (filters.nameQuery || '').toLowerCase(),
             activeOrganizers: filters.activeOrganizers || [], compQuery: (filters.compQuery || '').toLowerCase() };
         var cards = [];
         (competitions || []).forEach(function (comp) {
@@ -429,7 +432,7 @@ var StandplassStevnerPage = (function () {
 
         function currentFilters() {
             return { activeTab: activeTab, activeDiscs: activeDiscs, activeClubs: activeClubs,
-                klubbUnmatched: klubbUnmatched, klubb: klubb, nameQuery: nameQuery, groupMode: activeGroupMode,
+                nameQuery: nameQuery, groupMode: activeGroupMode,
                 activeOrganizers: activeOrganizers, compQuery: compQuery };
         }
 
@@ -465,6 +468,26 @@ var StandplassStevnerPage = (function () {
                     var resolved = resolveKlubbParam(klubb, Object.keys(masterClubs));
                     activeClubs = resolved.clubs;
                     klubbUnmatched = resolved.hasUnmatched;
+                }
+                // Re-resolve unmatched slug elements against this year's
+                // clubs: a deep-linked slug that matched nothing in one year
+                // can match in another. Exact club names pass through
+                // untouched; two elements can resolve to the same club, so
+                // the result is deduped preserving first occurrence.
+                if (klubbUnmatched) {
+                    var stillUnmatched = false;
+                    var reResolved = [];
+                    function pushUniqueClub(name) {
+                        if (reResolved.indexOf(name) < 0) { reResolved.push(name); }
+                    }
+                    activeClubs.forEach(function (el) {
+                        if (masterClubs[el]) { pushUniqueClub(el); return; }
+                        var matched = Object.keys(masterClubs).filter(function (c) { return matchesClub(c, el); });
+                        if (matched.length) { matched.forEach(pushUniqueClub); }
+                        else { pushUniqueClub(el); stillUnmatched = true; }
+                    });
+                    activeClubs = reResolved;
+                    klubbUnmatched = stillUnmatched;
                 }
                 discDropdown.rebuild();
                 clubCombo.rebuild();

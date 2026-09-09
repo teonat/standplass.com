@@ -46,7 +46,7 @@ var comps = [
         results: [{ personId: '2', name: 'Kari', club: 'Klubb B', discipline: 'Grovfelt', class: 'B', position: 1, score: 29, rankingScore: 92 }]
     }
 ];
-var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], klubbUnmatched: false, klubb: null, nameQuery: '', groupMode: 'klasse',
+var baseFilters = { activeTab: 'alle', activeDiscs: [], activeClubs: [], nameQuery: '', groupMode: 'klasse',
     activeOrganizers: [], compQuery: '' };
 
 var cards = SP.buildCompetitionCards(comps, baseFilters);
@@ -77,9 +77,9 @@ assert.strictEqual(ovelseMode[0].groups.length, 2, 'ovelse mode groups by discip
 
 assert.ok(cards[0].groups[0].rows[0].nameHtml.indexOf('data-discipline="') !== -1, 'nameHtml now carries the row discipline for Task 7');
 
-var byKlubbSlug = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { klubbUnmatched: true, klubb: 'a' }));
-assert.strictEqual(byKlubbSlug.length, 1, 'klubbUnmatched filter with slug "a" matches "Klubb A" and drops "Klubb B" competitions entirely');
-assert.strictEqual(byKlubbSlug[0].stats.startere, 2, 'c1 keeps only its 2 Klubb A rows when filtered by klub slug');
+// Mixed-value ?klubb= semantics are init-bound in the page (activeClubs is
+// exact-membership), so the keep-unmatched-alongside-matched guarantee is
+// asserted through resolveKlubbParam instead (r3 above).
 
 assert.strictEqual(SP.statsLine({ skyttere: 3, startere: 5, snitt: 27.4, median: 28 }),
     '3 skyttere · 5 starter · snitt 27,4 · median 28');
@@ -129,5 +129,7 @@ assert.deepStrictEqual(r4.clubs, ['Oslo Poltiselskap'], 'two slugs matching one 
 assert.strictEqual(r4.hasUnmatched, false, 'a fully deduped match is not unmatched');
 var r5 = SP.resolveKlubbParam('Aron%20Skytterklubb%2C%20Drammen', names);
 assert.deepStrictEqual(r5, { clubs: ['Aron Skytterklubb, Drammen'], hasUnmatched: false }, 'encoded comma survives as one element and resolves');
+assert.deepStrictEqual(SP.resolveKlubbParam(',,,', names), { clubs: [',,,'], hasUnmatched: true },
+    'degenerate raw decodes to zero elements but must never widen the view');
 
 console.log('stevner-page.test.js: all assertions passed');
