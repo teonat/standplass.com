@@ -131,5 +131,7 @@ var r5 = SP.resolveKlubbParam('Aron%20Skytterklubb%2C%20Drammen', names);
 assert.deepStrictEqual(r5, { clubs: ['Aron Skytterklubb, Drammen'], hasUnmatched: false }, 'encoded comma survives as one element and resolves');
 assert.deepStrictEqual(SP.resolveKlubbParam(',,,', names), { clubs: [',,,'], hasUnmatched: true },
     'degenerate raw decodes to zero elements but must never widen the view');
+assert.deepStrictEqual(SP.resolveKlubbParam('%20%20', names), { clubs: ['  '], hasUnmatched: true },
+    'whitespace-only slug normalizes to empty and must never widen the view');
 
 console.log('stevner-page.test.js: all assertions passed');

@@ -475,4 +475,21 @@ var evilTop3 = CS.renderTopThreeHtml(
 assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
 assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
 
+// ── empty ranking in a non-default mode keeps the card shell ──────────
+// (mode buttons and øvelser toggle must stay reachable in-card)
+var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false, showAllShooters: false });
+assert.ok(emptyP2Html.indexOf('data-card="top3"') >= 0, 'empty p2 mode keeps card shell');
+assert.ok(emptyP2Html.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'shell keeps current mode pressed');
+assert.ok(emptyP2Html.indexOf('data-mode="top3" aria-pressed="false"') >= 0, 'shell keeps other modes unpressed');
+assert.ok(emptyP2Html.indexOf('Vis øvelser') >= 0, 'shell keeps øvelser toggle');
+assert.ok(emptyP2Html.indexOf('ranking-status-msg') >= 0, 'empty-state uses status msg class');
+assert.ok(emptyP2Html.indexOf('Ingen 2. plasser for denne klubben i 2026.') >= 0, 'empty-state line names mode and year');
+var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false, showAllShooters: false });
+assert.ok(emptyP3Html.indexOf('Ingen 3. plasser for denne klubben i 2026.') >= 0, 'p3 empty-state names 3. plasser');
+assert.ok(emptyP3Html.indexOf('data-mode="p3" aria-pressed="true"') >= 0, 'p3 shell keeps mode pressed');
+// Initial render (default mode, øvelser hidden) with no data: no card at all
+assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + øvelser hidden -> no card');
+// øvelser toggle carries a stable id so the delegated handler can refocus it
+assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
+
 console.log('club-stats.test.js: all tests passed');

@@ -54,6 +54,14 @@ var StandplassStevnerPage = (function () {
             if (clubs.indexOf(name) < 0) { clubs.push(name); }
         }
         elements.forEach(function (el) {
+            if (!normalizeClub(el)) {
+                // An empty-normalizing slug (e.g. whitespace-only) substring-
+                // matches every club via indexOf('') — keep it verbatim, so
+                // the embed never silently widens to the national view.
+                pushUnique(el);
+                hasUnmatched = true;
+                return;
+            }
             var matched = clubNames.filter(function (name) { return matchesClub(name, el); });
             if (matched.length) {
                 matched.forEach(pushUnique);
@@ -481,7 +489,14 @@ var StandplassStevnerPage = (function () {
                         if (reResolved.indexOf(name) < 0) { reResolved.push(name); }
                     }
                     activeClubs.forEach(function (el) {
-                        if (masterClubs[el]) { pushUniqueClub(el); return; }
+                        if (!normalizeClub(el)) {
+                            // Empty-normalizing slug: substring-matches every
+                            // club via indexOf('') — keep verbatim, never widen.
+                            pushUniqueClub(el);
+                            stillUnmatched = true;
+                            return;
+                        }
+                        if (Object.prototype.hasOwnProperty.call(masterClubs, el)) { pushUniqueClub(el); return; }
                         var matched = Object.keys(masterClubs).filter(function (c) { return matchesClub(c, el); });
                         if (matched.length) { matched.forEach(pushUniqueClub); }
                         else { pushUniqueClub(el); stillUnmatched = true; }

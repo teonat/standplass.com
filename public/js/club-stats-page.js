@@ -277,6 +277,13 @@ var StandplassClubStats = (function () {
         return null;
     }
 
+    function top3ModeLabel(mode) {
+        if (mode === 'p1') { return '1. plasser'; }
+        if (mode === 'p2') { return '2. plasser'; }
+        if (mode === 'p3') { return '3. plasser'; }
+        return 'topp-3 plasseringer';
+    }
+
     var TOP3_ROW_PAGE = 10;
 
     // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
@@ -287,7 +294,12 @@ var StandplassClubStats = (function () {
         var mode = opts.mode || 'top3';
         var showOvelser = !!opts.showOvelser;
         var showAllShooters = !!opts.showAllShooters;
-        if (!ranking || !ranking.length) { return ''; }
+        var empty = !ranking || !ranking.length;
+        // Initial render only: no ranking in the default view means the card
+        // has never shown anything — omit it entirely. In every other empty
+        // state the shell MUST stay so the mode buttons and øvelser toggle
+        // remain reachable in-card.
+        if (empty && mode === 'top3' && !showOvelser) { return ''; }
         var MODES = [
             { key: 'top3', label: 'Topp-3' },
             { key: 'p1', label: '1. plass' },
@@ -299,8 +311,14 @@ var StandplassClubStats = (function () {
                 return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
                     + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
             }).join('')
-            + '<button type="button" class="top3-mode-btn top3-ovelser-btn" aria-pressed="' + (showOvelser ? 'true' : 'false') + '">'
+            + '<button type="button" class="top3-mode-btn top3-ovelser-btn" id="top3-ovelser-btn" aria-pressed="' + (showOvelser ? 'true' : 'false') + '">'
             + (showOvelser ? 'Skjul øvelser' : 'Vis øvelser') + '</button></div>';
+        if (empty) {
+            return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
+                + modeHtml
+                + '<p class="ranking-status-msg">Ingen ' + esc(top3ModeLabel(mode)) + ' for denne klubben i ' + esc(String(year)) + '.</p>'
+                + '</section>';
+        }
         var comboTotals = {};
         ranking.forEach(function (s) {
             Object.keys(s.combos).forEach(function (k) { comboTotals[k] = (comboTotals[k] || 0) + s.combos[k]; });
@@ -1174,9 +1192,11 @@ var StandplassClubStats = (function () {
                 top3Section.outerHTML = renderTopThreeHtml(
                     computeTopThreeRanking(top3Rows, top3Club, modePosition(top3State.mode)),
                     top3Club, activeYear, top3State);
-                var refocus = btn.id
-                    ? contentEl.querySelector('#' + btn.id)
-                    : contentEl.querySelector('.top3-mode [aria-pressed="true"]');
+                var refocus = btn.classList.contains('top3-ovelser-btn')
+                    ? contentEl.querySelector('#top3-ovelser-btn')
+                    : (btn.id
+                        ? contentEl.querySelector('#' + btn.id)
+                        : contentEl.querySelector('.top3-mode [aria-pressed="true"]'));
                 if (refocus) { refocus.focus(); }
             }
         });
