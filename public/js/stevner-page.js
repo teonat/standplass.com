@@ -35,6 +35,32 @@ var StandplassStevnerPage = (function () {
         return normalizeClub(rowClub).indexOf(normalizeClub(slug)) !== -1;
     }
 
+    // Resolves a (possibly comma-joined, per-element-encoded) ?klubb= value
+    // against the known club names. Matched elements become club-name
+    // selections; unmatched elements are KEPT verbatim in the result so an
+    // embed URL never silently widens to an unfiltered view. Comma-containing
+    // values survive as one element because decodeIdList splits before decode.
+    // Duplicate names are dropped preserving first occurrence — two slugs can
+    // match the same club.
+    function resolveKlubbParam(raw, clubNames) {
+        var elements = StandplassFormat.decodeIdList(raw);
+        var clubs = [];
+        var hasUnmatched = false;
+        function pushUnique(name) {
+            if (clubs.indexOf(name) < 0) { clubs.push(name); }
+        }
+        elements.forEach(function (el) {
+            var matched = clubNames.filter(function (name) { return matchesClub(name, el); });
+            if (matched.length) {
+                matched.forEach(pushUnique);
+            } else {
+                pushUnique(el);
+                hasUnmatched = true;
+            }
+        });
+        return { clubs: clubs, hasUnmatched: hasUnmatched };
+    }
+
     function decorateRow(comp, r) {
         return {
             position: r.position,
@@ -334,9 +360,10 @@ var StandplassStevnerPage = (function () {
         var currentCompetitions = [];               // raw competitions of activeYear, feeds card pagination
         var visibleCards = [];                      // after filters, built into cards
         var lastUpdated = null;                     // yearData.lastUpdated, for the overall stats bar
-        // ?klubb= is a slug; it is resolved against real club names once data is
-        // loaded so it shows as a removable chip. If it matches nothing we keep
-        // filtering by the slug, so an embed never silently widens to a
+        // ?klubb= is a comma-joined, per-element-encoded list of slugs; each
+        // element is resolved against real club names once data is loaded so
+        // it shows as a removable chip. Elements that match nothing are kept
+        // verbatim in the filter set, so an embed never silently widens to a
         // national list.
         var klubbResolved = false;
         var klubbUnmatched = false;
@@ -432,10 +459,12 @@ var StandplassStevnerPage = (function () {
                 });
                 if (klubb && !klubbResolved) {
                     klubbResolved = true;
-                    activeClubs = Object.keys(masterClubs).filter(function (c) {
-                        return matchesClub(c, klubb);
-                    });
-                    klubbUnmatched = activeClubs.length === 0;
+                    // klubb is passed exactly as read from the URL params —
+                    // resolveKlubbParam decodes each comma-joined element
+                    // itself, so it must not be pre-decoded here.
+                    var resolved = resolveKlubbParam(klubb, Object.keys(masterClubs));
+                    activeClubs = resolved.clubs;
+                    klubbUnmatched = resolved.hasUnmatched;
                 }
                 discDropdown.rebuild();
                 clubCombo.rebuild();
@@ -498,7 +527,9 @@ var StandplassStevnerPage = (function () {
         // builds its snippet from the current query string (its ALLOWED_PARAMS
         // whitelist is klubb/club/mode) — without this, "Opprett iframe" would
         // hand a club admin an unfiltered national embed. ?klubb= is
-        // single-valued, so 0 or 2+ chips means no param. tab/group/disc/name/
+        // comma-joined multi-value (per-element encoded, like organizer/disc),
+        // so N chips become N comma-joined elements and a multi-klubb embed
+        // filters to any of the selected clubs. tab/group/disc/name/
         // organizer/comp are URL-synced too, via setUrlParam below.
         function setUrlParam(key, value) {
             var qs = new URLSearchParams(urlState.getSearch());
@@ -511,7 +542,7 @@ var StandplassStevnerPage = (function () {
             // no club, otherwise the stale slug filter would keep applying on
             // top of the new selection.
             klubbUnmatched = false;
-            setUrlParam('klubb', activeClubs.length === 1 ? activeClubs[0] : null);
+            setUrlParam('klubb', activeClubs.length ? StandplassFormat.encodeIdList(activeClubs) : null);
         }
 
         var clubCombo = FW.makeTagComboHandlers({
@@ -912,7 +943,8 @@ var StandplassStevnerPage = (function () {
         personModal.openFromUrl();
     }
 
-    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
+    return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, resolveKlubbParam: resolveKlubbParam,
+        flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,

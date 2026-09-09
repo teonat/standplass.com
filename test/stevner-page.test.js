@@ -1,5 +1,8 @@
 'use strict';
 var assert = require('node:assert');
+// resolveKlubbParam decodes ?klubb= via StandplassFormat.decodeIdList, a
+// browser global -- shim it here the same way comp-modal.test.js does.
+global.StandplassFormat = require('../public/js/format.js');
 var SP = require('../public/js/stevner-page.js');
 var PM = require('../public/js/person-modal.js');
 
@@ -106,5 +109,25 @@ assert.strictEqual(SP.countUniqueShooters([{ personId: 'p1' }, { personId: 'p2' 
     2, 'distinct personIds counted once');
 assert.strictEqual(SP.countUniqueShooters([{ name: 'A' }, { personId: null }]),
     0, 'rows without personId are not counted');
+
+// ── resolveKlubbParam ──────────────────────────────────────────────────
+// matchesClub is a normalized substring match — use realistic names.
+var names = ['Kongsvinger Sportsskyttere', 'Oslo Poltiselskap', 'Aron Skytterklubb, Drammen'];
+var r1 = SP.resolveKlubbParam('kongsvinger', names);
+assert.deepStrictEqual(r1, { clubs: ['Kongsvinger Sportsskyttere'], hasUnmatched: false }, 'single slug resolves');
+var r2 = SP.resolveKlubbParam('kongsvinger,oslo', names);
+assert.strictEqual(r2.clubs.length, 2, 'two slugs resolve to two clubs');
+assert.ok(r2.clubs.indexOf('Kongsvinger Sportsskyttere') >= 0 && r2.clubs.indexOf('Oslo Poltiselskap') >= 0, 'both matched');
+assert.strictEqual(r2.hasUnmatched, false, 'no unmatched when both match');
+var r3 = SP.resolveKlubbParam('kongsvinger,nosuchclub', names);
+assert.strictEqual(r3.clubs.length, 2, 'unmatched element kept, never widen');
+assert.ok(r3.clubs.indexOf('nosuchclub') >= 0, 'unmatched slug present verbatim');
+assert.strictEqual(r3.hasUnmatched, true, 'unmatched flagged');
+assert.deepStrictEqual(SP.resolveKlubbParam('', names), { clubs: [], hasUnmatched: false }, 'empty raw -> empty');
+var r4 = SP.resolveKlubbParam('oslo,poltiselskap', names);
+assert.deepStrictEqual(r4.clubs, ['Oslo Poltiselskap'], 'two slugs matching one club dedupe, first occurrence wins');
+assert.strictEqual(r4.hasUnmatched, false, 'a fully deduped match is not unmatched');
+var r5 = SP.resolveKlubbParam('Aron%20Skytterklubb%2C%20Drammen', names);
+assert.deepStrictEqual(r5, { clubs: ['Aron Skytterklubb, Drammen'], hasUnmatched: false }, 'encoded comma survives as one element and resolves');
 
 console.log('stevner-page.test.js: all assertions passed');
