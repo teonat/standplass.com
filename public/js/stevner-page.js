@@ -300,11 +300,11 @@ var StandplassStevnerPage = (function () {
         var groupParam = params.get('group');
         if (groupParam && COMPARATORS[groupParam]) { activeGroupMode = groupParam; }
         var discParam = params.get('disc');
-        if (discParam) { activeDiscs = [discParam]; }
+        if (discParam) { activeDiscs = StandplassFormat.decodeIdList(discParam); }
         var nameParamInit = params.get('name');
         if (nameParamInit) { nameQuery = nameParamInit; }
         var organizerParam = params.get('organizer');
-        if (organizerParam) { activeOrganizers = [organizerParam]; }
+        if (organizerParam) { activeOrganizers = StandplassFormat.decodeIdList(organizerParam); }
         var compParam = params.get('comp');
         if (compParam) { compQuery = compParam; }
         var masterClubs = {};                      // accumulates across loaded years (stevner.js:353-373)
@@ -462,7 +462,7 @@ var StandplassStevnerPage = (function () {
                     activeDiscs = activeDiscs.filter(function (x) { return x !== id_; });
                 }
                 discDropdown.rebuild();
-                setUrlParam('disc', activeDiscs.length === 1 ? activeDiscs[0] : null);
+                setUrlParam('disc', activeDiscs.length ? StandplassFormat.encodeIdList(activeDiscs) : null);
                 applyFilters();
             },
             onClearAll: function () {
@@ -532,7 +532,7 @@ var StandplassStevnerPage = (function () {
 
         // ── Organizer combo (competition-level filter, mirrors clubCombo) ─
         function syncOrganizerParam() {
-            setUrlParam('organizer', activeOrganizers.length === 1 ? activeOrganizers[0] : null);
+            setUrlParam('organizer', activeOrganizers.length ? StandplassFormat.encodeIdList(activeOrganizers) : null);
         }
 
         var organizerCombo = FW.makeTagComboHandlers({

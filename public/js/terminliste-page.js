@@ -47,9 +47,10 @@ var StandplassTerminlistePage = (function () {
     // array params and this page's own multi-value URL params -- url-state.js
     // itself needs no changes (every tracked param is already an opaque
     // string; see this plan's "Corrections to the approved spec"), this is
-    // just the page-local encode/decode terminliste needs that no other
-    // view has needed yet, since felt/bane's own multi-select filters
-    // choose not to URL-sync past a single selection.
+    // just the page-local encode/decode terminliste needs (felt/bane now
+    // round-trip their multi-select organizer/disc filters through the same
+    // encode/decode pattern -- comma-joined, per-element encoded -- via
+    // format.js's StandplassFormat helpers).
     function encodeIdList(ids) { return (ids || []).map(encodeURIComponent).join(','); }
     function decodeIdList(param) {
         if (!param) { return []; }
