@@ -1093,21 +1093,28 @@ var StandplassClubStats = (function () {
                 : '';
 
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
-
-            // Focus management for screen readers
-            var mainEl = id('-root') || id('-title');
-            if (mainEl && mainEl.focus) { mainEl.focus(); }
         }
 
         // ── Main render ────────────────────────────────────────────────
 
+        var lastView = null;
+
         function render() {
             statusEl.textContent = '';
+            var view = klubbParam || null;
+            var viewChanged = view !== lastView;
+            lastView = view;
             if (klubbParam) {
                 renderDrilldown(klubbParam);
             } else {
                 document.title = 'Klubbstatistikk – standplass.com';
                 renderToplists();
+            }
+            if (viewChanged) {
+                var mainEl = id('-root') || id('-title');
+                if (mainEl && mainEl.focus) { mainEl.focus(); }
+            } else {
+                statusEl.textContent = 'Viser statistikk for ' + activeYear + ' (' + activeProgram + ').';
             }
         }
 
