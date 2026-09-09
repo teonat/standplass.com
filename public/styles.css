@@ -124,6 +124,13 @@ h1, h2, h3 {
   align-items: center;
   gap: 0.25rem;
 }
+/* Below ~720px the header's min-content width exceeds the viewport; let
+   the ribbon stack instead of overflowing the page (nowrap above keeps
+   each label on one line). */
+@media (max-width: 720px) {
+  .site-header-inner { flex-wrap: wrap; row-gap: 0.25rem; }
+  .site-header-inner nav { flex-wrap: wrap; row-gap: 0.25rem; }
+}
 .nav-dropdown { position: relative; }
 .nav-dropdown-btn {
   background: none;
@@ -133,6 +140,7 @@ h1, h2, h3 {
   font-size: 0.9375rem;
   cursor: pointer;
   padding: 0.4rem 0.6rem;
+  white-space: nowrap;
 }
 .nav-dropdown-btn:hover { color: var(--brand-accent); }
 /* Plain nav item (Terminliste) alongside the dropdowns -- one page, no
