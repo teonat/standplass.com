@@ -100,4 +100,11 @@ assert.strictEqual(byTitle[0].id, 'c2');
 var noMatch = SP.buildCompetitionCards(comps, Object.assign({}, baseFilters, { compQuery: 'nonexistent' }));
 assert.strictEqual(noMatch.length, 0);
 
+// ── countUniqueShooters ────────────────────────────────────────────────
+assert.strictEqual(SP.countUniqueShooters([]), 0, 'no rows -> 0');
+assert.strictEqual(SP.countUniqueShooters([{ personId: 'p1' }, { personId: 'p2' }, { personId: 'p1' }]),
+    2, 'distinct personIds counted once');
+assert.strictEqual(SP.countUniqueShooters([{ name: 'A' }, { personId: null }]),
+    0, 'rows without personId are not counted');
+
 console.log('stevner-page.test.js: all assertions passed');

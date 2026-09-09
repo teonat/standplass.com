@@ -94,6 +94,14 @@ var StandplassStevnerPage = (function () {
         return { skyttere: Object.keys(byPerson).length, startere: rows.length, snitt: snitt, median: median };
     }
 
+    // Distinct shooters across a row set. Rows without personId can only
+    // ever count in raw sums, never here.
+    function countUniqueShooters(rows) {
+        var seen = {};
+        (rows || []).forEach(function (r) { if (r.personId) { seen[r.personId] = true; } });
+        return Object.keys(seen).length;
+    }
+
     // Mirrors resultatliste-stevner.js:794-850: 'klasse' groups by
     // discipline+class; any other mode groups by discipline only (its row
     // order within the group still comes from COMPARATORS[groupMode]).
@@ -211,13 +219,25 @@ var StandplassStevnerPage = (function () {
             + ' kl. ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
     }
 
+    // Bar reflects the FULL filtered set (caller passes all filtered cards,
+    // not the paginated slice), so the numbers are stable while "Last flere"
+    // loads more cards. X (deltakelser) is the sum of per-competition unique
+    // shooters — person-stevne pairs, not people; Y is the deduplicated
+    // count. Rows without personId count in X and Z only.
     function overallStatsBar(cards, lastUpdated, idPrefix) {
         if (cards.length < 2) { return ''; }
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
-        return '<div class="stevner-overall-stats"><span>' + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
-            + totals.skyttere + ' skytter' + (totals.skyttere !== 1 ? 'e' : '') + ' · '
+        var allRows = [];
+        cards.forEach(function (c) {
+            (c.groups || []).forEach(function (g) { allRows = allRows.concat(g.rows); });
+        });
+        var unike = countUniqueShooters(allRows);
+        return '<div class="stevner-overall-stats"><span>'
+            + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
+            + totals.skyttere + ' deltakelse' + (totals.skyttere !== 1 ? 'r' : '') + ' · '
+            + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
             + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
             + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
             + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
@@ -339,7 +359,7 @@ var StandplassStevnerPage = (function () {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
-                rowsEl.innerHTML = overallStatsBar(pagination.state.items, lastUpdated, config.idPrefix)
+                rowsEl.innerHTML = overallStatsBar(visibleCards, lastUpdated, config.idPrefix)
                     + pagination.state.items.map(function (card) {
                         return renderCard(card, activeTab === 'alle');
                     }).join('');
@@ -895,7 +915,7 @@ var StandplassStevnerPage = (function () {
     return { init: init, normalizeClub: normalizeClub, matchesClub: matchesClub, flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
-        competitionStats: competitionStats, columns: columns,
+        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,
         statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 
