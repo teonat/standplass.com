@@ -1457,6 +1457,8 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   line-height: 1.5;
 }
 
+.club-stats-note summary { cursor: pointer; }
+
 .club-stats-back {
   display: inline-block;
   font-size: 0.875rem;

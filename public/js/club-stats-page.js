@@ -210,6 +210,31 @@ var StandplassClubStats = (function () {
         return out;
     }
 
+    // Pure HTML builder for the Klassefordeling card. The disclaimer's
+    // øvelse list is generated from ALWAYS_OPEN_DISCIPLINES so text and
+    // behavior cannot drift apart.
+    function renderClassDistributionHtml(dist) {
+        if (!dist || !dist.length) { return ''; }
+        var rowsHtml = dist.map(function (dc) {
+            return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td>'
+                + '<td class="ranking-score">' + dc.shooters + '</td>'
+                + '<td class="ranking-score">' + dc.starts + '</td></tr>';
+        }).join('');
+        var apenList = ALWAYS_OPEN_DISCIPLINES.map(function (d) { return esc(d); }).join(', ');
+        return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
+            + '<table class="ranking-table" aria-label="Klassefordeling"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
+            + rowsHtml + '</tbody></table>'
+            + '<details class="club-stats-note"><summary>Om klassene</summary>'
+            + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
+            + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
+            + apenList + ', vises klassene A–D som «Åpen». Skyttere telles én gang per øvelse, '
+            + 'i klassen med flest starter (laveste klasse ved likt); deltakelse uten ferdighetsklasse '
+            + 'telles i tillegg som «Åpen». Alders- og kjønnsklasser vises som egne rader. '
+            + 'Klasseringen føres per øvelse, og kildedata kan inneholde registreringsfeil — '
+            + 'fordelingen er et beste-estimat.</p>'
+            + '</details></section>';
+    }
+
     // ── SVG line chart ─────────────────────────────────────────────────
 
     // Pure function: returns an SVG string. data: [{ year, shooters, starts }, ...].
@@ -910,21 +935,6 @@ var StandplassClubStats = (function () {
             });
             var discRows = Object.keys(discData).sort(function (a, b) { return discData[b].starts - discData[a].starts; });
 
-            // Øvelse+klasse-fordeling — track starts AND unique shooters per discipline+class combo.
-            // Reclassify: class "A" in non-klasseførende stevner is actually "Åpen" (clubs use A loosely).
-            var discClassData = {};
-            rows.forEach(function (r) {
-                if (StandplassStevnerPage.normalizeClub(r.club) !== StandplassStevnerPage.normalizeClub(resolved)) { return; }
-                if (!r.discipline || !r.class) { return; }
-                var effectiveClass = r.class;
-                if (effectiveClass === 'A' && !r.applicableForClassification) { effectiveClass = 'Åpen'; }
-                var key = r.discipline + ' – ' + effectiveClass;
-                if (!discClassData[key]) { discClassData[key] = { discipline: r.discipline, class: effectiveClass, starts: 0, shooters: {} }; }
-                discClassData[key].starts++;
-                if (r.personId) { discClassData[key].shooters[r.personId] = true; }
-            });
-            var discClassRows = Object.keys(discClassData).sort(function (a, b) { return discClassData[b].starts - discClassData[a].starts; });
-
             // Beste plasseringer — only top 3 (position 1-3), sort by class priority then position
             var TOP3_LIMIT = 10;
             var allTop3 = rows
@@ -1021,18 +1031,7 @@ var StandplassClubStats = (function () {
                 + '</tbody></table></section>'
                 : '';
 
-            var classHtml = discClassRows.length
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
-                + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(resolved) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
-                + discClassRows.map(function (key) {
-                    var dc = discClassData[key];
-                    return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td><td class="ranking-score">' + Object.keys(dc.shooters).length + '</td><td class="ranking-score">' + dc.starts + '</td></tr>';
-                }).join('')
-                + '</tbody></table>'
-                + '<p class="club-stats-note">Klasse «A» i ikke-klasseførende stevner er vist som «Åpen», '
-                + 'siden dette i praksis er åpen klasse.</p>'
-                + '</section>'
-                : '';
+            var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved));
 
             var bestResults = allTop3.slice(0, TOP3_LIMIT);
             var bestHtml = bestResults.length
@@ -1130,6 +1129,7 @@ var StandplassClubStats = (function () {
         ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
+        renderClassDistributionHtml: renderClassDistributionHtml,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         init: init

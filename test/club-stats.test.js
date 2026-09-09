@@ -335,4 +335,21 @@ assert.strictEqual(CS.effectiveClass({ class: 'C', applicableForClassification: 
 assert.strictEqual(CS.effectiveClass({ class: 'Veteran 65', applicableForClassification: false, discipline: 'Finfelt' }), 'Veteran 65');
 assert.strictEqual(CS.effectiveClass({ class: 'Åpen2', applicableForClassification: true, discipline: 'Revolverfelt-Rødpunkt' }), 'Åpen2');
 
+// ── renderClassDistributionHtml ───────────────────────────────────────
+
+var distHtml = CS.renderClassDistributionHtml([
+    { discipline: 'Finfelt', class: 'A', shooters: 2, starts: 5 },
+    { discipline: 'Finfelt', class: 'Åpen', shooters: 1, starts: 3 }
+]);
+assert.ok(distHtml.indexOf('Klassefordeling') >= 0, 'card title present');
+assert.ok(distHtml.indexOf('<details') >= 0 && distHtml.indexOf('årsskiftet') >= 0, 'disclaimer as details, year-free');
+assert.ok(distHtml.indexOf('Spesialpistol') >= 0 && distHtml.indexOf('T96 fin') >= 0, 'øvelse list generated from constant');
+assert.ok(distHtml.indexOf('2026') < 0, 'no edition year in UI text');
+assert.strictEqual(CS.renderClassDistributionHtml([]), '', 'empty distribution -> no card');
+
+var evilDist = CS.renderClassDistributionHtml([
+    { discipline: '<img src=x onerror=alert(1)>', class: 'A', shooters: 1, starts: 1 }
+]);
+assert.ok(evilDist.indexOf('&lt;img') >= 0 && evilDist.indexOf('<img') < 0, 'discipline string is escaped');
+
 console.log('club-stats.test.js: all tests passed');
