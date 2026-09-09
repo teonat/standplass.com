@@ -151,13 +151,16 @@ var StandplassClubStats = (function () {
     }
 
     // Per-øvelse class distribution for one club.
-    // - A–D rows: shooter counts ONCE per øvelse, in their modal class
-    //   (most starts; tie-break lowest: D < C < B < A).
+    // - A–D rows: emitted only for classes where ≥1 shooter's modal class
+    //   (most starts; tie-break lowest: D < C < B < A) equals that class.
+    //   A shooter counts ONLY in their modal class — their skill-class
+    //   starts are attributed to that class too, and a class whose
+    //   shooters were all deduped elsewhere is not displayed at all.
     // - "Åpen" counts additively: any shooter with Åpen participation
     //   (literal Åpen, remapped A–D) counts once more in Åpen.
     // - All other class values (age/gender, Åpen2, …) pass through with
     //   their own unique-shooter counts.
-    // - Starts are raw row counts everywhere; rows without a class value
+    // - Pass-through rows use raw row counts; rows without a class value
     //   are skipped (unchanged behavior).
     function computeClassDistribution(rows, clubName) {
         var target = StandplassStevnerPage.normalizeClub(clubName);
@@ -194,11 +197,14 @@ var StandplassClubStats = (function () {
                 if (best) { modal[pid] = best; }
             });
             SKILL_CLASSES.forEach(function (cls) {
-                var cell = d[cls];
-                if (!cell) { return; }
-                var count = 0;
-                Object.keys(cell.shooters).forEach(function (pid) { if (modal[pid] === cls) { count++; } });
-                out.push({ discipline: disc, class: cls, shooters: count, starts: cell.starts });
+                var pids = Object.keys(byClass).filter(function (pid) { return modal[pid] === cls; });
+                if (!pids.length) { return; }
+                var starts = 0;
+                pids.forEach(function (pid) {
+                    var sc = byClass[pid];
+                    Object.keys(sc).forEach(function (c) { starts += sc[c]; });
+                });
+                out.push({ discipline: disc, class: cls, shooters: pids.length, starts: starts });
             });
             Object.keys(d).forEach(function (cls) {
                 if (SKILL_CLASSES.indexOf(cls) >= 0) { return; }
@@ -228,8 +234,9 @@ var StandplassClubStats = (function () {
             + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
             + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
             + apenList + ', vises klassene A–D som «Åpen». Skyttere telles én gang per øvelse, '
-            + 'i klassen med flest starter (laveste klasse ved likt); deltakelse uten ferdighetsklasse '
-            + 'telles i tillegg som «Åpen». Alders- og kjønnsklasser vises som egne rader. '
+            + 'i klassen med flest starter (laveste klasse ved likt) — starter deres føres til '
+            + 'samme klasse, og klasser uten tildelte skyttere vises ikke; deltakelse uten '
+            + 'ferdighetsklasse telles i tillegg som «Åpen». Alders- og kjønnsklasser vises som egne rader. '
             + 'Klasseringen føres per øvelse, og kildedata kan inneholde registreringsfeil — '
             + 'fordelingen er et beste-estimat.</p>'
             + '</details></section>';

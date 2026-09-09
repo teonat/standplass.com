@@ -295,23 +295,22 @@ function distCell(disc, cls) {
 }
 
 // Finfelt: g1 has 2 klasseførende A starts (modal A); m1 has 3 B + 1 C (modal B);
-// m1's spurious C row keeps its start but loses the shooter to B.
+// m1's starts are all attributed to his modal class B, and C (no modal
+// shooters left) is not displayed at all.
 assert.strictEqual(distCell('Finfelt', 'A').shooters, 1, 'Finfelt A: g1 (modal)');
-assert.strictEqual(distCell('Finfelt', 'A').starts, 2, 'Finfelt A: raw starts (g1 only)');
+assert.strictEqual(distCell('Finfelt', 'A').starts, 2, 'Finfelt A: g1 skill-class starts');
 assert.strictEqual(distCell('Finfelt', 'B').shooters, 1, 'Finfelt B: m1 modal B (3 > 1)');
-assert.strictEqual(distCell('Finfelt', 'B').starts, 3, 'Finfelt B: raw starts kept');
-assert.strictEqual(distCell('Finfelt', 'C').shooters, 0, 'Finfelt C: m1 counted in B, not C');
-assert.strictEqual(distCell('Finfelt', 'C').starts, 1, 'Finfelt C: raw starts kept');
+assert.strictEqual(distCell('Finfelt', 'B').starts, 4, 'Finfelt B: m1 starts attributed to modal (3 B + 1 C)');
+assert.strictEqual(distCell('Finfelt', 'C'), null, 'Finfelt C: no modal shooters, no row');
 assert.strictEqual(distCell('Finfelt', 'Åpen').shooters, 1, 'Finfelt Åpen: g1 additive (remapped starts)');
 assert.strictEqual(distCell('Finfelt', 'Åpen').starts, 3, 'Finfelt Åpen: remapped starts raw');
 assert.strictEqual(distCell('Finfelt', 'Veteran 55').shooters, 1, 'age class passes through at ikke-klasseførende');
 assert.strictEqual(distCell('Finfelt', 'Veteran 55').starts, 1, 'age class starts raw');
 
-// Grovfelt tie: lowest (C) wins -> B row has 0 shooters, 1 start
-assert.strictEqual(distCell('Grovfelt', 'B').shooters, 0, 'Grovfelt B: tie lost to lowest');
-assert.strictEqual(distCell('Grovfelt', 'B').starts, 1, 'Grovfelt B: raw starts kept');
+// Grovfelt tie: lowest (C) wins -> C gets both starts attributed, B row gone
+assert.strictEqual(distCell('Grovfelt', 'B'), null, 'Grovfelt B: no modal shooters, no row');
 assert.strictEqual(distCell('Grovfelt', 'C').shooters, 1, 'Grovfelt C: tie-break lowest wins');
-assert.strictEqual(distCell('Grovfelt', 'C').starts, 1, 'Grovfelt C: raw starts kept');
+assert.strictEqual(distCell('Grovfelt', 'C').starts, 2, 'Grovfelt C: both starts attributed to modal');
 
 // Always-open øvelser: no A row survives
 assert.strictEqual(distCell('Spesialpistol', 'A'), null, 'Spesialpistol dummy-A remapped');
@@ -319,8 +318,8 @@ assert.strictEqual(distCell('Spesialpistol', 'Åpen').shooters, 1, 'Spesialpisto
 assert.strictEqual(distCell('T96 fin', 'A'), null, 'T96 fin dummy-A remapped');
 assert.strictEqual(distCell('T96 fin', 'Åpen').shooters, 1, 'T96 fin Åpen');
 
-// Other club and empty-class rows excluded (x1 filtered out -> Finfelt C
-// stays at 0 shooters from the assertion above; x2 skipped entirely)
+// Other club and empty-class rows excluded (x1 is another club -> no
+// Finfelt C row at all, asserted above; x2 skipped entirely)
 assert.ok(!dist.some(function (d) { return d.starts === 0; }), 'empty-class row skipped entirely');
 
 // Sorted by starts desc
@@ -344,6 +343,7 @@ var distHtml = CS.renderClassDistributionHtml([
 assert.ok(distHtml.indexOf('Klassefordeling') >= 0, 'card title present');
 assert.ok(distHtml.indexOf('aria-label="Klassefordeling for Odda PK"') >= 0, 'table aria-label names club');
 assert.ok(distHtml.indexOf('<details') >= 0 && distHtml.indexOf('årsskiftet') >= 0, 'disclaimer as details, year-free');
+assert.ok(distHtml.indexOf('starter deres føres til samme klasse, og klasser uten tildelte skyttere vises ikke') >= 0, 'disclaimer notes starts follow modal class and empty classes are hidden');
 assert.ok(distHtml.indexOf('Spesialpistol') >= 0 && distHtml.indexOf('T96 fin') >= 0, 'øvelse list generated from constant');
 assert.ok(distHtml.indexOf('2026') < 0, 'no edition year in UI text');
 assert.strictEqual(CS.renderClassDistributionHtml([], 'X'), '', 'empty distribution -> no card');
