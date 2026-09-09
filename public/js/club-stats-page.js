@@ -260,6 +260,53 @@ var StandplassClubStats = (function () {
             .sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name, 'no'); });
     }
 
+    var TOP3_COMBO_CAP = 12;
+    var TOP3_ROW_PAGE = 10;
+
+    // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
+    // .ranking-card-table-wrap (overflow-x: auto) — .ranking-card itself is
+    // overflow: hidden and would silently clip columns.
+    function renderTopThreeHtml(ranking, year, opts) {
+        opts = opts || {};
+        var showAllCombos = !!opts.showAllCombos;
+        var showAllShooters = !!opts.showAllShooters;
+        if (!ranking || !ranking.length) { return ''; }
+        var comboTotals = {};
+        ranking.forEach(function (s) {
+            Object.keys(s.combos).forEach(function (k) { comboTotals[k] = (comboTotals[k] || 0) + s.combos[k]; });
+        });
+        var comboOrder = Object.keys(comboTotals)
+            .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
+        var visibleCombos = showAllCombos ? comboOrder : comboOrder.slice(0, TOP3_COMBO_CAP);
+        var visibleShooters = showAllShooters ? ranking : ranking.slice(0, TOP3_ROW_PAGE);
+        var headers = visibleCombos.map(function (k) {
+            var parts = k.split('|');
+            return '<th scope="col" class="ranking-score">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
+        }).join('');
+        var rowsHtml = visibleShooters.map(function (s, i) {
+            var cells = visibleCombos.map(function (k) {
+                return '<td class="ranking-score">' + (s.combos[k] || '') + '</td>';
+            }).join('');
+            return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'
+                + '<th scope="row">' + esc(s.name) + '</th>' + cells
+                + '<td class="ranking-score">' + s.total + '</td></tr>';
+        }).join('');
+        var comboToggle = comboOrder.length > TOP3_COMBO_CAP
+            ? '<button type="button" class="ranking-toggle" id="top3-combo-toggle" aria-expanded="' + (showAllCombos ? 'true' : 'false') + '" aria-controls="top3-table">'
+                + (showAllCombos ? 'Vis færre øvelser' : 'Vis alle øvelser (' + comboOrder.length + ')') + '</button>'
+            : '';
+        var rowToggle = ranking.length > TOP3_ROW_PAGE
+            ? '<button type="button" class="ranking-toggle" id="top3-row-toggle" aria-expanded="' + (showAllShooters ? 'true' : 'false') + '" aria-controls="top3-table">'
+                + (showAllShooters ? 'Vis færre' : 'Vis alle (' + ranking.length + ')') + '</button>'
+            : '';
+        return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
+            + '<div class="ranking-card-table-wrap">'
+            + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + '">'
+            + '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th>' + headers + '<th scope="col" class="ranking-score">Totalt</th></tr></thead>'
+            + '<tbody>' + rowsHtml + '</tbody></table></div>'
+            + comboToggle + rowToggle + '</section>';
+    }
+
     // ── SVG line chart ─────────────────────────────────────────────────
 
     // Pure function: returns an SVG string. data: [{ year, shooters, starts }, ...].
@@ -488,25 +535,6 @@ var StandplassClubStats = (function () {
         return svg;
     }
 
-    // Class ranking for "Beste plasseringer" sort priority — lower number = higher priority.
-    // A always ranks top. Åpen ranks with A when klasseførende, below Junior when not.
-    // Then Kvinner/Junior/Ungdom, then B, C, D, then everything else.
-    var CLASS_PRIORITY = {
-        'A': 1,
-        'Kvinner': 2, 'Junior kvinner': 2, 'Junior menn': 2, 'Junior åpen': 2, 'Junior åpen-NM': 2,
-        'Ungdom': 2, 'Ungdom 12': 2, 'Ungdom 14': 2, 'Ungdom 16': 2, 'Ungdom-NM': 2,
-        'B': 4,
-        'C': 5,
-        'D': 6
-    };
-
-    function classPriority(cls, applicableForClassification) {
-        if (cls === 'Åpen') {
-            return applicableForClassification ? 1 : 3;
-        }
-        return CLASS_PRIORITY[cls] || 9;
-    }
-
     // ── init / DOM wiring ──────────────────────────────────────────────
 
     var TOPLIST_PAGE_SIZE = 10;
@@ -538,6 +566,8 @@ var StandplassClubStats = (function () {
         // allClubNames accumulated across all loaded years
         var allClubNames = {};
         var dataLoaded = false;
+        var top3State = { showAllCombos: false, showAllShooters: false };
+        var top3Ranking = [];
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -960,19 +990,6 @@ var StandplassClubStats = (function () {
             });
             var discRows = Object.keys(discData).sort(function (a, b) { return discData[b].starts - discData[a].starts; });
 
-            // Beste plasseringer — only top 3 (position 1-3), sort by class priority then position
-            var TOP3_LIMIT = 10;
-            var allTop3 = rows
-                .filter(function (r) {
-                    return StandplassStevnerPage.normalizeClub(r.club) === StandplassStevnerPage.normalizeClub(resolved)
-                        && r.position != null && !isNaN(Number(r.position)) && Number(r.position) >= 1 && Number(r.position) <= 3;
-                })
-                .sort(function (a, b) {
-                    var posDiff = Number(a.position) - Number(b.position);
-                    if (posDiff !== 0) { return posDiff; }
-                    return classPriority(a.class, a.applicableForClassification) - classPriority(b.class, b.applicableForClassification);
-                });
-
             // Arrangerte stevner
             var organizedComps = [];
             Object.keys(yearData).forEach(function (key) {
@@ -1058,23 +1075,9 @@ var StandplassClubStats = (function () {
 
             var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved));
 
-            var bestResults = allTop3.slice(0, TOP3_LIMIT);
-            var bestHtml = bestResults.length
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Beste plasseringer (top 3)</h2></div>'
-                + '<table class="ranking-table" aria-label="Beste plasseringer (top 3) for ' + esc(resolved) + '"><thead><tr><th scope="col" class="ranking-rank">Plass</th><th scope="col">Skytter</th><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col">Stevne</th></tr></thead><tbody>'
-                + bestResults.map(function (r) {
-                    return '<tr><td class="ranking-rank">' + esc(String(r.position)) + '</td><td>' + esc(r.name || '–') + '</td><td>' + esc(r.discipline || '–') + '</td><td>' + esc(r.class || '–') + '</td><td>' + esc(r.competition || '–') + '</td></tr>';
-                }).join('')
-                + '</tbody></table>'
-                + (allTop3.length > TOP3_LIMIT ? '<button type="button" class="ranking-toggle" id="' + config.idPrefix + '-best-toggle">Vis alle (' + allTop3.length + ')</button>' : '')
-                + '</section>'
-                : '';
-
-            function renderBestRows(list) {
-                return list.map(function (r) {
-                    return '<tr><td class="ranking-rank">' + esc(String(r.position)) + '</td><td>' + esc(r.name || '–') + '</td><td>' + esc(r.discipline || '–') + '</td><td>' + esc(r.class || '–') + '</td><td>' + esc(r.competition || '–') + '</td></tr>';
-                }).join('');
-            }
+            top3Ranking = computeTopThreeRanking(rows, resolved);
+            top3State = { showAllCombos: false, showAllShooters: false };
+            var bestHtml = renderTopThreeHtml(top3Ranking, activeYear, top3State);
 
             var orgHtml = organizedComps.length
                 ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Arrangerte stevner</h2></div>'
@@ -1090,23 +1093,6 @@ var StandplassClubStats = (function () {
                 : '';
 
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
-
-            // "Vis alle" toggle for Beste plasseringer
-            var bestToggle = id('-best-toggle');
-            if (bestToggle) {
-                bestToggle.addEventListener('click', function () {
-                    var section = bestToggle.closest('.club-stats-section');
-                    var tbody = section.querySelector('tbody');
-                    var expanded = bestToggle.textContent.indexOf('Vis alle') === -1;
-                    if (expanded) {
-                        tbody.innerHTML = renderBestRows(allTop3.slice(0, TOP3_LIMIT));
-                        bestToggle.textContent = 'Vis alle (' + allTop3.length + ')';
-                    } else {
-                        tbody.innerHTML = renderBestRows(allTop3);
-                        bestToggle.textContent = 'Vis færre';
-                    }
-                });
-            }
 
             // Focus management for screen readers
             var mainEl = id('-root') || id('-title');
@@ -1128,6 +1114,20 @@ var StandplassClubStats = (function () {
         // ── Init ───────────────────────────────────────────────────────
 
         buildFilters();
+
+        // Top-3 card toggles: one delegated listener for the drilldown's
+        // top-3 card. Registered once here — the section's inner HTML is
+        // replaced on toggle, so per-render bindings would be lost and
+        // per-render listener adds would stack.
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('#top3-combo-toggle, #top3-row-toggle') : null;
+            if (!btn) { return; }
+            if (btn.id === 'top3-combo-toggle') { top3State.showAllCombos = !top3State.showAllCombos; }
+            else { top3State.showAllShooters = !top3State.showAllShooters; }
+            var top3Section = contentEl.querySelector('[data-card="top3"]');
+            if (top3Section) { top3Section.outerHTML = renderTopThreeHtml(top3Ranking, activeYear, top3State); }
+        });
+
         statusEl.textContent = 'Laster data…';
 
         loadAllYears().then(function () {
@@ -1156,6 +1156,7 @@ var StandplassClubStats = (function () {
         computeClassDistribution: computeClassDistribution,
         renderClassDistributionHtml: renderClassDistributionHtml,
         computeTopThreeRanking: computeTopThreeRanking,
+        renderTopThreeHtml: renderTopThreeHtml,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         init: init

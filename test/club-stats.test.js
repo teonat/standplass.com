@@ -393,4 +393,45 @@ var sortRanking = CS.computeTopThreeRanking([
 ], 'K1');
 assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
 
+// ── renderTopThreeHtml ────────────────────────────────────────────────
+
+var top3Ranking = [
+    { personId: 'p1', name: 'Alice', total: 3, combos: { 'Finfelt|A': 2, 'Spesialpistol|Åpen': 1 } },
+    { personId: 'p2', name: 'Bob', total: 2, combos: { 'Finfelt|A': 1, 'Finfelt|Åpen': 1 } }
+];
+var top3Html = CS.renderTopThreeHtml(top3Ranking, 2026, {});
+assert.ok(top3Html.indexOf('Flest topp-3 plasseringer') >= 0, 'card title');
+assert.ok(top3Html.indexOf('ranking-card-table-wrap') >= 0, 'scroll wrapper present');
+assert.ok(top3Html.indexOf('Totalt') >= 0, 'Totalt column header');
+assert.ok(top3Html.indexOf('Finfelt A') >= 0, 'combo header from key');
+assert.ok(top3Html.indexOf('Spesialpistol Åpen') >= 0, 'effective class in header');
+assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
+assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'no combo toggle under cap');
+// Row paging: 10 shown, toggle appears beyond that
+var manyRows = [];
+for (var ri = 0; ri < 14; ri++) {
+    manyRows.push({ personId: 'r' + ri, name: 'Skytter ' + ri, total: 1, combos: { 'Finfelt|A': 1 } });
+}
+var pagedHtml = CS.renderTopThreeHtml(manyRows, 2026, {});
+assert.ok(pagedHtml.indexOf('Vis alle (14)') >= 0, 'row paging toggle');
+assert.ok(pagedHtml.indexOf('Skytter 13') < 0, 'only first 10 rows shown');
+// Combo cap: 14 zero-padded combos -> 12 shown + toggle (zero-padding makes
+// the alphabetical tie order deterministic: 00..11 visible, 12/13 hidden)
+var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
+for (var ci = 0; ci < 14; ci++) {
+    manyCombos[0].combos['Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = 1;
+}
+var cappedHtml = CS.renderTopThreeHtml(manyCombos, 2026, {});
+assert.ok(cappedHtml.indexOf('Vis alle øvelser (14)') >= 0, 'combo cap toggle');
+assert.ok(cappedHtml.indexOf('Øvelse 13') < 0, 'only 12 combo columns shown');
+var expandedHtml = CS.renderTopThreeHtml(manyCombos, 2026, { showAllCombos: true, showAllShooters: true });
+assert.ok(expandedHtml.indexOf('Øvelse 13') >= 0, 'expanded shows all combos');
+assert.ok(expandedHtml.indexOf('aria-expanded="true"') >= 0, 'toggles expose state');
+assert.strictEqual(CS.renderTopThreeHtml([], 2026, {}), '', 'empty ranking -> no card');
+
+var evilTop3 = CS.renderTopThreeHtml(
+    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 2026, {});
+assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
+assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
+
 console.log('club-stats.test.js: all tests passed');
