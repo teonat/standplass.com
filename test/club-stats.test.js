@@ -345,6 +345,12 @@ assert.ok(distHtml.indexOf('aria-label="Klassefordeling for Odda PK"') >= 0, 'ta
 assert.ok(distHtml.indexOf('<details') >= 0 && distHtml.indexOf('årsskiftet') >= 0, 'disclaimer as details, year-free');
 assert.ok(distHtml.indexOf('starter deres føres til samme klasse, og klasser uten tildelte skyttere vises ikke') >= 0, 'disclaimer notes starts follow modal class and empty classes are hidden');
 assert.ok(distHtml.indexOf('Spesialpistol') >= 0 && distHtml.indexOf('T96 fin') >= 0, 'øvelse list generated from constant');
+var tagsStart = distHtml.indexOf('apen-disc-tags');
+assert.ok(tagsStart >= 0, 'chip block present in disclaimer');
+var tagsBlock = distHtml.substring(tagsStart, distHtml.indexOf('</div>', tagsStart));
+assert.ok(tagsBlock.indexOf(';') < 0, 'no separator garbage inside chip block');
+assert.strictEqual(distHtml.split('class="apen-disc-tag"').length - 1, CS.ALWAYS_OPEN_DISCIPLINES.length,
+    'one chip per always-open øvelse');
 assert.ok(distHtml.indexOf('2026') < 0, 'no edition year in UI text');
 assert.strictEqual(CS.renderClassDistributionHtml([], 'X'), '', 'empty distribution -> no card');
 

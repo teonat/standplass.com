@@ -226,16 +226,17 @@ var StandplassClubStats = (function () {
                 + '<td class="ranking-score">' + dc.shooters + '</td>'
                 + '<td class="ranking-score">' + dc.starts + '</td></tr>';
         }).join('');
-        // '; ' rather than ', ': "10m luftsprint, pistol" itself contains a
-        // comma, which would read as two separate øvelser.
-        var apenList = ALWAYS_OPEN_DISCIPLINES.map(function (d) { return esc(d); }).join('; ');
         return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
             + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
             + rowsHtml + '</tbody></table>'
             + '<details class="club-stats-note"><summary>Om klassene</summary>'
             + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
             + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
-            + apenList + ', vises klassene A–D som «Åpen». Skyttere telles én gang per øvelse, '
+            + 'merket nedenfor, vises klassene A–D som «Åpen».</p>'
+            + '<div class="apen-disc-tags">' + ALWAYS_OPEN_DISCIPLINES.map(function (d) {
+                return '<span class="apen-disc-tag">' + esc(d) + '</span>';
+            }).join('') + '</div>'
+            + '<p>Skyttere telles én gang per øvelse, '
             + 'i klassen med flest starter (laveste klasse ved likt) — starter deres føres til '
             + 'samme klasse, og klasser uten tildelte skyttere vises ikke; deltakelse uten '
             + 'ferdighetsklasse telles i tillegg som «Åpen». Alders- og kjønnsklasser vises som egne rader. '

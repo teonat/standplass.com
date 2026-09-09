@@ -1459,6 +1459,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 
 .club-stats-note summary { cursor: pointer; }
 
+.apen-disc-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0; }
+.apen-disc-tag {
+  display: inline-block; background: var(--surface-card); border: 1px solid var(--border-strong);
+  border-radius: 4px; padding: 0.1rem 0.45rem; font-size: 0.775rem; color: var(--text);
+}
+
 .club-stats-back {
   display: inline-block;
   font-size: 0.875rem;
