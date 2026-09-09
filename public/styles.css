@@ -1509,6 +1509,17 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
   padding-right: 1.125rem;
 }
 
+/* Top-3 card placement-mode / øvelser-visibility toggle group */
+.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0; }
+.top3-mode-btn {
+  background: none; border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text-muted); font: inherit; font-size: 0.8125rem;
+  cursor: pointer; padding: 0.2rem 0.6rem;
+}
+.top3-mode-btn[aria-pressed="true"] {
+  background: var(--brand-accent); border-color: var(--brand-accent); color: var(--white);
+}
+
 .club-chart-wrap {
   padding: 0.5rem 0;
 }

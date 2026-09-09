@@ -369,7 +369,7 @@ var topRows = [
     { personId: 'p9', name: 'X', club: 'K2', discipline: 'Finfelt', class: 'A', position: 1, applicableForClassification: true }
 ];
 
-var ranking = CS.computeTopThreeRanking(topRows, 'K1');
+var ranking = CS.computeTopThreeRanking(topRows, 'K1', null);
 assert.strictEqual(ranking.length, 2, 'only K1 shooters, only top-3');
 assert.strictEqual(ranking[0].name, 'Alice');
 assert.strictEqual(ranking[0].total, 3, 'Alice: 3 podiums');
@@ -378,11 +378,33 @@ assert.strictEqual(ranking[0].combos['Spesialpistol|Åpen'], 1, 'effective class
 assert.strictEqual(ranking[1].total, 2, 'Bob: no dedup — both podiums count');
 assert.strictEqual(ranking[1].combos['Finfelt|Åpen'], 1, 'remapped podium lands in Åpen column');
 
+// Position filter: 1/2/3 counts only that exact placement; null = all top-3
+var p1Ranking = CS.computeTopThreeRanking(topRows, 'K1', 1);
+assert.strictEqual(p1Ranking.length, 2, 'position 1: Alice and Bob each have one');
+assert.strictEqual(p1Ranking[0].name, 'Alice');
+assert.strictEqual(p1Ranking[0].total, 1, 'Alice: her position-1 Finfelt A row only');
+assert.deepStrictEqual(p1Ranking[0].combos, { 'Finfelt|A': 1 }, 'Alice position-1 combo');
+assert.strictEqual(p1Ranking[1].name, 'Bob');
+assert.strictEqual(p1Ranking[1].total, 1, "Bob: ikke-klasseførende position-1 counts");
+assert.strictEqual(p1Ranking[1].combos['Finfelt|Åpen'], 1, 'Bob position-1 combo');
+
+var p2Ranking = CS.computeTopThreeRanking(topRows, 'K1', 2);
+assert.strictEqual(p2Ranking.length, 1, 'zero-total shooters are not in the ranking');
+assert.strictEqual(p2Ranking[0].name, 'Alice');
+assert.strictEqual(p2Ranking[0].total, 1, 'Alice: her position-2 Finfelt A row');
+
+var p3Ranking = CS.computeTopThreeRanking(topRows, 'K1', 3);
+assert.strictEqual(p3Ranking.length, 2, 'position 3: both shooters present');
+assert.strictEqual(p3Ranking[0].total, 1, 'Alice position-3 total');
+assert.strictEqual(p3Ranking[0].combos['Spesialpistol|Åpen'], 1, 'Alice position-3 combo');
+assert.strictEqual(p3Ranking[1].total, 1, 'Bob position-3 total');
+assert.strictEqual(p3Ranking[1].combos['Finfelt|A'], 1, 'Bob position-3 combo');
+
 // Tied positions both count (delt 2. plass)
 var tieRanking = CS.computeTopThreeRanking([
     { personId: 'd1', name: 'D1', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true },
     { personId: 'd2', name: 'D2', club: 'K1', discipline: 'Finfelt', class: 'A', position: 2, applicableForClassification: true }
-], 'K1');
+], 'K1', null);
 assert.strictEqual(tieRanking.length, 2, 'tied placement counts for both shooters');
 assert.strictEqual(tieRanking[0].total, 1);
 assert.strictEqual(tieRanking[1].total, 1);
@@ -391,7 +413,7 @@ assert.strictEqual(tieRanking[1].total, 1);
 var sortRanking = CS.computeTopThreeRanking([
     { personId: 'z', name: 'Zed', club: 'K1', discipline: 'Finfelt', class: 'A', position: 3, applicableForClassification: true },
     { personId: 'a', name: 'Abe', club: 'K1', discipline: 'Grovfelt', class: 'B', position: 3, applicableForClassification: true }
-], 'K1');
+], 'K1', null);
 assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
 
 // ── renderTopThreeHtml ────────────────────────────────────────────────
@@ -405,10 +427,25 @@ assert.ok(top3Html.indexOf('Flest topp-3 plasseringer') >= 0, 'card title');
 assert.ok(top3Html.indexOf('aria-label="Flest topp-3 plasseringer i 2026 for K1"') >= 0, 'table aria-label names club and year');
 assert.ok(top3Html.indexOf('ranking-card-table-wrap') >= 0, 'scroll wrapper present');
 assert.ok(top3Html.indexOf('Totalt') >= 0, 'Totalt column header');
-assert.ok(top3Html.indexOf('Finfelt A') >= 0, 'combo header from key');
-assert.ok(top3Html.indexOf('Spesialpistol Åpen') >= 0, 'effective class in header');
+assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
+assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
 assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
-assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'no combo toggle under cap');
+assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
+assert.ok(top3Html.indexOf('Vis øvelser') >= 0, 'øvelser reveal toggle present');
+// Placement-mode group: 4 buttons, aria-pressed only on the active one
+assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
+assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
+assert.strictEqual((top3Html.match(/aria-pressed="true"/g) || []).length, 1, 'only active mode pressed');
+assert.ok(top3Html.indexOf('data-mode="top3" aria-pressed="true"') >= 0, 'default mode active');
+assert.ok(top3Html.indexOf('data-mode="p1" aria-pressed="false"') >= 0, 'inactive mode unpressed');
+var p2ModeHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { mode: 'p2' });
+assert.ok(p2ModeHtml.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'selected mode pressed');
+assert.ok(p2ModeHtml.indexOf('data-mode="top3" aria-pressed="true"') < 0, 'default mode unpressed when p2 selected');
+// showOvelser: true reveals ALL combo headers
+var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { showOvelser: true });
+assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
+assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
+assert.ok(ovelserHtml.indexOf('Skjul øvelser') >= 0, 'label flips when shown');
 // Row paging: 10 shown, toggle appears beyond that
 var manyRows = [];
 for (var ri = 0; ri < 14; ri++) {
@@ -417,22 +454,24 @@ for (var ri = 0; ri < 14; ri++) {
 var pagedHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, {});
 assert.ok(pagedHtml.indexOf('Vis alle (14)') >= 0, 'row paging toggle');
 assert.ok(pagedHtml.indexOf('Skytter 13') < 0, 'only first 10 rows shown');
-// Combo cap: 14 zero-padded combos -> 12 shown + toggle (zero-padding makes
-// the alphabetical tie order deterministic: 00..11 visible, 12/13 hidden)
+var expandedRowsHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, { showAllShooters: true });
+assert.ok(expandedRowsHtml.indexOf('aria-expanded="true"') >= 0, 'row toggle exposes state');
+assert.ok(expandedRowsHtml.indexOf('Skytter 13') >= 0, 'expanded shows all rows');
+// No combo cap: 14 combos all rendered when øvelser shown (zero-padding makes
+// the alphabetical tie order deterministic)
 var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
 for (var ci = 0; ci < 14; ci++) {
     manyCombos[0].combos['Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = 1;
 }
-var cappedHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, {});
-assert.ok(cappedHtml.indexOf('Vis alle øvelser (14)') >= 0, 'combo cap toggle');
-assert.ok(cappedHtml.indexOf('Øvelse 13') < 0, 'only 12 combo columns shown');
-var expandedHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { showAllCombos: true, showAllShooters: true });
-assert.ok(expandedHtml.indexOf('Øvelse 13') >= 0, 'expanded shows all combos');
-assert.ok(expandedHtml.indexOf('aria-expanded="true"') >= 0, 'toggles expose state');
+var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { showOvelser: true });
+for (var ai = 0; ai < 14; ai++) {
+    assert.ok(allCombosHtml.indexOf('Øvelse ' + (ai < 10 ? '0' + ai : ai) + ' A') >= 0, 'all combo headers shown, no cap (' + ai + ')');
+}
+assert.ok(allCombosHtml.indexOf('Vis alle øvelser') < 0 && allCombosHtml.indexOf('Vis færre øvelser') < 0, 'cap toggles removed entirely');
 assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking -> no card');
 
 var evilTop3 = CS.renderTopThreeHtml(
-    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026, {});
+    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026, { showOvelser: true });
 assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
 assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
 

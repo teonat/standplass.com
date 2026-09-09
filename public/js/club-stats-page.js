@@ -247,7 +247,9 @@ var StandplassClubStats = (function () {
     // (positions are class-relative facts of the result lists). Tied
     // positions ("delt 2. plass") count for both shooters. Combo keys use
     // the effective (post-remap) class so columns match Klassefordeling.
-    function computeTopThreeRanking(rows, clubName) {
+    // position: null/undefined counts all top-3 rows; 1, 2, or 3 counts only
+    // rows with that exact placement.
+    function computeTopThreeRanking(rows, clubName, position) {
         var target = StandplassStevnerPage.normalizeClub(clubName);
         var shooters = {};
         (rows || []).forEach(function (r) {
@@ -255,6 +257,7 @@ var StandplassClubStats = (function () {
             if (r.position == null) { return; }
             var pos = Number(r.position);
             if (isNaN(pos) || pos < 1 || pos > 3) { return; }
+            if (position != null && pos !== position) { return; }
             if (!r.personId) { return; }
             var s = shooters[r.personId];
             if (!s) { s = shooters[r.personId] = { personId: r.personId, name: r.name || 'Ukjent', total: 0, combos: {} }; }
@@ -267,7 +270,13 @@ var StandplassClubStats = (function () {
             .sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name, 'no'); });
     }
 
-    var TOP3_COMBO_CAP = 12;
+    function modePosition(mode) {
+        if (mode === 'p1') { return 1; }
+        if (mode === 'p2') { return 2; }
+        if (mode === 'p3') { return 3; }
+        return null;
+    }
+
     var TOP3_ROW_PAGE = 10;
 
     // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
@@ -275,43 +284,57 @@ var StandplassClubStats = (function () {
     // overflow: hidden and would silently clip columns.
     function renderTopThreeHtml(ranking, clubName, year, opts) {
         opts = opts || {};
-        var showAllCombos = !!opts.showAllCombos;
+        var mode = opts.mode || 'top3';
+        var showOvelser = !!opts.showOvelser;
         var showAllShooters = !!opts.showAllShooters;
         if (!ranking || !ranking.length) { return ''; }
+        var MODES = [
+            { key: 'top3', label: 'Topp-3' },
+            { key: 'p1', label: '1. plass' },
+            { key: 'p2', label: '2. plass' },
+            { key: 'p3', label: '3. plass' }
+        ];
+        var modeHtml = '<div class="top3-mode" id="top3-mode" role="group" aria-label="Plasseringstype">'
+            + MODES.map(function (m) {
+                return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
+                    + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
+            }).join('')
+            + '<button type="button" class="top3-mode-btn top3-ovelser-btn" aria-pressed="' + (showOvelser ? 'true' : 'false') + '">'
+            + (showOvelser ? 'Skjul øvelser' : 'Vis øvelser') + '</button></div>';
         var comboTotals = {};
         ranking.forEach(function (s) {
             Object.keys(s.combos).forEach(function (k) { comboTotals[k] = (comboTotals[k] || 0) + s.combos[k]; });
         });
         var comboOrder = Object.keys(comboTotals)
             .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
-        var visibleCombos = showAllCombos ? comboOrder : comboOrder.slice(0, TOP3_COMBO_CAP);
         var visibleShooters = showAllShooters ? ranking : ranking.slice(0, TOP3_ROW_PAGE);
-        var headers = visibleCombos.map(function (k) {
-            var parts = k.split('|');
-            return '<th scope="col" class="ranking-score">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
-        }).join('');
+        var headers = showOvelser
+            ? comboOrder.map(function (k) {
+                var parts = k.split('|');
+                return '<th scope="col" class="ranking-score">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
+            }).join('')
+            : '';
         var rowsHtml = visibleShooters.map(function (s, i) {
-            var cells = visibleCombos.map(function (k) {
-                return '<td class="ranking-score">' + (s.combos[k] || '') + '</td>';
-            }).join('');
+            var cells = showOvelser
+                ? comboOrder.map(function (k) {
+                    return '<td class="ranking-score">' + (s.combos[k] || '') + '</td>';
+                }).join('')
+                : '';
             return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'
                 + '<th scope="row">' + esc(s.name) + '</th>' + cells
                 + '<td class="ranking-score">' + s.total + '</td></tr>';
         }).join('');
-        var comboToggle = comboOrder.length > TOP3_COMBO_CAP
-            ? '<button type="button" class="ranking-toggle" id="top3-combo-toggle" aria-expanded="' + (showAllCombos ? 'true' : 'false') + '" aria-controls="top3-table">'
-                + (showAllCombos ? 'Vis færre øvelser' : 'Vis alle øvelser (' + comboOrder.length + ')') + '</button>'
-            : '';
         var rowToggle = ranking.length > TOP3_ROW_PAGE
             ? '<button type="button" class="ranking-toggle" id="top3-row-toggle" aria-expanded="' + (showAllShooters ? 'true' : 'false') + '" aria-controls="top3-table">'
                 + (showAllShooters ? 'Vis færre' : 'Vis alle (' + ranking.length + ')') + '</button>'
             : '';
         return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
+            + modeHtml
             + '<div class="ranking-card-table-wrap">'
             + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + ' for ' + esc(clubName) + '">'
             + '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th>' + headers + '<th scope="col" class="ranking-score">Totalt</th></tr></thead>'
             + '<tbody>' + rowsHtml + '</tbody></table></div>'
-            + comboToggle + rowToggle + '</section>';
+            + rowToggle + '</section>';
     }
 
     // ── SVG line chart ─────────────────────────────────────────────────
@@ -573,8 +596,8 @@ var StandplassClubStats = (function () {
         // allClubNames accumulated across all loaded years
         var allClubNames = {};
         var dataLoaded = false;
-        var top3State = { showAllCombos: false, showAllShooters: false };
-        var top3Ranking = [];
+        var top3State = { mode: 'top3', showOvelser: false, showAllShooters: false };
+        var top3Rows = [];
         var top3Club = '';
 
         var filtersEl = id('-filters');
@@ -1083,9 +1106,10 @@ var StandplassClubStats = (function () {
 
             var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
 
-            top3Ranking = computeTopThreeRanking(rows, resolved);
+            top3Rows = rows;
             top3Club = resolved;
-            top3State = { showAllCombos: false, showAllShooters: false };
+            top3State = { mode: 'top3', showOvelser: false, showAllShooters: false };
+            var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
             var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 
             var orgHtml = organizedComps.length
@@ -1136,14 +1160,23 @@ var StandplassClubStats = (function () {
         // replaced on toggle, so per-render bindings would be lost and
         // per-render listener adds would stack.
         contentEl.addEventListener('click', function (e) {
-            var btn = e.target.closest ? e.target.closest('#top3-combo-toggle, #top3-row-toggle') : null;
+            var btn = e.target.closest ? e.target.closest('.top3-mode-btn, #top3-row-toggle') : null;
             if (!btn) { return; }
-            if (btn.id === 'top3-combo-toggle') { top3State.showAllCombos = !top3State.showAllCombos; }
-            else { top3State.showAllShooters = !top3State.showAllShooters; }
+            if (btn.classList.contains('top3-ovelser-btn')) {
+                top3State.showOvelser = !top3State.showOvelser;
+            } else if (btn.getAttribute('data-mode')) {
+                top3State.mode = btn.getAttribute('data-mode');
+            } else {
+                top3State.showAllShooters = !top3State.showAllShooters;
+            }
             var top3Section = contentEl.querySelector('[data-card="top3"]');
             if (top3Section) {
-                top3Section.outerHTML = renderTopThreeHtml(top3Ranking, top3Club, activeYear, top3State);
-                var refocus = contentEl.querySelector('#' + btn.id);
+                top3Section.outerHTML = renderTopThreeHtml(
+                    computeTopThreeRanking(top3Rows, top3Club, modePosition(top3State.mode)),
+                    top3Club, activeYear, top3State);
+                var refocus = btn.id
+                    ? contentEl.querySelector('#' + btn.id)
+                    : contentEl.querySelector('.top3-mode [aria-pressed="true"]');
                 if (refocus) { refocus.focus(); }
             }
         });
