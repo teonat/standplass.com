@@ -128,8 +128,13 @@ h1, h2, h3 {
    the ribbon stack instead of overflowing the page (nowrap above keeps
    each label on one line). */
 @media (max-width: 720px) {
-  .site-header-inner { flex-wrap: wrap; row-gap: 0.25rem; }
-  .site-header-inner nav { flex-wrap: wrap; row-gap: 0.25rem; }
+  /* Wrapped ribbon: top-align lines so the mode toggle is not centered
+     against nav's wrapped height, and let the toggle share the logo's row
+     (DOM order stays logo, nav, toggle — `order` affects visual placement
+     only). */
+  .site-header-inner { flex-wrap: wrap; align-items: flex-start; row-gap: 0.25rem; }
+  .site-header-inner nav { flex-wrap: wrap; row-gap: 0.25rem; order: 3; }
+  #site-mode-toggle { order: 2; }
 }
 .nav-dropdown { position: relative; }
 .nav-dropdown-btn {
