@@ -238,7 +238,7 @@ var multiSeries = [
     { label: 'Felt', color: 'var(--brand-accent)', points: [
         { year: 2021, value: 5 }, { year: 2022, value: 8 }, { year: 2023, value: 12 }
     ]},
-    { label: 'Bane', color: '#4a90d9', points: [
+    { label: 'Bane', color: 'var(--chart-blue)', points: [
         { year: 2021, value: 3 }, { year: 2022, value: 6 }, { year: 2023, value: 9 }
     ]}
 ];

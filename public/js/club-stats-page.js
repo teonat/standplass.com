@@ -428,7 +428,7 @@ var StandplassClubStats = (function () {
         }
 
         var shootersLine = buildLine('shooters', 'var(--brand-accent)', 'skyttere');
-        var startsLine = opts.showStarts ? buildLine('starts', '#4a90d9', 'starter') : '';
+        var startsLine = opts.showStarts ? buildLine('starts', 'var(--chart-blue)', 'starter') : '';
 
         // Y-axis labels (top, middle, bottom)
         var yTop = String(Math.round(maxVal));
@@ -449,7 +449,7 @@ var StandplassClubStats = (function () {
         // Legend
         var legend = '<div class="chart-legend">'
             + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--brand-accent)"></span>Skyttere</span>'
-            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#4a90d9"></span>Starter</span>' : '')
+            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--chart-blue)"></span>Starter</span>' : '')
             + '</div>';
 
         var ariaLabel = 'Aktivitet per år' + (opts.showStarts ? ': skyttere og starter' : ': skyttere');
@@ -934,12 +934,12 @@ var StandplassClubStats = (function () {
                 + '<h3 class="club-stats-chart-label">Skyttere</h3>'
                 + renderMultiSeriesChart(
                     [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltShooters },
-                     { label: 'Bane', color: '#4a90d9', points: overviewBaneShooters }],
+                     { label: 'Bane', color: 'var(--chart-blue)', points: overviewBaneShooters }],
                     { title: 'Totalt antall skyttere per år: felt og bane' })
                 + '<h3 class="club-stats-chart-label">Starter</h3>'
                 + renderMultiSeriesChart(
                     [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltStarts },
-                     { label: 'Bane', color: '#4a90d9', points: overviewBaneStarts }],
+                     { label: 'Bane', color: 'var(--chart-blue)', points: overviewBaneStarts }],
                     { title: 'Totalt antall starter per år: felt og bane' })
                 + '</section>'
                 : '';
@@ -1059,12 +1059,12 @@ var StandplassClubStats = (function () {
                 + '<h3 class="club-stats-chart-label">Skyttere</h3>'
                 + renderMultiSeriesChart(
                     [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
-                     { label: 'Bane', color: '#4a90d9', points: baneShooters }],
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
                     { title: 'Unike skyttere per år: felt og bane' })
                 + '<h3 class="club-stats-chart-label">Starter</h3>'
                 + renderMultiSeriesChart(
                     [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
-                     { label: 'Bane', color: '#4a90d9', points: baneStarts }],
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
                     { title: 'Starter per år: felt og bane' })
                 + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
                 + '<table class="ranking-table"><thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead><tbody>'
