@@ -201,8 +201,18 @@ var StandplassFilterWidgets = (function () {
                 var input = document.createElement('input');
                 input.type = 'checkbox';
                 input.checked = selected.indexOf(item.id) >= 0;
+                input.setAttribute('data-id', item.id);
                 input.addEventListener('change', function () {
+                    var rootNode = input.getRootNode();
+                    var hadFocus = rootNode.activeElement === input;
                     cfg.onToggle(item.id, item.name, input.checked);
+                    // onToggle may rebuild() the list, destroying this
+                    // checkbox mid-interaction -- restore focus to its
+                    // replacement so keyboard users aren't dropped to
+                    // <body> on every toggle.
+                    if (hadFocus && !rootNode.contains(input)) {
+                        focusCheckboxById(item.id);
+                    }
                 });
                 var span = document.createElement('span');
                 span.textContent = item.name;
@@ -211,6 +221,16 @@ var StandplassFilterWidgets = (function () {
                 li.appendChild(label);
                 cfg.list.appendChild(li);
             });
+        }
+
+        function focusCheckboxById(itemId) {
+            var inputs = cfg.list.querySelectorAll('input[type="checkbox"]');
+            for (var i = 0; i < inputs.length; i++) {
+                if (inputs[i].getAttribute('data-id') === String(itemId)) {
+                    inputs[i].focus();
+                    return;
+                }
+            }
         }
 
         function openPanel() {
