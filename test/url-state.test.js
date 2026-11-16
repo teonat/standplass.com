@@ -33,6 +33,16 @@ withForeignParam.setSearch('?year=2025');
 assert.strictEqual(get(window.location.search, 'utm_source'), 'nyhetsbrev', 'a foreign query param must not be dropped');
 assert.strictEqual(get(window.location.search, 'year'), '2025');
 
+// The klubbstatistikk chart metric param must round-trip: written by the
+// metric toggle (setSearch), read back on a fresh page load (getSearch).
+window.location.search = '?metric=medianAge';
+var metricRead = StandplassUrlState.createController({ namespace: null });
+assert.strictEqual(get(metricRead.getSearch(), 'metric'), 'medianAge', 'metric is tracked and readable on load');
+window.location.search = '';
+var metricWrite = StandplassUrlState.createController({ namespace: null });
+metricWrite.setSearch('?metric=avgAge');
+assert.strictEqual(get(window.location.search, 'metric'), 'avgAge', 'metric is written to the URL by setSearch');
+
 // Embed, sync-url off: state lives in memory only, the real URL never touched.
 window.location.search = '';
 var embedOff = StandplassUrlState.createController({ namespace: 'felt', syncUrl: false });
