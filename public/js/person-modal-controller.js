@@ -199,8 +199,8 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table>';
+                    + '<div class="person-table-scroll"><table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
+                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table></div>';
             }
 
             function toggleSetValue(current, known, v, checked) {
