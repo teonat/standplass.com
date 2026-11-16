@@ -16,6 +16,40 @@ assert.strictEqual(
     '30. aug 2026–2. sep 2026'
 );
 
+// ── literal (substring) date parsing + time helpers ───────────────────
+// The competition APIs emit datetimes WITHOUT a timezone suffix (e.g.
+// "2026-11-16T16:00:00"): Norwegian wall-clock time for that date, DST
+// baked in by the registering club. Dates/times must be read literally —
+// new Date() would reinterpret a suffix-less string in the *viewer's*
+// timezone (shifting dates for non-Norwegian visitors at edge hours).
+assert.strictEqual(StandplassFormat.formatDate('2026-11-16T16:00:00'), '16. nov 2026', 'datetime without offset parses literally');
+assert.strictEqual(StandplassFormat.formatDate('2026-11-16'), '16. nov 2026', 'date-only string');
+assert.strictEqual(StandplassFormat.formatDate(''), '', 'empty input -> empty output');
+assert.strictEqual(StandplassFormat.formatTime('2026-11-16T16:00:00'), '16:00', 'time part extracted');
+assert.strictEqual(StandplassFormat.formatTime('2026-11-16'), null, 'no time part -> null');
+assert.strictEqual(StandplassFormat.formatTime(''), null, 'empty -> null');
+assert.strictEqual(
+    StandplassFormat.formatDateRange('2026-11-16T16:00:00', '2026-11-16T18:00:00'),
+    '16. nov 2026',
+    'same-day different-times renders a single date (old code produced "16.–16. nov 2026")'
+);
+assert.strictEqual(
+    StandplassFormat.formatDateRangeTime('2026-11-16T16:00:00', '2026-11-16T16:00:00'),
+    '16. nov 2026, kl 16:00',
+    'single-day event with start time'
+);
+assert.strictEqual(
+    StandplassFormat.formatDateRangeTime('2026-11-21T09:00:00', '2026-11-22T16:00:00'),
+    '21.–22. nov 2026 · starter kl 09:00',
+    'multi-day range with first-day start time'
+);
+assert.strictEqual(
+    StandplassFormat.formatDateRangeTime('2026-11-16', '2026-11-16'),
+    '16. nov 2026',
+    'no time part -> plain range'
+);
+assert.strictEqual(StandplassFormat.formatDateRangeTime('', ''), '', 'empty inputs -> empty output');
+
 // ── encodeIdList / decodeIdList ────────────────────────────────────────
 
 // Round-trips, including values that themselves contain commas (real data:

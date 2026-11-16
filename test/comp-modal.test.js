@@ -1,5 +1,10 @@
 'use strict';
 var assert = require('node:assert');
+// nsf-orgs.js (used further down) probes localStorage, which Node 26
+// implements experimentally behind a flag -- its absence is handled
+// gracefully there, but Node still emits a warning per access. Silence
+// just the warning channel to keep this file's output clean.
+process.removeAllListeners('warning');
 global.StandplassFormat = require('../public/js/format.js');
 var CM = require('../public/js/comp-modal.js');
 
@@ -15,6 +20,22 @@ assert.strictEqual(grouped[1].events.length, 2);
 
 // description comes from a third-party API and must be escaped
 var xssBody = CM.renderDetailBody({ competitionNumber: '1', description: '<img src=x onerror=alert(1)>', events: [] });
+
+// ── contact address, registration times ─────────────────────────────────
+// (Arrangør/Stevnetype resolution is tested further down, after the async
+// reference-data seeding -- the detail API returns only GUIDs for both.)
+
+var contactBody = CM.renderDetailBody({ contactAddress1: 'v/ Wenche <script>', contactAddress2: 'Eidskogvegen 38', contactZipCode: '2211', contactCity: 'KONGSVINGER', events: [] });
+assert.ok(contactBody.indexOf('Kontaktadresse') >= 0, 'contact address row');
+assert.ok(contactBody.indexOf('v/ Wenche &lt;script&gt;') >= 0, 'contact address escaped');
+assert.ok(contactBody.indexOf('2211 KONGSVINGER') >= 0, 'zip + city composed');
+
+var regTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T23:59:00', useRegistrationEndTime: true, events: [] });
+assert.ok(regTimeBody.indexOf('Påmeldingsfrist') >= 0 && regTimeBody.indexOf('kl 23:59') >= 0, 'registration time shown when flagged');
+var regNoTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T23:59:00', events: [] });
+assert.ok(regNoTimeBody.indexOf('kl 23:59') < 0, 'registration time hidden without flag');
+var regPlainDate = CM.renderDetailBody({ registrationEndDate: '2026-01-05', useRegistrationEndTime: true, events: [] });
+assert.ok(regPlainDate.indexOf(', kl ') < 0, 'flagged but date-only string renders no time');
 assert.ok(xssBody.indexOf('<img src=x') < 0, 'description markup is not emitted raw');
 assert.ok(xssBody.indexOf('&lt;img src=x onerror=alert(1)&gt;') >= 0, 'description is escaped');
 
@@ -84,10 +105,45 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
             disciplineGroups: [{ name: 'Some Leirdue Group', disciplines: [{ id: 'x1', name: 'Leirdue Disc', deleted: false }] }]
         }]
     };
-    return CM.ensureReferenceData(function () {
-        return Promise.resolve({ ok: true, json: function () { return Promise.resolve(mockBranchlist); } });
+    // URL-routed stub: ensureReferenceData fetches branchlist, competitiontype
+    // and the org list -- each endpoint gets its own fixture. The org request
+    // routes through nsf-orgs.js (the shared module production pages use),
+    // exercising that delegation instead of comp-modal's direct fallback.
+    global.StandplassNsfOrgs = require('../public/js/nsf-orgs.js');
+    var jsonResponse = function (body) {
+        return Promise.resolve({ ok: true, json: function () { return Promise.resolve(body); } });
+    };
+    return CM.ensureReferenceData(function (url) {
+        if (url.indexOf('branchlist') >= 0) { return jsonResponse(mockBranchlist); }
+        if (url.indexOf('competitiontype') >= 0) { return jsonResponse([{ id: 'ct-1', name: 'Åpent stevne' }]); }
+        if (url.indexOf('organization') >= 0) {
+            return jsonResponse([{ id: 'org-1', organizationName: 'Eidskog Sportsskyttere', organizationFederationType: 3 }]);
+        }
+        return Promise.resolve({ ok: false, json: function () { return Promise.resolve(null); } });
     });
 }).then(function () {
+    // Arrangør/Stevnetype: the detail API returns only organizationId and
+    // competitionTypeId GUIDs -- names resolve through the reference maps,
+    // and an unresolved GUID omits the row entirely rather than rendering
+    // the raw id.
+    var ctxBody = CM.renderDetailBody({ organizationId: 'org-1', competitionTypeId: 'ct-1', events: [] });
+    assert.ok(ctxBody.indexOf('Arrangør') >= 0 && ctxBody.indexOf('Eidskog Sportsskyttere') >= 0, 'organizer name resolves via the shared org list');
+    assert.ok(ctxBody.indexOf('Stevnetype') >= 0 && ctxBody.indexOf('Åpent stevne') >= 0, 'stevnetype name resolves via /competitiontype');
+    var noCtxBody = CM.renderDetailBody({ organizationId: 'unresolved-guid', competitionTypeId: 'unresolved-guid', events: [] });
+    assert.ok(noCtxBody.indexOf('Arrangør') < 0 && noCtxBody.indexOf('unresolved-guid') < 0, 'unresolved GUIDs omit the row instead of rendering the raw id');
+
+    // the shared meta line pages use under the modal title
+    var meta = CM.formatMetaLine(
+        { startDate: '2026-11-16T16:00:00', endDate: '2026-11-16T16:00:00', organizationId: 'org-1' },
+        { name: 'Bomba' }
+    );
+    assert.strictEqual(meta, '16. nov 2026, kl 16:00 · Bomba · Eidskog Sportsskyttere', 'formatMetaLine composes start time, venue and organizer');
+    assert.strictEqual(
+        CM.formatMetaLine({ startDate: '2026-11-16', endDate: '2026-11-16', organizationId: 'unresolved' }, null),
+        '16. nov 2026',
+        'formatMetaLine silently drops an unresolved venue/organizer'
+    );
+
     var resolvedBody = CM.renderDetailBody({ events: [{ disciplineId: 'd1', classId: 'c1', entryFee: 50 }] });
     assert.ok(resolvedBody.indexOf('Spesialpistol') >= 0, 'discipline name resolves via the reference-list fetch');
     assert.ok(resolvedBody.indexOf('>A<') >= 0, 'class name resolves and the branch prefix is stripped');
