@@ -105,23 +105,31 @@ var emptyContainer = {};
 StandplassPersonModal.renderChart(emptyContainer, [chartEntries[0]], 'rankingScore');
 assert.ok(!emptyContainer.innerHTML.includes('<svg'), 'single data point falls back to a message instead of a chart');
 
-// dotColor: class-relative rankingScore color bands, one threshold crossing per class.
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 96 }, 'rankingScore'), '#ef4444');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 97 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 84 }, 'rankingScore'), '#ef4444');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 85 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 84 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 85 }, 'rankingScore'), '#22c55e');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 84 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 85 }, 'rankingScore'), '#a855f7');
-// Unknown/missing class falls back to the brand accent (not a color band).
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'E', rankingScore: 99 }, 'rankingScore'), 'var(--brand-accent)');
+// dotColor: rankingScore bands per class. B has no orange band — nothing
+// is 2+ classes below B (C is below B; D is the entry class, doesn't count).
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 98 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 96 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 84 }, 'rankingScore'), 'var(--chart-orange)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 98 }, 'rankingScore'), 'var(--chart-green)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 86 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 80 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 60 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 98 }, 'rankingScore'), 'var(--chart-purple)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 86 }, 'rankingScore'), 'var(--chart-green)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 70 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 86 }, 'rankingScore'), 'var(--chart-purple)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 70 }, 'rankingScore'), 'var(--chart-blue)');
+// Non-klasseføring competition classes (Åpen, Menn, veteran, '') and unknown
+// classes fall back to the neutral chart line color — never red.
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'Åpen', rankingScore: 90 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: '', rankingScore: 90 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'E', rankingScore: 99 }, 'rankingScore'), 'var(--chart-blue)');
 
 // dotColor: position medal colors, 1st/2nd/3rd plus the "other" fallback.
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 1 }, 'position'), '#e8b923');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 2 }, 'position'), '#c8d0d8');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 3 }, 'position'), '#b87333');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 4 }, 'position'), '#4a90d9');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 1 }, 'position'), 'var(--chart-gold)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 2 }, 'position'), 'var(--chart-silver)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 3 }, 'position'), 'var(--chart-bronze)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 4 }, 'position'), 'var(--chart-blue)');
 
 var e2024 = [{ date: '2024-05-01', discipline: 'Grovfelt', class: 'A', competitionType: 'Feltskyting', score: 28 }];
 var e2025 = [{ date: '2025-05-01', discipline: 'Fellesfelt', class: 'B', competitionType: 'Feltskyting', score: 30 }];

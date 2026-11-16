@@ -131,21 +131,21 @@ var StandplassPersonModal = (function () {
     function dotColor(entry, metric) {
         if (metric === 'position') {
             switch (Number(entry.position)) {
-                case 1: return '#e8b923';
-                case 2: return '#c8d0d8';
-                case 3: return '#b87333';
+                case 1: return 'var(--chart-gold)';
+                case 2: return 'var(--chart-silver)';
+                case 3: return 'var(--chart-bronze)';
             }
-            return '#4a90d9';
+            return 'var(--chart-blue)';
         }
         if (metric === 'rankingScore') {
             var v = Number(entry.rankingScore);
             var cls = entry.class || '';
-            if (cls === 'A') { return v >= 97 ? '#eab308' : v >= 85 ? '#ef4444' : '#f97316'; }
-            if (cls === 'B') { return v >= 97 ? '#22c55e' : v >= 85 ? '#eab308' : v >= 75 ? '#ef4444' : '#f97316'; }
-            if (cls === 'C') { return v >= 97 ? '#a855f7' : v >= 85 ? '#22c55e' : '#eab308'; }
-            if (cls === 'D') { return v >= 85 ? '#a855f7' : '#eab308'; }
+            if (cls === 'A') { return v >= 97 ? 'var(--chart-blue)' : v >= 85 ? 'var(--chart-red)' : 'var(--chart-orange)'; }
+            if (cls === 'B') { return v >= 97 ? 'var(--chart-green)' : v >= 85 ? 'var(--chart-blue)' : 'var(--chart-red)'; }
+            if (cls === 'C') { return v >= 97 ? 'var(--chart-purple)' : v >= 85 ? 'var(--chart-green)' : 'var(--chart-blue)'; }
+            if (cls === 'D') { return v >= 85 ? 'var(--chart-purple)' : 'var(--chart-blue)'; }
         }
-        return 'var(--brand-accent)';
+        return 'var(--chart-blue)';
     }
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
@@ -184,15 +184,15 @@ var StandplassPersonModal = (function () {
     function chartLegend(metric) {
         if (metric === 'position') {
             return '<div class="chart-legend">'
-                + legendDot('#e8b923', '1. plass') + legendDot('#c8d0d8', '2. plass')
-                + legendDot('#b87333', '3. plass') + legendDot('#4a90d9', 'Andre')
+                + legendDot('var(--chart-gold)', '1. plass') + legendDot('var(--chart-silver)', '2. plass')
+                + legendDot('var(--chart-bronze)', '3. plass') + legendDot('var(--chart-blue)', 'Andre')
                 + '</div>';
         }
         if (metric !== 'rankingScore') { return ''; }
         return '<div class="chart-legend">'
-            + legendDot('#a855f7', '2+ klasser over') + legendDot('#22c55e', 'Opprykksgrense nådd')
-            + legendDot('#eab308', 'I klassen') + legendDot('#ef4444', 'Under klassen')
-            + legendDot('#f97316', '2+ klasser under')
+            + legendDot('var(--chart-purple)', '2+ klasser over') + legendDot('var(--chart-green)', 'Opprykksgrense nådd')
+            + legendDot('var(--chart-blue)', 'I klassen') + legendDot('var(--chart-red)', 'Under klassen')
+            + legendDot('var(--chart-orange)', '2+ klasser under')
             + '</div>';
     }
 
@@ -336,7 +336,7 @@ var StandplassPersonModal = (function () {
             + '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + (CHART_TITLES[metric] || '') + '-utvikling" style="display:block;overflow:visible;">'
             + '<line x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' + (H - PB) + '" stroke="var(--border)" stroke-width="1"/>'
             + '<line x1="' + PL + '" y1="' + (H - PB) + '" x2="' + (W - PR) + '" y2="' + (H - PB) + '" stroke="var(--border)" stroke-width="1"/>'
-            + '<polyline points="' + polyPoints + '" fill="none" stroke="var(--brand-accent)" stroke-width="1.5" stroke-linejoin="round"/>'
+            + '<polyline points="' + polyPoints + '" fill="none" stroke="var(--chart-blue)" stroke-width="1.5" stroke-linejoin="round"/>'
             + dots
             + yLabels
             + xTicks
