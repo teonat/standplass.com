@@ -17,16 +17,12 @@ owns the storage format and write rules for the per-family
   (first write wins).
 - Correction procedure for a WRONG value (a forced re-scan only fills
   gaps and upgrades nulls — it never overwrites an existing value):
-  delete or edit the entry in the JSON file by hand, then re-collect it
-  with the backfill script (docs/superpowers/scripts/) or any later
-  competition containing that shooter. Hand edits are safe: first-write
-  wins means no later poll overwrites them.
+  edit the entry in the JSON file by hand. Hand edits are safe —
+  first-write-wins means no later poll overwrites them.
 - Keys are sorted on save for stable git diffs; JSON is compact like the
   year files.
 - The files carry personId keys only — no names or other person
   attributes (repo hygiene: names live in the results files).
-
-See docs/superpowers/specs/2026-11-16-birthyear-data-design.md.
 """
 
 import json
