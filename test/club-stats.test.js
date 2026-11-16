@@ -330,6 +330,64 @@ assert.ok(multiSvg.indexOf('tabindex="0"') !== -1, 'multi-series dots are focusa
     assert.ok(svg.indexOf('>47.3<') !== -1, 'value label is formatted (47.25 → 47.3)');
 })();
 
+// Label placement: the upper series labels ABOVE its dots, the lower
+// series BELOW its dots; at a same-point collision the series that is
+// mostly above (higher mean value) wins the above slot.
+(function () {
+    function parse(svg) {
+        var dots = [], labels = [];
+        (svg.match(/<circle[^>]*class="club-chart-dot"[^>]*>/g) || []).forEach(function (m) {
+            dots.push({ x: Number(/cx="([0-9.]+)"/.exec(m)[1]), y: Number(/cy="([0-9.]+)"/.exec(m)[1]),
+                       color: /fill="([^"]+)"/.exec(m)[1] });
+        });
+        (svg.match(/<text[^>]*text-anchor="middle"[^>]*>[0-9.]+<\/text>/g) || []).forEach(function (m) {
+            labels.push({ x: Number(/ x="([0-9.]+)"/.exec(m)[1]), y: Number(/ y="([0-9.]+)"/.exec(m)[1]),
+                          color: /fill="([^"]+)"/.exec(m)[1] });
+        });
+        return { dots: dots, labels: labels };
+    }
+    function labelAt(parsed, x, color) {
+        var l = parsed.labels.filter(function (t) { return Math.abs(t.x - x) < 0.05 && t.color === color; })[0];
+        assert.ok(l, 'label found at x=' + x + ' for ' + color);
+        return l.y;
+    }
+    function dotAt(parsed, x, color) {
+        var d = parsed.dots.filter(function (c) { return Math.abs(c.x - x) < 0.05 && c.color === color; })[0];
+        assert.ok(d, 'dot found at x=' + x + ' for ' + color);
+        return d.y;
+    }
+
+    // Clear separation: Felt always above Bane → Felt labels above dots,
+    // Bane labels below dots.
+    var svg = CS.renderMultiSeriesChart([
+        { label: 'Felt', color: 'var(--brand-accent)', points: [{ year: 2021, value: 50 }, { year: 2022, value: 52 }] },
+        { label: 'Bane', color: 'var(--chart-blue)', points: [{ year: 2021, value: 40 }, { year: 2022, value: 42 }] }
+    ], { title: 'Label placement' });
+    var p = parse(svg);
+    p.dots.forEach(function (d) {
+        var ly = labelAt(p, d.x, d.color);
+        if (d.color === 'var(--brand-accent)') {
+            assert.ok(ly < d.y, 'upper series label sits above its dot (y ' + ly + ' vs ' + d.y + ')');
+        } else {
+            assert.ok(ly > d.y, 'lower series label sits below its dot (y ' + ly + ' vs ' + d.y + ')');
+        }
+    });
+
+    // Same-point collision in 2022 (both 50): Felt's mean (52.5) is above
+    // Bane's (47.5), so Felt takes the above slot, Bane below.
+    var svg2 = CS.renderMultiSeriesChart([
+        { label: 'Felt', color: 'var(--brand-accent)', points: [{ year: 2021, value: 55 }, { year: 2022, value: 50 }] },
+        { label: 'Bane', color: 'var(--chart-blue)', points: [{ year: 2021, value: 45 }, { year: 2022, value: 50 }] }
+    ], { title: 'Collision' });
+    var p2 = parse(svg2);
+    var colX = p2.dots[2].x; // 2022 position (second of four dots)
+    var feltLy = labelAt(p2, colX, 'var(--brand-accent)');
+    var baneLy = labelAt(p2, colX, 'var(--chart-blue)');
+    var colY = dotAt(p2, colX, 'var(--brand-accent)');
+    assert.ok(feltLy < colY, 'mostly-above series labels above the shared point');
+    assert.ok(baneLy > colY, 'other series labels below the shared point');
+})();
+
 // Single series with < 2 points → message
 var shortSeries = [{ label: 'Felt', color: 'red', points: [{ year: 2025, value: 5 }] }];
 assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1, 'short series → message');

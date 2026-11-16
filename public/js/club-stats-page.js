@@ -665,10 +665,16 @@ var StandplassClubStats = (function () {
                 + dots;
         }).join('');
 
-        // Value labels above dots with collision avoidance per X position.
-        // Group dots by year index, sort by Y within each group, then
-        // stagger labels so close ones don't overlap.
+        // Value labels: the upper series labels ABOVE its dots, the lower
+        // series BELOW its dots — close pairs split instead of stacking.
+        // At a same-point collision the series that is mostly above
+        // (higher mean value) wins the above slot.
         var fmtVal = opts.valueFormat || function (v) { return String(v); };
+        var seriesMean = series.map(function (s) {
+            var vals = (s.points || []).filter(function (p) { return p.value != null; });
+            if (!vals.length) { return -Infinity; }
+            return vals.reduce(function (a, p) { return a + p.value; }, 0) / vals.length;
+        });
         var byYear = {};
         allDots.forEach(function (d) {
             if (!byYear[d.yi]) { byYear[d.yi] = []; }
@@ -677,15 +683,23 @@ var StandplassClubStats = (function () {
 
         var labels = '';
         Object.keys(byYear).forEach(function (yi) {
-            var group = byYear[yi].sort(function (a, b) { return a.y - b.y; });
-            var lastLabelY = -Infinity;
-            group.forEach(function (d) {
-                var labelY = d.y - 8;
-                // If too close to the previous label at this X, push it up
-                if (labelY < lastLabelY + 10) {
-                    labelY = lastLabelY + 1;
+            var group = byYear[yi].slice().sort(function (a, b) {
+                if (Math.abs(a.y - b.y) > 3) { return a.y - b.y; }
+                return (seriesMean[b.seriesIdx] || 0) - (seriesMean[a.seriesIdx] || 0);
+            });
+            var lastAboveY = -Infinity;
+            var lastBelowY = Infinity;
+            group.forEach(function (d, i) {
+                var labelY;
+                if (i === 0) {
+                    labelY = d.y - 8;
+                    if (labelY < lastAboveY + 10) { labelY = lastAboveY - 1; }
+                    lastAboveY = labelY;
+                } else {
+                    labelY = d.y + 13;
+                    if (lastBelowY !== Infinity && labelY < lastBelowY + 10) { labelY = lastBelowY + 10; }
+                    lastBelowY = labelY;
                 }
-                lastLabelY = labelY;
                 labels += '<text x="' + d.x.toFixed(1) + '" y="' + labelY.toFixed(1)
                     + '" text-anchor="middle" font-size="8" font-weight="400" fill="' + d.color + '">'
                     + esc(fmtVal(d.value)) + '</text>';
