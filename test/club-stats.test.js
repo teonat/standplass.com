@@ -623,4 +623,116 @@ var expEvil = CS.buildTableCard({
 });
 assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'table card: title/ariaLabel escaped');
 
+// ── Age series computation ──────────────────────────────────────────────
+
+// isLuftDiscipline: the only luft disciplines in the data are the 10m
+// luftpistol/luftsprint ones; every powder discipline lacks "luft".
+assert.strictEqual(CS.isLuftDiscipline('10m luftpistol 40 skudd'), true);
+assert.strictEqual(CS.isLuftDiscipline('10m luftpistol 60 skudd'), true);
+assert.strictEqual(CS.isLuftDiscipline('10m luftsprint, pistol'), true);
+assert.strictEqual(CS.isLuftDiscipline('25m finpistol'), false);
+assert.strictEqual(CS.isLuftDiscipline('Finfelt'), false);
+assert.strictEqual(CS.isLuftDiscipline('T96 grov'), false);
+assert.strictEqual(CS.isLuftDiscipline(''), false);
+
+// computeLuftOnlyShooters: a shooter is luft-only when EVERY row in the
+// family is a luft discipline — any powder row anywhere (other club, other
+// year) gives the powder floor.
+(function () {
+    var rows = [
+        { personId: 'p1', discipline: '10m luftpistol 40 skudd', club: 'A' },
+        { personId: 'p1', discipline: '10m luftpistol 60 skudd', club: 'B' },
+        { personId: 'p2', discipline: '10m luftpistol 40 skudd', club: 'A' },
+        { personId: 'p2', discipline: '25m finpistol', club: 'B' },
+        { personId: 'p3', discipline: 'Finfelt', club: 'A' }
+    ];
+    var luftOnly = CS.computeLuftOnlyShooters(rows);
+    assert.deepStrictEqual(luftOnly, { p1: true }, 'only all-luft shooters are luft-only');
+})();
+
+// computeAgeSeries: unique shooters per year, age = year - birthYear,
+// null/absent birth year excluded, discipline-aware floors (luft-only 9,
+// powder 11), avg rounded to 1 decimal, median middle-or-mean-of-two.
+(function () {
+    var rowsByYear = [
+        { year: 2021, rows: [
+            // p1: born 2010 → age 11 in 2021 (powder floor ok); 3 starts, counted once.
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p1', discipline: 'Grovfelt', club: 'A' },
+            { personId: 'p1', discipline: 'Spesialpistol', club: 'B' }
+        ]},
+        { year: 2022, rows: [
+            // p1 a year older (12); p2 has null birth year → excluded.
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p2', discipline: 'Finfelt', club: 'A' }
+        ]},
+        { year: 2023, rows: [
+            // p3 absent from birthyears entirely → excluded; p1 only (13).
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p3', discipline: 'Finfelt', club: 'A' }
+        ]}
+    ];
+    var birthyears = { p1: 2010, p2: null };
+    var series = CS.computeAgeSeries(rowsByYear, {}, birthyears);
+    assert.strictEqual(series.length, 3, 'all three years have data');
+    var y2021 = series[0];
+    assert.strictEqual(y2021.year, 2021);
+    assert.strictEqual(y2021.count, 1, 'multiple starts count once per year');
+    assert.strictEqual(y2021.avg, 11, 'age 11 in 2021 (born 2010)');
+    assert.strictEqual(y2021.median, 11);
+    assert.strictEqual(series[1].avg, 12, 'same shooter one year older in 2022');
+    assert.strictEqual(series[1].count, 1, 'null birth year excluded');
+    assert.strictEqual(series[2].count, 1, 'absent-from-map birth year excluded');
+    assert.strictEqual(series[2].avg, 13);
+})();
+
+// Floors: luft-only shooters are plausible from age 9, powder from 11.
+(function () {
+    var luftOnly = { pl: true };
+    var birthyears = { pl: 2016, pp: 2016, py: 2015, ppow11: 2015 };
+    // pl: luft-only, age 10 in 2026 → kept. pp: powder, age 10 → excluded.
+    // py: powder, age 11 → kept. ppow11: age 11 → kept.
+    var rowsByYear = [{ year: 2026, rows: [
+        { personId: 'pl', discipline: '10m luftpistol 40 skudd' },
+        { personId: 'pp', discipline: '25m finpistol' },
+        { personId: 'py', discipline: '25m finpistol' }
+    ]}];
+    var series = CS.computeAgeSeries(rowsByYear, luftOnly, birthyears);
+    assert.strictEqual(series.length, 1);
+    assert.strictEqual(series[0].count, 2, 'age-10 luft kept, age-10 powder excluded');
+    var ages = [10, 11];
+    assert.strictEqual(series[0].avg, 10.5, 'avg of 10 and 11');
+    assert.strictEqual(series[0].median, 10.5, 'even count → mean of two middle values (.5)');
+})();
+
+// Median/avg rounding: odd count → middle; even → mean of two middle;
+// avg rounds to 1 decimal.
+(function () {
+    var birthyears = { a: 1980, b: 1970, c: 1990 };
+    var rowsByYear = [{ year: 2020, rows: [
+        { personId: 'a', discipline: 'Finfelt' },
+        { personId: 'b', discipline: 'Finfelt' },
+        { personId: 'c', discipline: 'Finfelt' }
+    ]}];
+    var series = CS.computeAgeSeries(rowsByYear, {}, birthyears);
+    // ages 40, 50, 30
+    assert.strictEqual(series[0].median, 40, 'odd count → middle value');
+    assert.strictEqual(series[0].avg, 40, 'avg of 40/50/30');
+    var birthyears2 = { a: 1980, b: 1970, c: 1990, d: 1991 };
+    var rowsByYear2 = [{ year: 2020, rows: [
+        { personId: 'a', discipline: 'Finfelt' }, { personId: 'b', discipline: 'Finfelt' },
+        { personId: 'c', discipline: 'Finfelt' }, { personId: 'd', discipline: 'Finfelt' }
+    ]}];
+    var series2 = CS.computeAgeSeries(rowsByYear2, {}, birthyears2);
+    // ages 40, 50, 30, 29 → sorted 29,30,40,50
+    assert.strictEqual(series2[0].median, 35, 'even count → mean of two middle (30,40)');
+    assert.strictEqual(series2[0].avg, 37.3, 'avg rounds to 1 decimal (37.25 → 37.3)');
+})();
+
+// formatAgeValue: 1 decimal, trailing .0 trimmed.
+assert.strictEqual(CS.formatAgeValue(47), '47');
+assert.strictEqual(CS.formatAgeValue(47.5), '47.5');
+assert.strictEqual(CS.formatAgeValue(47.25), '47.3');
+assert.strictEqual(CS.formatAgeValue(47.04), '47');
+
 console.log('club-stats.test.js: all tests passed');

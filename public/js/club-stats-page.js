@@ -18,6 +18,84 @@ var StandplassClubStats = (function () {
 
     // ── Stats computation ──────────────────────────────────────────────
 
+    // ── Age series computation ─────────────────────────────────────────
+
+    // The only luft (air gun) disciplines in the data are the 10m
+    // luftpistol/luftsprint ones — identified by name; no powder
+    // discipline contains "luft".
+    function isLuftDiscipline(discipline) {
+        return String(discipline || '').indexOf('luft') >= 0;
+    }
+
+    // Luft-only shooters are plausible from age 9; any shooter with at
+    // least one powder result is plausible only from age 11. The
+    // classification is a property of the SHOOTER across the whole
+    // family (all clubs, all years) — the view scope never changes it.
+    var AGE_FLOOR_LUFT = 9;
+    var AGE_FLOOR_POWDER = 11;
+
+    // familyRows: ALL rows of one family. Returns { personId: true } for
+    // shooters whose every row is a luft discipline.
+    function computeLuftOnlyShooters(familyRows) {
+        var luftOnly = {};
+        var seenPowder = {};
+        (familyRows || []).forEach(function (r) {
+            if (!r.personId) { return; }
+            if (isLuftDiscipline(r.discipline)) {
+                if (!seenPowder[r.personId]) { luftOnly[r.personId] = true; }
+            } else {
+                seenPowder[r.personId] = true;
+                delete luftOnly[r.personId];
+            }
+        });
+        return luftOnly;
+    }
+
+    // rowsByYear: [{ year, rows }] — rows in scope (national or one
+    // club). Per year: unique personIds, age = year − birthYear, null or
+    // absent birth year excluded, ages below the shooter's floor
+    // excluded. Returns [{ year, count, avg, median }] — avg rounded to
+    // 1 decimal, median the middle value or the mean of the two middle
+    // values (can be .5). Years where nobody survives are omitted.
+    function computeAgeSeries(rowsByYear, luftOnly, birthyears) {
+        luftOnly = luftOnly || {};
+        birthyears = birthyears || {};
+        var out = [];
+        (rowsByYear || []).forEach(function (ye) {
+            var seen = {};
+            var ages = [];
+            (ye.rows || []).forEach(function (r) {
+                var pid = r.personId;
+                if (!pid || seen[pid]) { return; }
+                seen[pid] = true;
+                var by = birthyears[pid];
+                if (by == null) { return; } // not collected or API has none
+                var age = ye.year - by;
+                var floor = luftOnly[pid] ? AGE_FLOOR_LUFT : AGE_FLOOR_POWDER;
+                if (age < floor) { return; } // implausible birth year
+                ages.push(age);
+            });
+            if (!ages.length) { return; }
+            ages.sort(function (a, b) { return a - b; });
+            var mid = Math.floor(ages.length / 2);
+            var median = ages.length % 2 ? ages[mid] : (ages[mid - 1] + ages[mid]) / 2;
+            var sum = ages.reduce(function (a, b) { return a + b; }, 0);
+            out.push({
+                year: ye.year,
+                count: ages.length,
+                avg: Math.round((sum / ages.length) * 10) / 10,
+                median: median
+            });
+        });
+        return out;
+    }
+
+    // Age values for chart labels: 1 decimal, trailing .0 trimmed.
+    function formatAgeValue(v) {
+        var rounded = Math.round(Number(v) * 10) / 10;
+        return String(rounded).replace(/\.0$/, '');
+    }
+
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
@@ -1247,6 +1325,10 @@ var StandplassClubStats = (function () {
         renderClassDistributionHtml: renderClassDistributionHtml,
         computeTopThreeRanking: computeTopThreeRanking,
         renderTopThreeHtml: renderTopThreeHtml,
+        isLuftDiscipline: isLuftDiscipline,
+        computeLuftOnlyShooters: computeLuftOnlyShooters,
+        computeAgeSeries: computeAgeSeries,
+        formatAgeValue: formatAgeValue,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         buildTableCard: buildTableCard,
