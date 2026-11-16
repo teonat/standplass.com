@@ -408,6 +408,12 @@ def main():
         except Exception as e:
             print(f'ERROR processing year {year}: {e}', file=sys.stderr, flush=True)
             failed.append(year)
+        else:
+            # Persist birth years per year: process_year has already
+            # committed those competitions to processedIds in the year
+            # file, so a hard kill after this point would otherwise never
+            # re-fetch their resultlists (outside the 28-day window).
+            _save_birthyears()
 
     # Persist collected birth years even when years failed — partial
     # progress must survive the run.

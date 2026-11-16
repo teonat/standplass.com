@@ -14,7 +14,13 @@ owns the storage format and write rules for the per-family
 - Write rules: absent -> record whatever the poll returns (value or
   null); null -> may be upgraded to a value by a later poll (the API
   gained or corrected data); an existing value -> never overwritten
-  (first write wins; corrections go through a forced re-run).
+  (first write wins).
+- Correction procedure for a WRONG value (a forced re-scan only fills
+  gaps and upgrades nulls — it never overwrites an existing value):
+  delete or edit the entry in the JSON file by hand, then re-collect it
+  with the backfill script (docs/superpowers/scripts/) or any later
+  competition containing that shooter. Hand edits are safe: first-write
+  wins means no later poll overwrites them.
 - Keys are sorted on save for stable git diffs; JSON is compact like the
   year files.
 - The files carry personId keys only — no names or other person
@@ -53,12 +59,24 @@ def merge_birthyears(existing, updates):
 
 
 def save_birthyears(path, data):
-    """Write compact JSON with sorted keys (caller passes data through
-    merge_birthyears/slice_family for sorting; this re-sorts for safety)."""
+    """Write compact JSON with sorted keys, atomically: the destination
+    is replaced only after a complete write, so a crash mid-save can
+    never leave a corrupt file that a later load would silently reset to
+    {} (which the daily workflow would then commit, dropping thousands
+    of backfilled entries)."""
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump({k: data[k] for k in sorted(data)}, f, ensure_ascii=False,
-                  separators=(',', ':'))
+    tmp = path + '.tmp'
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({k: data[k] for k in sorted(data)}, f, ensure_ascii=False,
+                      separators=(',', ':'))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def extract_birthyears(resultlist_items):

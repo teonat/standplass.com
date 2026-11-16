@@ -84,6 +84,22 @@ class FileIO(unittest.TestCase):
                 f.write('{not valid json')
             self.assertEqual(load_birthyears(path), {})
 
+    def test_failed_save_leaves_existing_file_intact(self):
+        # A crash mid-write must never leave a corrupt/truncated file:
+        # load_birthyears silently resets corrupt files to {}, and the
+        # daily workflow would then commit the shrunken file, silently
+        # dropping thousands of backfilled entries.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'birthyears.json')
+            save_birthyears(path, {'a': 1980})
+
+            class Unserializable:
+                pass
+
+            with self.assertRaises(TypeError):
+                save_birthyears(path, {'a': 1980, 'b': Unserializable()})
+            self.assertEqual(load_birthyears(path), {'a': 1980})
+
 
 if __name__ == '__main__':
     unittest.main()
