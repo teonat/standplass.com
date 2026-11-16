@@ -125,6 +125,22 @@ var StandplassClubStats = (function () {
             + '</div>';
     }
 
+    // Memoizes an expensive, immutable-input computation per scope key.
+    // Used for the age-series walk (a full flatten of both families,
+    // ~225k rows) so it runs once per scope — never per toggle click or
+    // filter change. Valid because yearData/birthyears/luftOnlyMaps are
+    // immutable after load, the same assumption statsCache already makes.
+    function createAgeSeriesCache(compute) {
+        var cache = {};
+        return function (scopeClub) {
+            var key = scopeClub == null ? '\u0000national' : scopeClub;
+            if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+                cache[key] = compute(scopeClub);
+            }
+            return cache[key];
+        };
+    }
+
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
@@ -772,17 +788,6 @@ var StandplassClubStats = (function () {
         var birthyears = { felt: null, bane: null };      // personId → year|null
         var luftOnlyMaps = { felt: null, bane: null };    // personId → true
 
-        // ALL rows of one family across all years (luft-only classification
-        // is a property of the shooter, never of the view scope).
-        function familyRows(base) {
-            var rows = [];
-            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
-                var key = base + '|' + y;
-                if (yearData[key]) { rows = rows.concat(StandplassStevnerPage.flattenRows(yearData[key])); }
-            }
-            return rows;
-        }
-
         function ageRowsByYear(base, scopeClub) {
             var out = [];
             for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
@@ -799,9 +804,10 @@ var StandplassClubStats = (function () {
             return out;
         }
 
-        // Four chart series: avg (solid) and median (dashed) per family.
-        // scopeClub null = national overview.
-        function buildAgeSeriesData(scopeClub) {
+        // The age-series walk flattens both families (~225k rows) — it is
+        // memoized per scope (national / per club) so it runs once, never
+        // on toggle clicks or filter changes.
+        var getAgeSeriesData = createAgeSeriesCache(function (scopeClub) {
             var out = {};
             ['felt', 'bane'].forEach(function (fam) {
                 var perYear = computeAgeSeries(
@@ -814,12 +820,12 @@ var StandplassClubStats = (function () {
                 };
             });
             return out;
-        }
+        });
 
         function ageChartSeries(scopeClub) {
             // After the avg/median split: two single-metric charts, one
             // series per family — solid lines, family colors.
-            var data = buildAgeSeriesData(scopeClub);
+            var data = getAgeSeriesData(scopeClub);
             return {
                 avg: [
                     { label: 'Felt', color: 'var(--brand-accent)', points: data.felt.avg },
@@ -1143,7 +1149,7 @@ var StandplassClubStats = (function () {
             // Details table follows the active metric.
             var head, body;
             if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
-                var data = buildAgeSeriesData(resolved);
+                var data = getAgeSeriesData(resolved);
                 var ageArr = activeMetric === 'avgAge' ? { felt: data.felt.avg, bane: data.bane.avg } : { felt: data.felt.median, bane: data.bane.median };
                 function byYearAge(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
                 var yearSetA = {};
@@ -1497,17 +1503,21 @@ var StandplassClubStats = (function () {
             dataLoaded = true;
             birthyears.felt = loaded[1];
             birthyears.bane = loaded[2];
-            // Luft-only classification is per shooter across the WHOLE
-            // family (all clubs, all years) — computed once after load.
-            luftOnlyMaps.felt = computeLuftOnlyShooters(familyRows('/data/felt'));
-            luftOnlyMaps.bane = computeLuftOnlyShooters(familyRows('/data/bane'));
-            // Accumulate club names from all years
+            // One walk over all year files: accumulates club names AND the
+            // per-family row sets for the luft-only classification (a
+            // property of the shooter across the whole family — all clubs,
+            // all years).
+            var famRows = { felt: [], bane: [] };
             Object.keys(yearData).forEach(function (key) {
                 var rows = StandplassStevnerPage.flattenRows(yearData[key]);
                 rows.forEach(function (r) {
                     if (r.club) { allClubNames[r.club] = true; }
                 });
+                var fam = key.split('|')[0] === '/data/felt' ? 'felt' : 'bane';
+                famRows[fam] = famRows[fam].concat(rows);
             });
+            luftOnlyMaps.felt = computeLuftOnlyShooters(famRows.felt);
+            luftOnlyMaps.bane = computeLuftOnlyShooters(famRows.bane);
             render();
         }, function () {
             statusEl.textContent = 'Kunne ikke laste data. Prøv igjen senere.';
@@ -1532,6 +1542,7 @@ var StandplassClubStats = (function () {
         formatAgeValue: formatAgeValue,
         normalizeClubChartMetric: normalizeClubChartMetric,
         renderMetricToggleHtml: renderMetricToggleHtml,
+        createAgeSeriesCache: createAgeSeriesCache,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         buildTableCard: buildTableCard,

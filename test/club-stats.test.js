@@ -818,4 +818,20 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     assert.ok(ageHtml.indexOf('>Alder<') === -1, 'combined Alder metric is gone');
 })();
 
+// createAgeSeriesCache: memoizes the (expensive, immutable-input) age
+// walk per scope — one full flatten of both families per scope, never
+// re-run on toggle clicks or filter changes.
+(function () {
+    var calls = [];
+    var cached = CS.createAgeSeriesCache(function (scopeClub) {
+        calls.push(scopeClub);
+        return { scope: scopeClub };
+    });
+    assert.deepStrictEqual(cached(null), { scope: null }, 'returns the computed value');
+    assert.deepStrictEqual(cached('Klubb A'), { scope: 'Klubb A' });
+    cached(null); cached('Klubb A'); cached(null);
+    assert.strictEqual(calls.length, 2, 'same scope is served from cache');
+    assert.deepStrictEqual(calls, [null, 'Klubb A']);
+})();
+
 console.log('club-stats.test.js: all tests passed');
