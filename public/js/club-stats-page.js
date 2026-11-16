@@ -103,7 +103,8 @@ var StandplassClubStats = (function () {
     var CLUB_CHART_METRICS = [
         { key: 'shooters', label: 'Skyttere' },
         { key: 'starts', label: 'Starter' },
-        { key: 'age', label: 'Alder' }
+        { key: 'avgAge', label: 'Snittalder' },
+        { key: 'medianAge', label: 'Medianalder' }
     ];
 
     function normalizeClubChartMetric(v) {
@@ -802,13 +803,27 @@ var StandplassClubStats = (function () {
         }
 
         function ageChartSeries(scopeClub) {
+            // After the avg/median split: two single-metric charts, one
+            // series per family — solid lines, family colors.
             var data = buildAgeSeriesData(scopeClub);
-            return [
-                { label: 'Felt · gjennomsnitt', color: 'var(--brand-accent)', dash: false, points: data.felt.avg },
-                { label: 'Felt · median', color: 'var(--brand-accent)', dash: true, points: data.felt.median },
-                { label: 'Bane · gjennomsnitt', color: 'var(--chart-blue)', dash: false, points: data.bane.avg },
-                { label: 'Bane · median', color: 'var(--chart-blue)', dash: true, points: data.bane.median }
-            ];
+            return {
+                avg: [
+                    { label: 'Felt', color: 'var(--brand-accent)', points: data.felt.avg },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: data.bane.avg }
+                ],
+                median: [
+                    { label: 'Felt', color: 'var(--brand-accent)', points: data.felt.median },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: data.bane.median }
+                ]
+            };
+        }
+
+        // The charts react to the alle/felt/bane program filter like every
+        // other section on the page: 'alle' shows both family series.
+        function visibleSeries(series) {
+            if (activeProgram === 'felt') { return series.slice(0, 1); }
+            if (activeProgram === 'bane') { return series.slice(1); }
+            return series;
         }
         var activeYear = isNaN(yearParam) ? CURRENT_YEAR : yearParam;
 
@@ -1052,19 +1067,20 @@ var StandplassClubStats = (function () {
             }
             if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
             var chart;
-            if (activeMetric === 'age') {
-                chart = renderMultiSeriesChart(ageChartSeries(null),
-                    { title: 'Alder per år: gjennomsnitt og median, felt og bane', yClamp: true, valueFormat: formatAgeValue })
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var ageSeries = activeMetric === 'avgAge' ? ageChartSeries(null).avg : ageChartSeries(null).median;
+                chart = renderMultiSeriesChart(visibleSeries(ageSeries),
+                    { title: 'Alder per år: ' + (activeMetric === 'avgAge' ? 'gjennomsnitt' : 'median') + ', felt og bane', yClamp: true, valueFormat: formatAgeValue })
                     + '<p class="club-stats-note">Skyttere uten kjent fødselsår er ikke med i beregningen.</p>';
             } else if (activeMetric === 'starts') {
-                chart = renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }]),
                     { title: 'Totalt antall starter per år: felt og bane' });
             } else {
-                chart = renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }]),
                     { title: 'Totalt antall skyttere per år: felt og bane' });
             }
             return '<section class="ranking-card club-stats-section club-stats-overview" data-club-chart-section>'
@@ -1093,40 +1109,39 @@ var StandplassClubStats = (function () {
             }
             if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
             var chart;
-            if (activeMetric === 'age') {
-                chart = renderMultiSeriesChart(ageChartSeries(resolved),
-                    { title: 'Alder per år: gjennomsnitt og median, felt og bane', yClamp: true, valueFormat: formatAgeValue })
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var ageSeries = activeMetric === 'avgAge' ? ageChartSeries(resolved).avg : ageChartSeries(resolved).median;
+                chart = renderMultiSeriesChart(visibleSeries(ageSeries),
+                    { title: 'Alder per år: ' + (activeMetric === 'avgAge' ? 'gjennomsnitt' : 'median') + ', felt og bane', yClamp: true, valueFormat: formatAgeValue })
                     + '<p class="club-stats-note">Skyttere uten kjent fødselsår er ikke med i beregningen.</p>';
             } else if (activeMetric === 'starts') {
-                chart = renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }]),
                     { title: 'Starter per år: felt og bane' });
             } else {
-                chart = renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }]),
                     { title: 'Unike skyttere per år: felt og bane' });
             }
 
             // Details table follows the active metric.
             var head, body;
-            if (activeMetric === 'age') {
-                var ageData = buildAgeSeriesData(resolved);
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var data = buildAgeSeriesData(resolved);
+                var ageArr = activeMetric === 'avgAge' ? { felt: data.felt.avg, bane: data.bane.avg } : { felt: data.felt.median, bane: data.bane.median };
                 function byYearAge(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
                 var yearSetA = {};
-                ageData.felt.avg.concat(ageData.felt.median, ageData.bane.avg, ageData.bane.median)
-                    .forEach(function (p) { yearSetA[p.year] = true; });
+                ageArr.felt.concat(ageArr.bane).forEach(function (p) { yearSetA[p.year] = true; });
                 var yearsA = Object.keys(yearSetA).map(Number).sort(function (a, b) { return a - b; });
-                head = '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt snittalder</th><th scope="col" class="ranking-score">Felt medianalder</th><th scope="col" class="ranking-score">Bane snittalder</th><th scope="col" class="ranking-score">Bane medianalder</th></tr></thead>';
+                var ageColLabel = activeMetric === 'avgAge' ? 'snittalder' : 'medianalder';
+                head = '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt ' + ageColLabel + '</th><th scope="col" class="ranking-score">Bane ' + ageColLabel + '</th></tr></thead>';
                 body = yearsA.map(function (yr) {
-                    var fa = byYearAge(ageData.felt.avg, yr), fm = byYearAge(ageData.felt.median, yr);
-                    var ba = byYearAge(ageData.bane.avg, yr), bm = byYearAge(ageData.bane.median, yr);
+                    var fa = byYearAge(ageArr.felt, yr), ba = byYearAge(ageArr.bane, yr);
                     return '<tr><td>' + esc(String(yr)) + '</td>'
                         + '<td class="ranking-score">' + (fa ? formatAgeValue(fa.value) : '–') + '</td>'
-                        + '<td class="ranking-score">' + (fm ? formatAgeValue(fm.value) : '–') + '</td>'
-                        + '<td class="ranking-score">' + (ba ? formatAgeValue(ba.value) : '–') + '</td>'
-                        + '<td class="ranking-score">' + (bm ? formatAgeValue(bm.value) : '–') + '</td></tr>';
+                        + '<td class="ranking-score">' + (ba ? formatAgeValue(ba.value) : '–') + '</td></tr>';
                 }).join('');
             } else {
                 var yearSet = {};

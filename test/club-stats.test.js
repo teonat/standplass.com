@@ -738,7 +738,9 @@ assert.strictEqual(CS.formatAgeValue(47.04), '47');
 // ── Metric switcher ────────────────────────────────────────────────────
 
 assert.strictEqual(CS.normalizeClubChartMetric('starts'), 'starts');
-assert.strictEqual(CS.normalizeClubChartMetric('age'), 'age');
+assert.strictEqual(CS.normalizeClubChartMetric('avgAge'), 'avgAge');
+assert.strictEqual(CS.normalizeClubChartMetric('medianAge'), 'medianAge');
+assert.strictEqual(CS.normalizeClubChartMetric('age'), 'shooters', 'pre-split age key is no longer a metric');
 assert.strictEqual(CS.normalizeClubChartMetric('shooters'), 'shooters');
 assert.strictEqual(CS.normalizeClubChartMetric('garbage'), 'shooters');
 assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
@@ -751,8 +753,11 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     assert.strictEqual((html.match(/program-btn--active/g) || []).length, 1, 'exactly one active button');
     assert.ok(/data-metric="starts"[^>]*aria-pressed="true"/.test(html), 'active button is aria-pressed=true');
     assert.ok(/data-metric="shooters"[^>]*aria-pressed="false"/.test(html), 'inactive button is aria-pressed=false');
-    // After the Alder task: the age metric is in the list.
-    assert.ok(CS.renderMetricToggleHtml('age').indexOf('>Alder<') !== -1, 'Alder metric present');
+    // After the split: Snittalder and Medianalder are separate metrics.
+    var ageHtml = CS.renderMetricToggleHtml('avgAge');
+    assert.ok(ageHtml.indexOf('>Snittalder<') !== -1, 'Snittalder metric present');
+    assert.ok(ageHtml.indexOf('>Medianalder<') !== -1, 'Medianalder metric present');
+    assert.ok(ageHtml.indexOf('>Alder<') === -1, 'combined Alder metric is gone');
 })();
 
 console.log('club-stats.test.js: all tests passed');
