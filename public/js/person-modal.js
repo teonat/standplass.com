@@ -343,7 +343,7 @@ var StandplassPersonModal = (function () {
             + '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + (CHART_TITLES[metric] || '') + '-utvikling" style="display:block;overflow:visible;">'
             + '<line x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' + (H - PB) + '" stroke="var(--border)" stroke-width="1"/>'
             + '<line x1="' + PL + '" y1="' + (H - PB) + '" x2="' + (W - PR) + '" y2="' + (H - PB) + '" stroke="var(--border)" stroke-width="1"/>'
-            + '<polyline points="' + polyPoints + '" fill="none" stroke="var(--chart-blue)" stroke-width="1.25" stroke-linejoin="round"/>'
+            + '<polyline points="' + polyPoints + '" fill="none" stroke="var(--chart-blue)" stroke-width="1.5" stroke-linejoin="round"/>'
             + dots
             + yLabels
             + xTicks
