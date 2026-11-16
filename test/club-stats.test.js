@@ -738,6 +738,7 @@ assert.strictEqual(CS.formatAgeValue(47.04), '47');
 // ── Metric switcher ────────────────────────────────────────────────────
 
 assert.strictEqual(CS.normalizeClubChartMetric('starts'), 'starts');
+assert.strictEqual(CS.normalizeClubChartMetric('age'), 'age');
 assert.strictEqual(CS.normalizeClubChartMetric('shooters'), 'shooters');
 assert.strictEqual(CS.normalizeClubChartMetric('garbage'), 'shooters');
 assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
@@ -750,8 +751,8 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     assert.strictEqual((html.match(/program-btn--active/g) || []).length, 1, 'exactly one active button');
     assert.ok(/data-metric="starts"[^>]*aria-pressed="true"/.test(html), 'active button is aria-pressed=true');
     assert.ok(/data-metric="shooters"[^>]*aria-pressed="false"/.test(html), 'inactive button is aria-pressed=false');
-    // Skyttere + Starter only at this stage (age lands with its data).
-    assert.ok(html.indexOf('>Alder<') === -1, 'no Alder metric yet');
+    // After the Alder task: the age metric is in the list.
+    assert.ok(CS.renderMetricToggleHtml('age').indexOf('>Alder<') !== -1, 'Alder metric present');
 })();
 
 console.log('club-stats.test.js: all tests passed');
