@@ -3,18 +3,67 @@ var StandplassFormat = (function () {
 
     var MONTHS = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
 
-    // The competition APIs emit datetimes WITHOUT a timezone suffix
-    // ("2026-11-16T16:00:00"): the value is Norwegian wall-clock time for
-    // that date, DST already baked in by whoever registered the event.
-    // Read it literally — new Date() would reinterpret a suffix-less
-    // string in the *viewer's* timezone (shifting the date for
-    // non-Norwegian visitors at edge hours), and any conversion would
-    // have to guess CET vs CEST. Suffix-less and "Z"-suffixed strings
-    // alike yield their leading date verbatim here. (This restores the
-    // source's own substring-parsing approach, which the port lost.)
+    // The competition APIs (nsfapi competitionlist, app.skyting.no
+    // competition detail) emit datetimes WITHOUT a timezone suffix, e.g.
+    // "2026-11-18T15:00:00" -- and that value is a UTC instant, not
+    // Norwegian wall-clock. The registration form has no timezone input
+    // (pure digit fields), the backend stores the entered time's UTC
+    // equivalent, and skyting.no renders it back as Europe/Oslo local
+    // time -- confirmed live: an event stored as 15:00 displays "kl
+    // 16:00" in November (CET, +1), and list rows titled "NAIS 09:00 -
+    // 22.05.2021" carry 07:00 strings (CEST, +2). So parsing must do the
+    // same conversion: read the fields as a UTC instant, then format as
+    // Europe/Oslo. Intl's timeZone support does the CET/CEST DST
+    // arithmetic and makes the result identical for every viewer
+    // regardless of their own timezone (a plain new Date() on a
+    // suffix-less string would instead reinterpret it in the *viewer's*
+    // zone). Date-only strings (no time part) carry no instant to
+    // convert and pass through as-is.
+    var osloFmt = null;
+    function osloParts(utc) {
+        if (osloFmt === null) {
+            try {
+                osloFmt = new Intl.DateTimeFormat('en', {
+                    timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit',
+                    day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+                });
+            } catch (e) { osloFmt = false; }
+        }
+        var byType = {};
+        if (osloFmt && osloFmt.formatToParts) {
+            osloFmt.formatToParts(utc).forEach(function (p) { byType[p.type] = p.value; });
+        }
+        if (byType.year) {
+            return {
+                y: +byType.year, mo: +byType.month, d: +byType.day,
+                // some engines render midnight as hour "24" under hour12:false
+                hh: byType.hour === '24' ? '00' : byType.hour, mm: byType.minute
+            };
+        }
+        // No Intl timezone support (ancient environment): fall back to the
+        // raw UTC fields rather than crash -- times then show the stored
+        // UTC hour, one off in winter, two in summer.
+        return {
+            y: utc.getUTCFullYear(), mo: utc.getUTCMonth() + 1, d: utc.getUTCDate(),
+            hh: ('0' + utc.getUTCHours()).slice(-2), mm: ('0' + utc.getUTCMinutes()).slice(-2)
+        };
+    }
+
     function parseDateParts(isoString) {
-        var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(String(isoString || ''));
-        return m ? { y: m[1], mo: m[2], d: m[3], hh: m[4] || null, mm: m[5] || '00' } : null;
+        var s = String(isoString == null ? '' : isoString);
+        var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?/.exec(s);
+        if (!m) { return null; }
+        if (m[4] == null) {
+            return { dateOnly: true, y: +m[1], mo: +m[2], d: +m[3], hh: null, mm: null };
+        }
+        // Explicit offset (incl. Z): let Date apply it; suffix-less (the
+        // APIs' convention): interpret the fields as UTC.
+        var utc = m[7]
+            ? new Date(s)
+            : new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+        if (isNaN(utc.getTime())) { return null; }
+        var p = osloParts(utc);
+        return { dateOnly: false, y: p.y, mo: p.mo, d: p.d, hh: p.hh, mm: p.mm };
     }
 
     function sameDay(a, b) {
@@ -41,8 +90,9 @@ var StandplassFormat = (function () {
     }
 
     // Meta-line composition: the competition's date range plus its start
-    // time when the API carries one. Single day: "16. nov 2026, kl 16:00".
-    // Range: "21.–22. nov 2026 · starter kl 09:00" (the first day's time).
+    // time (Oslo time, per the conversion above) when the API carries one.
+    // Single day: "18. nov 2026, kl 16:00". Range: "21.–22. nov 2026 ·
+    // starter kl 10:00" (the first day's time).
     function formatDateRangeTime(startIso, endIso) {
         var range = formatDateRange(startIso, endIso);
         if (!range) { return range; }

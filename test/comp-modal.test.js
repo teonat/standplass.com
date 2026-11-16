@@ -30,10 +30,10 @@ assert.ok(contactBody.indexOf('Kontaktadresse') >= 0, 'contact address row');
 assert.ok(contactBody.indexOf('v/ Wenche &lt;script&gt;') >= 0, 'contact address escaped');
 assert.ok(contactBody.indexOf('2211 KONGSVINGER') >= 0, 'zip + city composed');
 
-var regTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T23:59:00', useRegistrationEndTime: true, events: [] });
-assert.ok(regTimeBody.indexOf('Påmeldingsfrist') >= 0 && regTimeBody.indexOf('kl 23:59') >= 0, 'registration time shown when flagged');
-var regNoTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T23:59:00', events: [] });
-assert.ok(regNoTimeBody.indexOf('kl 23:59') < 0, 'registration time hidden without flag');
+var regTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T10:00:00', useRegistrationEndTime: true, events: [] });
+assert.ok(regTimeBody.indexOf('Påmeldingsfrist') >= 0 && regTimeBody.indexOf('kl 11:00') >= 0, 'registration time shown when flagged (UTC 10:00 -> Oslo 11:00)');
+var regNoTimeBody = CM.renderDetailBody({ registrationEndDate: '2026-01-05T10:00:00', events: [] });
+assert.ok(regNoTimeBody.indexOf('kl 11:00') < 0, 'registration time hidden without flag');
 var regPlainDate = CM.renderDetailBody({ registrationEndDate: '2026-01-05', useRegistrationEndTime: true, events: [] });
 assert.ok(regPlainDate.indexOf(', kl ') < 0, 'flagged but date-only string renders no time');
 assert.ok(xssBody.indexOf('<img src=x') < 0, 'description markup is not emitted raw');
@@ -137,7 +137,7 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
         { startDate: '2026-11-16T16:00:00', endDate: '2026-11-16T16:00:00', organizationId: 'org-1' },
         { name: 'Bomba' }
     );
-    assert.strictEqual(meta, '16. nov 2026, kl 16:00 · Bomba · Eidskog Sportsskyttere', 'formatMetaLine composes start time, venue and organizer');
+    assert.strictEqual(meta, '16. nov 2026, kl 17:00 · Bomba · Eidskog Sportsskyttere', 'formatMetaLine composes start time (Oslo), venue and organizer');
     assert.strictEqual(
         CM.formatMetaLine({ startDate: '2026-11-16', endDate: '2026-11-16', organizationId: 'unresolved' }, null),
         '16. nov 2026',
