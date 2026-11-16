@@ -96,6 +96,33 @@ var StandplassClubStats = (function () {
         return String(rounded).replace(/\.0$/, '');
     }
 
+    // ── Club chart metric switcher ────────────────────────────────────
+
+    // One visible chart behind a toggle (person-modal "Vis i graf"
+    // pattern) instead of stacked charts.
+    var CLUB_CHART_METRICS = [
+        { key: 'shooters', label: 'Skyttere' },
+        { key: 'starts', label: 'Starter' }
+    ];
+
+    function normalizeClubChartMetric(v) {
+        for (var i = 0; i < CLUB_CHART_METRICS.length; i++) {
+            if (CLUB_CHART_METRICS[i].key === v) { return v; }
+        }
+        return 'shooters';
+    }
+
+    function renderMetricToggleHtml(activeMetric) {
+        return '<div class="program-toggle" role="group" aria-label="Vis i graf">'
+            + CLUB_CHART_METRICS.map(function (m) {
+                return '<button type="button" class="program-btn club-metric-toggle'
+                    + (m.key === activeMetric ? ' program-btn--active' : '') + '"'
+                    + ' data-metric="' + m.key + '" aria-pressed="' + (m.key === activeMetric) + '">'
+                    + esc(m.label) + '</button>';
+            }).join('')
+            + '</div>';
+    }
+
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
@@ -720,6 +747,10 @@ var StandplassClubStats = (function () {
         var programParam = params.get('program');
         var activeProgram = (programParam === 'felt' || programParam === 'bane') ? programParam : 'alle';
         var yearParam = parseInt(params.get('year'), 10);
+        var activeMetric = normalizeClubChartMetric(params.get('metric'));
+        // The drilldown's data-derived club name (set by renderDrilldown);
+        // the metric-toggle handler re-renders the chart section with it.
+        var resolvedClub = null;
         var activeYear = isNaN(yearParam) ? CURRENT_YEAR : yearParam;
 
         var fetcher = StandplassData.createFetcher(window.fetch.bind(window));
@@ -939,7 +970,99 @@ var StandplassClubStats = (function () {
             });
         }
 
+        // Overview charts: one chart behind the metric switcher — always
+        // both programs (felt + bane) regardless of the active program
+        // filter. Defined at init level so the toggle's click handler can
+        // re-render just this section.
+        function renderOverviewChartSection() {
+            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
+            for (var oy = FIRST_YEAR; oy <= CURRENT_YEAR; oy++) {
+                var ofs = getStatsForYear(oy, 'felt');
+                var obs = getStatsForYear(oy, 'bane');
+                var fsCount = 0, fsStarts = 0, bsCount = 0, bsStarts = 0;
+                Object.keys(ofs).forEach(function (c) { fsCount += ofs[c].uniqueShooters; fsStarts += ofs[c].totalStarts; });
+                Object.keys(obs).forEach(function (c) { bsCount += obs[c].uniqueShooters; bsStarts += obs[c].totalStarts; });
+                if (Object.keys(ofs).length) {
+                    feltShooters.push({ year: oy, value: fsCount });
+                    feltStarts.push({ year: oy, value: fsStarts });
+                }
+                if (Object.keys(obs).length) {
+                    baneShooters.push({ year: oy, value: bsCount });
+                    baneStarts.push({ year: oy, value: bsStarts });
+                }
+            }
+            if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
+            var chart = activeMetric === 'starts'
+                ? renderMultiSeriesChart(
+                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
+                    { title: 'Totalt antall starter per år: felt og bane' })
+                : renderMultiSeriesChart(
+                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
+                    { title: 'Totalt antall skyttere per år: felt og bane' });
+            return '<section class="ranking-card club-stats-section club-stats-overview" data-club-chart-section>'
+                + '<div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet i hele Norge</h2></div>'
+                + '<div class="club-stats-chart-toggle">' + renderMetricToggleHtml(activeMetric) + '</div>'
+                + chart
+                + '</section>';
+        }
+
+        // Drilldown charts: same metric switcher, per club. Series are
+        // computed per call (getStatsForYear caches underneath), so the
+        // toggle's click handler can re-render just this section.
+        function renderDrilldownChartSection(resolved) {
+            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
+            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
+                var fStats = getStatsForYear(y, 'felt');
+                var bStats = getStatsForYear(y, 'bane');
+                if (fStats[resolved]) {
+                    feltShooters.push({ year: y, value: fStats[resolved].uniqueShooters });
+                    feltStarts.push({ year: y, value: fStats[resolved].totalStarts });
+                }
+                if (bStats[resolved]) {
+                    baneShooters.push({ year: y, value: bStats[resolved].uniqueShooters });
+                    baneStarts.push({ year: y, value: bStats[resolved].totalStarts });
+                }
+            }
+            if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
+            var chart = activeMetric === 'starts'
+                ? renderMultiSeriesChart(
+                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
+                    { title: 'Starter per år: felt og bane' })
+                : renderMultiSeriesChart(
+                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
+                    { title: 'Unike skyttere per år: felt og bane' });
+
+            // Details table follows the active metric.
+            var yearSet = {};
+            feltShooters.concat(baneShooters).concat(feltStarts).concat(baneStarts)
+                .forEach(function (p) { yearSet[p.year] = true; });
+            var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
+            function byYear(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
+            var head = activeMetric === 'starts'
+                ? '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead>'
+                : '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th></tr></thead>';
+            var body = years.map(function (yr) {
+                var a = byYear(activeMetric === 'starts' ? feltStarts : feltShooters, yr);
+                var b = byYear(activeMetric === 'starts' ? baneStarts : baneShooters, yr);
+                return '<tr><td>' + esc(String(yr)) + '</td>'
+                    + '<td class="ranking-score">' + (a ? a.value : '–') + '</td>'
+                    + '<td class="ranking-score">' + (b ? b.value : '–') + '</td></tr>';
+            }).join('');
+
+            return '<section class="ranking-card club-stats-section" data-club-chart-section>'
+                + '<div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet over tid</h2></div>'
+                + '<div class="club-stats-chart-toggle">' + renderMetricToggleHtml(activeMetric) + '</div>'
+                + chart
+                + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
+                + '<table class="ranking-table">' + head + '<tbody>' + body + '</tbody></table></div></details></section>';
+        }
+
         function renderToplists() {
+            resolvedClub = null;
             titleEl.textContent = 'Klubbstatistikk';
             leadEl.innerHTML = 'Topplister og statistikk for skytteklubber. '
                 + 'Data fra skyting.no – kun pistol og revolver (feltskyting og baneskyting).';
@@ -1008,40 +1131,10 @@ var StandplassClubStats = (function () {
                 + '<div class="club-stats-summary-card"><span class="club-stats-summary-value">' + Object.keys(nationalClubs).length + '</span><span class="club-stats-summary-label">Aktive klubber</span></div>'
                 + '</div>';
 
-            // Overview charts: total skyttere/starter across all clubs, felt vs bane, per year.
-            // Always shows both programs regardless of the active program toggle.
-            var overviewFeltShooters = [], overviewFeltStarts = [];
-            var overviewBaneShooters = [], overviewBaneStarts = [];
-            for (var oy = FIRST_YEAR; oy <= CURRENT_YEAR; oy++) {
-                var ofs = getStatsForYear(oy, 'felt');
-                var obs = getStatsForYear(oy, 'bane');
-                var fsCount = 0, fsStarts = 0, bsCount = 0, bsStarts = 0;
-                Object.keys(ofs).forEach(function (c) { fsCount += ofs[c].uniqueShooters; fsStarts += ofs[c].totalStarts; });
-                Object.keys(obs).forEach(function (c) { bsCount += obs[c].uniqueShooters; bsStarts += obs[c].totalStarts; });
-                if (Object.keys(ofs).length) {
-                    overviewFeltShooters.push({ year: oy, value: fsCount });
-                    overviewFeltStarts.push({ year: oy, value: fsStarts });
-                }
-                if (Object.keys(obs).length) {
-                    overviewBaneShooters.push({ year: oy, value: bsCount });
-                    overviewBaneStarts.push({ year: oy, value: bsStarts });
-                }
-            }
-
-            var overviewHtml = (overviewFeltShooters.length >= 2 || overviewBaneShooters.length >= 2)
-                ? '<section class="ranking-card club-stats-section club-stats-overview"><div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet i hele Norge</h2></div>'
-                + '<h3 class="club-stats-chart-label">Skyttere</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltShooters },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: overviewBaneShooters }],
-                    { title: 'Totalt antall skyttere per år: felt og bane' })
-                + '<h3 class="club-stats-chart-label">Starter</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltStarts },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: overviewBaneStarts }],
-                    { title: 'Totalt antall starter per år: felt og bane' })
-                + '</section>'
-                : '';
+            // Overview charts: one chart behind the metric switcher —
+            // always both programs (felt + bane) regardless of the active
+            // program filter.
+            var overviewHtml = renderOverviewChartSection();
 
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
@@ -1067,6 +1160,9 @@ var StandplassClubStats = (function () {
                     resolved = name;
                 }
             });
+            // Expose the resolved name for the metric-toggle handler, which
+            // re-renders the chart section without a full drilldown render.
+            resolvedClub = resolved;
             if (!resolved) {
                 // No match — fall back to toplists with info message
                 klubbParam = null;
@@ -1086,20 +1182,7 @@ var StandplassClubStats = (function () {
             var stats = getStatsForYear(activeYear, activeProgram);
             var clubStat = stats[resolved];
 
-            // Multi-year chart data — separate felt/bane per year
-            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
-            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
-                var fStats = getStatsForYear(y, 'felt');
-                var bStats = getStatsForYear(y, 'bane');
-                if (fStats[resolved]) {
-                    feltShooters.push({ year: y, value: fStats[resolved].uniqueShooters });
-                    feltStarts.push({ year: y, value: fStats[resolved].totalStarts });
-                }
-                if (bStats[resolved]) {
-                    baneShooters.push({ year: y, value: bStats[resolved].uniqueShooters });
-                    baneStarts.push({ year: y, value: bStats[resolved].totalStarts });
-                }
-            }
+            var chartHtml = renderDrilldownChartSection(resolved);
 
             // Mest aktive skyttere (per club, from raw rows)
             var rows = getRowsForYear(activeYear, activeProgram);
@@ -1152,43 +1235,6 @@ var StandplassClubStats = (function () {
                 + '<div class="club-stats-summary-card"><span class="club-stats-summary-value">' + clubStat.topThree + '</span><span class="club-stats-summary-label">Topp-3 plasseringer</span></div>'
                 + '</div>'
                 : '<p class="ranking-status-msg">Ingen data for ' + esc(resolved) + ' i ' + activeYear + '.</p>';
-
-            var chartHtml = (feltShooters.length >= 2 || baneShooters.length >= 2)
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet over tid</h2></div>'
-                + '<h3 class="club-stats-chart-label">Skyttere</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }],
-                    { title: 'Unike skyttere per år: felt og bane' })
-                + '<h3 class="club-stats-chart-label">Starter</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
-                     { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }],
-                    { title: 'Starter per år: felt og bane' })
-                + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
-                + '<table class="ranking-table"><thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead><tbody>'
-                + years0().map(function (yr) {
-                    var fs = feltShooters.filter(function (p) { return p.year === yr; })[0];
-                    var bs = baneShooters.filter(function (p) { return p.year === yr; })[0];
-                    var fst = feltStarts.filter(function (p) { return p.year === yr; })[0];
-                    var bst = baneStarts.filter(function (p) { return p.year === yr; })[0];
-                    return '<tr><td>' + esc(String(yr)) + '</td>'
-                        + '<td class="ranking-score">' + (fs ? fs.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (bs ? bs.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (fst ? fst.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (bst ? bst.value : '–') + '</td></tr>';
-                }).join('')
-                + '</tbody></table></div></details></section>'
-                : '';
-
-            function years0() {
-                var set = {};
-                feltShooters.forEach(function (p) { set[p.year] = true; });
-                baneShooters.forEach(function (p) { set[p.year] = true; });
-                feltStarts.forEach(function (p) { set[p.year] = true; });
-                baneStarts.forEach(function (p) { set[p.year] = true; });
-                return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
-            }
 
             var topShootersHtml = topShooters.length
                 ? buildTableCard({
@@ -1272,6 +1318,26 @@ var StandplassClubStats = (function () {
 
         buildFilters();
 
+        // Metric toggle: one delegated listener for the chart sections'
+        // toggle group (overview and drilldown). Swaps only the chart
+        // section's DOM — the toplists and drilldown cards stay put.
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.club-metric-toggle') : null;
+            if (!btn) { return; }
+            activeMetric = normalizeClubChartMetric(btn.getAttribute('data-metric'));
+            var qs = new URLSearchParams(urlState.getSearch());
+            if (activeMetric === 'shooters') { qs.delete('metric'); } else { qs.set('metric', activeMetric); }
+            urlState.setSearch('?' + qs.toString());
+            var section = contentEl.querySelector('[data-club-chart-section]');
+            if (section) {
+                section.outerHTML = resolvedClub
+                    ? renderDrilldownChartSection(resolvedClub)
+                    : renderOverviewChartSection();
+                var refocus = contentEl.querySelector('.club-metric-toggle[aria-pressed="true"]');
+                if (refocus) { refocus.focus(); }
+            }
+        });
+
         // Top-3 card toggles: one delegated listener for the drilldown's
         // top-3 card. Registered once here — the section's inner HTML is
         // replaced on toggle, so per-render bindings would be lost and
@@ -1329,6 +1395,8 @@ var StandplassClubStats = (function () {
         computeLuftOnlyShooters: computeLuftOnlyShooters,
         computeAgeSeries: computeAgeSeries,
         formatAgeValue: formatAgeValue,
+        normalizeClubChartMetric: normalizeClubChartMetric,
+        renderMetricToggleHtml: renderMetricToggleHtml,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         buildTableCard: buildTableCard,
