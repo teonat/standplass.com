@@ -153,7 +153,9 @@ var StandplassFilterWidgets = (function () {
     // Wires up a checkbox dropdown (click-outside, Escape, rebuild).
     // cfg: { btn, panel, list, clearAllBtn, getItems(), getSelected(), labelNone,
     //        onToggle(id, name, checked), onClearAll(), searchable? }
-    // Returns: { rebuild() }
+    // Returns: { rebuild(), destroy() } -- destroy() removes the root-node
+    // outside-click listener, which outlives this dropdown's elements; a
+    // caller that remounts must call it or that listener leaks per mount.
     function makeCheckboxDropdown(cfg) {
         var searchQuery   = '';
         var searchInputEl = null;
@@ -292,13 +294,21 @@ var StandplassFilterWidgets = (function () {
         // wrapper.contains() is then always false -- closing the panel on
         // every click, including the one that opened it. Inside a shadow tree
         // events aren't retargeted, and outside one this is document.
-        cfg.btn.getRootNode().addEventListener('click', function (e) {
+        // Captured now, while btn is attached: after the elements are
+        // discarded getRootNode() would return the detached tree instead.
+        var rootNode = cfg.btn.getRootNode();
+        function onOutsideClick(e) {
             if (!wrapper.contains(e.target)) {
                 closePanel();
             }
-        });
+        }
+        rootNode.addEventListener('click', onOutsideClick);
 
-        return { rebuild: rebuild };
+        function destroy() {
+            rootNode.removeEventListener('click', onOutsideClick);
+        }
+
+        return { rebuild: rebuild, destroy: destroy };
     }
 
     // Wires up a multi-select tag combobox (search → add chip, × to remove).

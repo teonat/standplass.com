@@ -40,6 +40,9 @@ var StandplassPersonModalController = (function () {
         var modalEl = null;
         var modalOpener = null;
         var personYearCache = {}; // { personId: { year: entry[] } }
+        var liveDropdowns = {};  // suffix -> widget instance, so a remount
+                                 // can destroy() the previous one's root-node
+                                 // listener instead of leaking it
         var personOpenSeq = 0;
         var modalMetric = cfg.initialMetric || 'rankingScore';
         var modalEntries = [];
@@ -205,6 +208,7 @@ var StandplassPersonModalController = (function () {
 
             function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
                 var container = id(suffix);
+                if (liveDropdowns[suffix]) { liveDropdowns[suffix].destroy(); }
                 if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
                     + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
@@ -220,6 +224,7 @@ var StandplassPersonModalController = (function () {
                     onClearAll: function () { onClear(); dropdown.rebuild(); }
                 });
                 dropdown.rebuild();
+                liveDropdowns[suffix] = dropdown;
                 return dropdown;
             }
 
