@@ -252,6 +252,18 @@ assert.ok(multiSvg.indexOf('Felt') !== -1, 'legend has Felt');
 assert.ok(multiSvg.indexOf('Bane') !== -1, 'legend has Bane');
 assert.ok(multiSvg.indexOf('tabindex="0"') !== -1, 'multi-series dots are focusable');
 
+// Plot-area inset: the first point sits half an x-step right of the y-axis
+// (W=400, PL=44, PR=12 → step 114.67 → first cx ≈ 101.3), and the last
+// point half a step from the right edge.
+(function () {
+    var circles = multiSvg.match(/<circle[^>]*cx="([0-9.]+)"/g) || [];
+    assert.ok(circles.length >= 2, 'multi-series chart has dots');
+    var firstCx = Number(/cx="([0-9.]+)"/.exec(circles[0])[1]);
+    var lastCx = Number(/cx="([0-9.]+)"/.exec(circles[circles.length - 1])[1]);
+    assert.ok(firstCx > 100, 'first dot clears the y-axis (got ' + firstCx + ')');
+    assert.ok(lastCx < 389, 'last dot clears the right edge (got ' + lastCx + ')');
+})();
+
 // Single series with < 2 points → message
 var shortSeries = [{ label: 'Felt', color: 'red', points: [{ year: 2025, value: 5 }] }];
 assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1, 'short series → message');

@@ -79,6 +79,15 @@ assert.ok(container.innerHTML.includes('<polyline'), 'renders a polyline for the
 assert.match(container.innerHTML, /<circle[^>]*>[\s\S]*<circle[^>]*>[\s\S]*<circle/, 'renders one circle per entry');
 assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 3, 'one dot per entry, no extra overlap rings');
 
+// Plot-area inset: the first dot sits half an x-step right of the y-axis
+// (PL=40, three points a month apart → half-step ≈ 28 → first cx ≈ 68).
+(function () {
+    var cxMatch = /<circle[^>]*cx="([0-9.]+)"/.exec(container.innerHTML);
+    assert.ok(cxMatch, 'renderChart produced a dot');
+    var firstCx = Number(cxMatch[1]);
+    assert.ok(firstCx > 60, 'first dot clears the y-axis (got ' + firstCx + ')');
+})();
+
 // Legend: a fixed 5-item legend describing what each color *means*
 // (2+ over/at opprykk/in class/under/2+ under), not per-class numeric
 // thresholds -- same regardless of which classes are actually in view.

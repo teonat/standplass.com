@@ -273,7 +273,14 @@ var StandplassPersonModal = (function () {
         var maxDate = new Date(pts[n - 1].date).getTime();
         var dateRange = maxDate - minDate || 1;
 
-        function xPos(ts) { return PL + ((ts - minDate) / dateRange) * (W - PL - PR); }
+        // Half-step inset: pad the date range by half the average
+        // inter-point step on each side, so the first/last dots (and any
+        // tooltip above them) clear the axis lines.
+        var halfStep = (dateRange / (n - 1)) / 2;
+        var plotMin = minDate - halfStep;
+        var plotRange = dateRange + 2 * halfStep;
+
+        function xPos(ts) { return PL + ((ts - plotMin) / plotRange) * (W - PL - PR); }
 
         // Plassering: invert Y-axis (lower position number = better = higher on chart).
         var invert = (metric === 'position');

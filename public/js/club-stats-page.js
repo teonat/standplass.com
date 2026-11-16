@@ -403,8 +403,11 @@ var StandplassClubStats = (function () {
         var range = maxVal || 1;
 
         function xPos(i) {
-            if (pts.length === 1) { return PL; }
-            return PL + (i / (pts.length - 1)) * (W - PL - PR);
+            if (pts.length === 1) { return (PL + (W - PR)) / 2; }
+            // Half-step inset: first/last points sit half an x-step inside
+            // the plot area so labels above them clear the axis lines.
+            var step = (W - PL - PR) / pts.length;
+            return PL + step * (i + 0.5);
         }
         function yPos(v) { return PT + (1 - v / range) * (H - PT - PB); }
 
@@ -496,8 +499,11 @@ var StandplassClubStats = (function () {
         var range = maxVal || 1;
 
         function xPos(i) {
-            if (years.length === 1) { return PL; }
-            return PL + (i / (years.length - 1)) * (W - PL - PR);
+            if (years.length === 1) { return (PL + (W - PR)) / 2; }
+            // Half-step inset: first/last points sit half an x-step inside
+            // the plot area so labels above them clear the axis lines.
+            var step = (W - PL - PR) / years.length;
+            return PL + step * (i + 0.5);
         }
         function yPos(v) { return PT + (1 - v / range) * (H - PT - PB); }
 
