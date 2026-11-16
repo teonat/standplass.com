@@ -1465,21 +1465,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 }
 
 .club-stats-toplist .ranking-table { margin: 0; }
-/* Header variant for cards whose "Vis alle" toggle sits in the header
-   next to the title (not below the table): the toggle stays reachable
-   without scrolling a long expanded list. */
-.club-stats-card-head-row {
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.5rem 0.75rem;
-}
-/* Expanded rows scroll inside the card instead of stretching the card —
-   and its 2-column grid row — to page length. A bit taller than the
-   10-row collapsed default (~2.1rem per row incl. border, plus thead).
-   overflow-y: auto, never hidden: browser find-in-page (Ctrl+F) must be
-   able to scroll the region to its matches. */
-.club-stats-list-scroll { overflow-y: auto; max-height: min(31rem, 70vh); }
+/* Every klubbstatistikk table renders all its rows inside one of these;
+   the region scrolls instead of stretching the card — or its 2-column
+   grid row — to page length. max-height comes from the user's "Rader"
+   filter-bar setting (rows × ~2.1rem + thead), applied as
+   --club-stats-rows-max on the content root; the fallback matches the
+   default setting (15 rows). overflow-y: auto, never hidden: browser
+   find-in-page (Ctrl+F) must be able to scroll the region to matches. */
+.club-stats-list-scroll { overflow-y: auto; max-height: var(--club-stats-rows-max, 33.5rem); }
 
 .club-stats-note {
   font-size: 0.8125rem;

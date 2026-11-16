@@ -227,8 +227,9 @@ var StandplassClubStats = (function () {
                 + '<td class="ranking-score">' + dc.starts + '</td></tr>';
         }).join('');
         return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
+            + '<div class="club-stats-list-scroll">'
             + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
-            + rowsHtml + '</tbody></table>'
+            + rowsHtml + '</tbody></table></div>'
             + '<details class="club-stats-note"><summary>Om klassene</summary>'
             + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
             + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
@@ -287,8 +288,6 @@ var StandplassClubStats = (function () {
         return 'topp-3 plasseringer';
     }
 
-    var TOP3_ROW_PAGE = 10;
-
     // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
     // .ranking-card-table-wrap (overflow-x: auto) — .ranking-card itself is
     // overflow: hidden and would silently clip columns.
@@ -296,7 +295,6 @@ var StandplassClubStats = (function () {
         opts = opts || {};
         var mode = opts.mode || 'top3';
         var showOvelser = !!opts.showOvelser;
-        var showAllShooters = !!opts.showAllShooters;
         var empty = !ranking || !ranking.length;
         // Initial render only: no ranking in the default view means the card
         // has never shown anything — omit it entirely. In every other empty
@@ -328,7 +326,7 @@ var StandplassClubStats = (function () {
         });
         var comboOrder = Object.keys(comboTotals)
             .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
-        var visibleShooters = showAllShooters ? ranking : ranking.slice(0, TOP3_ROW_PAGE);
+        var visibleShooters = ranking;
         var headers = showOvelser
             ? comboOrder.map(function (k, ci) {
                 var parts = k.split('|');
@@ -345,15 +343,10 @@ var StandplassClubStats = (function () {
                 + '<th scope="row">' + esc(s.name) + '</th>' + cells
                 + '<td class="ranking-score">' + s.total + '</td></tr>';
         }).join('');
-        var rowToggle = ranking.length > TOP3_ROW_PAGE
-            ? '<button type="button" class="ranking-toggle" id="top3-row-toggle" aria-expanded="' + (showAllShooters ? 'true' : 'false') + '" aria-controls="top3-table">'
-                + (showAllShooters ? 'Vis færre' : 'Vis alle (' + ranking.length + ')') + '</button>'
-            : '';
-        // rowToggle lives in the header, not below the table: on a long
-        // expanded list the bottom is a full scroll away, the header never
-        // moves. The wrap also carries the vertical scroll cap so the card
-        // stays compact when all shooters are shown.
-        return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header club-stats-card-head-row"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2>' + rowToggle + '</div>'
+        // All shooters render at once (row paging removed) — the wrap's
+        // scroll cap (from the user's "Rader" setting) confines the height
+        // instead. overflow-x: auto stays for wide øvelser tables.
+        return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
             + modeHtml
             + '<div class="ranking-card-table-wrap club-stats-list-scroll">'
             + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + ' for ' + esc(clubName) + '">'
@@ -362,39 +355,23 @@ var StandplassClubStats = (function () {
             + '</section>';
     }
 
-    // ── Expandable list cards ─────────────────────────────────────────
-    // Shared shape for every "top N + Vis alle" list (klubbstatistikk
-    // toplists and per-club lists): the toggle lives in the card header
-    // next to the title so it stays reachable without scrolling a long
-    // expanded list, and the table sits in an internally scrolling region
-    // (.club-stats-list-scroll) so an expanded list never stretches the
-    // card — or its grid row — to page length. Collapsed renders pageSize
-    // rows; expanding renders every row as real DOM so browser
-    // find-in-page (Ctrl+F) can reach rows inside the scroll region.
-    // Keyed by the stable list id: the builder re-registers fresh data on
-    // every (re)render, and one delegated click listener (wired once in
-    // init) serves every toggle — per-render bindings would be lost to
-    // the innerHTML replacement and stack listeners instead.
-    var expandableLists = {};
-
+    // ── Scroll-confined table cards ───────────────────────────────────
+    // Every klubbstatistikk table renders all rows (no paging, no expand
+    // toggle) inside .club-stats-list-scroll, whose max-height comes from
+    // the user's "Rader" setting (--club-stats-rows-max). All rows stay
+    // real DOM inside an overflow-y: auto region so browser find-in-page
+    // (Ctrl+F) can scroll to matches — the reason paging was removed.
     // renderRow must return a complete '<tr>…</tr>' and escape any
     // caller-supplied values itself (same raw contract as table-renderer).
-    function buildExpandableCard(opts) {
+    function buildTableCard(opts) {
         var rows = opts.rows || [];
         if (!rows.length) { return ''; }
-        var pageSize = opts.pageSize || TOPLIST_PAGE_SIZE;
-        expandableLists[opts.id] = { rows: rows, renderRow: opts.renderRow, pageSize: pageSize };
-        var toggle = rows.length > pageSize
-            ? '<button type="button" class="ranking-toggle" data-expand-list="' + esc(opts.id) + '"'
-                + ' aria-expanded="false" aria-controls="' + esc(opts.id) + '-table">Vis alle (' + rows.length + ')</button>'
-            : '';
         return '<section class="ranking-card ' + esc(opts.cardClass || 'club-stats-section') + '">'
-            + '<div class="ranking-card-header club-stats-card-head-row">'
-            + '<h2 class="ranking-card-title">' + esc(opts.title) + '</h2>' + toggle + '</div>'
+            + '<div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(opts.title) + '</h2></div>'
             + '<div class="club-stats-list-scroll">'
             + '<table class="ranking-table" id="' + esc(opts.id) + '-table" aria-label="' + esc(opts.ariaLabel) + '">'
             + opts.headHtml
-            + '<tbody>' + rows.slice(0, pageSize).map(function (row, i) { return opts.renderRow(row, i); }).join('') + '</tbody>'
+            + '<tbody>' + rows.map(function (row, i) { return opts.renderRow(row, i); }).join('') + '</tbody>'
             + '</table></div></section>';
     }
 
@@ -628,7 +605,6 @@ var StandplassClubStats = (function () {
 
     // ── init / DOM wiring ──────────────────────────────────────────────
 
-    var TOPLIST_PAGE_SIZE = 10;
     var MIN_SHOOTERS = 3;
     var MIN_STARTS = 5;
     var FIRST_YEAR = 2021;
@@ -657,7 +633,7 @@ var StandplassClubStats = (function () {
         // allClubNames accumulated across all loaded years
         var allClubNames = {};
         var dataLoaded = false;
-        var top3State = { mode: 'top3', showOvelser: false, showAllShooters: false };
+        var top3State = { mode: 'top3', showOvelser: false };
         var top3Rows = [];
         var top3Club = '';
 
@@ -691,6 +667,15 @@ var StandplassClubStats = (function () {
                 + '<button type="button" class="program-btn' + (activeProgram === 'alle' ? ' program-btn--active' : '') + '" data-program="alle" aria-pressed="' + (activeProgram === 'alle') + '">Alle</button>'
                 + '<button type="button" class="program-btn' + (activeProgram === 'felt' ? ' program-btn--active' : '') + '" data-program="felt" aria-pressed="' + (activeProgram === 'felt') + '">Felt</button>'
                 + '<button type="button" class="program-btn' + (activeProgram === 'bane' ? ' program-btn--active' : '') + '" data-program="bane" aria-pressed="' + (activeProgram === 'bane') + '">Bane</button>'
+                + '</div>'
+                + '<div class="filter-group">'
+                + '<label for="' + config.idPrefix + '-rows">Rader</label>'
+                + '<select id="' + config.idPrefix + '-rows">'
+                + '<option value="15">15</option>'
+                + '<option value="30">30</option>'
+                + '<option value="50">50</option>'
+                + '<option value="all">Alle</option>'
+                + '</select>'
                 + '</div>'
                 + '<div class="filter-group" id="' + config.idPrefix + '-club-search-group">'
                 + '<label for="' + config.idPrefix + '-club-input">Søk klubb</label>'
@@ -732,6 +717,26 @@ var StandplassClubStats = (function () {
                 setUrlParam('program', activeProgram === 'alle' ? null : activeProgram);
                 render();
             });
+
+            // "Rader" — how many rows each table card shows before it
+            // scrolls. Cosmetic view preference, persisted like the
+            // dark-mode toggle (localStorage, never a URL param — avoids
+            // the tracked-param/mode-collision bug class entirely).
+            var rowsEl = id('-rows');
+            var storedRows = null;
+            try { storedRows = localStorage.getItem('standplass_list_rows'); } catch (e) { storedRows = null; }
+            if (storedRows === '15' || storedRows === '30' || storedRows === '50' || storedRows === 'all') {
+                rowsEl.value = storedRows;
+            }
+            var applyRows = function () {
+                var v = rowsEl.value;
+                // ~2.1rem per row + ~2rem thead; "Alle" uncaps entirely.
+                contentEl.style.setProperty('--club-stats-rows-max',
+                    v === 'all' ? 'none' : (Number(v) * 2.1 + 2).toFixed(1) + 'rem');
+                try { localStorage.setItem('standplass_list_rows', v); } catch (e) { /* ignore */ }
+            };
+            applyRows();
+            rowsEl.addEventListener('change', applyRows);
 
             // Club search (only visible in toplist view)
             var clubInput = id('-club-input');
@@ -814,14 +819,14 @@ var StandplassClubStats = (function () {
 
         // ── Toplist rendering ──────────────────────────────────────────
 
-        // Club-row toplist on the generic expandable-card builder. The
+        // Club-row toplist on the generic table-card builder. The
         // stable metric key (not the displayed title) drives data lookup
         // and the value column — titles stay freely editable without
-        // breaking the toggle (the old title-string dispatch was one
+        // breaking rendering (the old title-string dispatch was one
         // rename away from silently rendering one toplist's data under
-        // another's header after "Vis alle").
+        // another's header).
         function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel) {
-            return buildExpandableCard({
+            return buildTableCard({
                 id: id, title: title,
                 ariaLabel: ariaLabel || (title + ' ' + activeYear),
                 headHtml: '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">' + esc(valueLabel) + '</th></tr></thead>',
@@ -831,7 +836,6 @@ var StandplassClubStats = (function () {
                         + '<td><a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a></td>'
                         + '<td class="ranking-score">' + esc(String(entry[valueKey])) + '</td></tr>';
                 },
-                pageSize: TOPLIST_PAGE_SIZE,
                 cardClass: 'club-stats-toplist'
             });
         }
@@ -1062,7 +1066,7 @@ var StandplassClubStats = (function () {
                     [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
                      { label: 'Bane', color: '#4a90d9', points: baneStarts }],
                     { title: 'Starter per år: felt og bane' })
-                + '<details><summary>Vis data som tabell</summary>'
+                + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
                 + '<table class="ranking-table"><thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead><tbody>'
                 + years0().map(function (yr) {
                     var fs = feltShooters.filter(function (p) { return p.year === yr; })[0];
@@ -1075,7 +1079,7 @@ var StandplassClubStats = (function () {
                         + '<td class="ranking-score">' + (fst ? fst.value : '–') + '</td>'
                         + '<td class="ranking-score">' + (bst ? bst.value : '–') + '</td></tr>';
                 }).join('')
-                + '</tbody></table></details></section>'
+                + '</tbody></table></div></details></section>'
                 : '';
 
             function years0() {
@@ -1088,7 +1092,7 @@ var StandplassClubStats = (function () {
             }
 
             var topShootersHtml = topShooters.length
-                ? buildExpandableCard({
+                ? buildTableCard({
                     id: 'mest-aktive', title: 'Mest aktive skyttere',
                     ariaLabel: 'Mest aktive skyttere for ' + esc(resolved),
                     headHtml: '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th><th scope="col" class="ranking-score">Starter</th></tr></thead>',
@@ -1100,12 +1104,15 @@ var StandplassClubStats = (function () {
                 : '';
 
             var discHtml = discRows.length
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Øvelsesfordeling</h2></div>'
-                + '<table class="ranking-table" aria-label="Øvelsesfordeling for ' + esc(resolved) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
-                + discRows.map(function (d) {
-                    return '<tr><td>' + esc(d) + '</td><td class="ranking-score">' + Object.keys(discData[d].shooters).length + '</td><td class="ranking-score">' + discData[d].starts + '</td></tr>';
-                }).join('')
-                + '</tbody></table></section>'
+                ? buildTableCard({
+                    id: 'ovelsesfordeling', title: 'Øvelsesfordeling',
+                    ariaLabel: 'Øvelsesfordeling for ' + esc(resolved),
+                    headHtml: '<thead><tr><th scope="col">Øvelse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead>',
+                    rows: discRows,
+                    renderRow: function (d) {
+                        return '<tr><td>' + esc(d) + '</td><td class="ranking-score">' + Object.keys(discData[d].shooters).length + '</td><td class="ranking-score">' + discData[d].starts + '</td></tr>';
+                    }
+                })
                 : '';
 
             var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
@@ -1115,13 +1122,13 @@ var StandplassClubStats = (function () {
             // changes — a year/program re-render for the same club must keep
             // the user's toggles. top3Club starts '' so the first entry still
             // resets.
-            if (resolved !== top3Club) { top3State = { mode: 'top3', showOvelser: false, showAllShooters: false }; }
+            if (resolved !== top3Club) { top3State = { mode: 'top3', showOvelser: false }; }
             top3Club = resolved;
             var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
             var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 
             var orgHtml = organizedComps.length
-                ? buildExpandableCard({
+                ? buildTableCard({
                     id: 'arrangerte-stevner', title: 'Arrangerte stevner',
                     ariaLabel: 'Arrangerte stevner for ' + esc(resolved),
                     headHtml: '<thead><tr><th scope="col">Stevne</th><th scope="col">Dato</th><th scope="col">Anlegg</th></tr></thead>',
@@ -1171,14 +1178,12 @@ var StandplassClubStats = (function () {
         // replaced on toggle, so per-render bindings would be lost and
         // per-render listener adds would stack.
         contentEl.addEventListener('click', function (e) {
-            var btn = e.target.closest ? e.target.closest('.top3-mode-btn, #top3-row-toggle') : null;
+            var btn = e.target.closest ? e.target.closest('.top3-mode-btn') : null;
             if (!btn) { return; }
             if (btn.classList.contains('top3-ovelser-btn')) {
                 top3State.showOvelser = !top3State.showOvelser;
-            } else if (btn.getAttribute('data-mode')) {
-                top3State.mode = btn.getAttribute('data-mode');
             } else {
-                top3State.showAllShooters = !top3State.showAllShooters;
+                top3State.mode = btn.getAttribute('data-mode');
             }
             var top3Section = contentEl.querySelector('[data-card="top3"]');
             if (top3Section) {
@@ -1187,32 +1192,9 @@ var StandplassClubStats = (function () {
                     top3Club, activeYear, top3State);
                 var refocus = btn.classList.contains('top3-ovelser-btn')
                     ? contentEl.querySelector('#top3-ovelser-btn')
-                    : (btn.id
-                        ? contentEl.querySelector('#' + btn.id)
-                        : contentEl.querySelector('.top3-mode [aria-pressed="true"]'));
+                    : contentEl.querySelector('.top3-mode [aria-pressed="true"]');
                 if (refocus) { refocus.focus(); }
             }
-        });
-
-        // Expandable-list toggles ("Vis alle"): one delegated listener for
-        // every buildExpandableCard list — same once-only registration as
-        // the top-3 delegation above, for the same reason (contentEl's
-        // innerHTML is replaced on every render). The header toggle itself
-        // is never destroyed by the tbody swap, so focus stays put.
-        contentEl.addEventListener('click', function (e) {
-            var btn = e.target.closest ? e.target.closest('[data-expand-list]') : null;
-            if (!btn) { return; }
-            var listId = btn.getAttribute('data-expand-list');
-            var list = expandableLists[listId];
-            if (!list) { return; }
-            var expand = btn.getAttribute('aria-expanded') !== 'true';
-            var rows = expand ? list.rows : list.rows.slice(0, list.pageSize);
-            var tbody = contentEl.querySelector('#' + listId + '-table tbody');
-            if (tbody) {
-                tbody.innerHTML = rows.map(function (row, i) { return list.renderRow(row, i); }).join('');
-            }
-            btn.setAttribute('aria-expanded', String(expand));
-            btn.textContent = expand ? 'Vis færre' : 'Vis alle (' + list.rows.length + ')';
         });
 
         statusEl.textContent = 'Laster data…';
@@ -1246,7 +1228,7 @@ var StandplassClubStats = (function () {
         renderTopThreeHtml: renderTopThreeHtml,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
-        buildExpandableCard: buildExpandableCard,
+        buildTableCard: buildTableCard,
         init: init
     };
 })();
