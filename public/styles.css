@@ -25,6 +25,19 @@
 
   --green: #2d6a4f;
   --white: #ffffff;
+
+  /* Chart colors — mode-aware (dark overrides in themes.css).
+     Used in SVG fill/stroke attributes the same way var(--text-muted)
+     already is. Brand colors (var(--brand-accent)) are deliberately
+     mode-invariant and not duplicated here. */
+  --chart-blue:   #4a90d9;
+  --chart-purple: #a855f7;
+  --chart-green:  #22c55e;
+  --chart-red:    #ef4444;
+  --chart-orange: #f97316;
+  --chart-gold:   #e8b923;
+  --chart-silver: #c8d0d8;
+  --chart-bronze: #b87333;
   --text:        #1c1f26;
   --text-muted:  #6b6558;
 

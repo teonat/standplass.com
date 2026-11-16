@@ -16,6 +16,14 @@
     --border-strong: rgba(255, 255, 255, 0.14);
     --surface-base:  rgba(255, 255, 255, 0.03);
     --surface-hover: rgba(255, 255, 255, 0.05);
+    --chart-blue:   #6ba6ed;
+    --chart-purple: #c084fc;
+    --chart-green:  #4ade80;
+    --chart-red:    #f87171;
+    --chart-orange: #fb923c;
+    --chart-gold:   #f0c93a;
+    --chart-silver: #d1d5db;
+    --chart-bronze: #d4915c;
   }
 }
 
@@ -33,6 +41,14 @@
   --border-strong: rgba(255, 255, 255, 0.14);
   --surface-base:  rgba(255, 255, 255, 0.03);
   --surface-hover: rgba(255, 255, 255, 0.05);
+  --chart-blue:   #6ba6ed;
+  --chart-purple: #c084fc;
+  --chart-green:  #4ade80;
+  --chart-red:    #f87171;
+  --chart-orange: #fb923c;
+  --chart-gold:   #f0c93a;
+  --chart-silver: #d1d5db;
+  --chart-bronze: #d4915c;
 }
 
 /* ── Brand axis: kss ─────────────────────────────────────────────── */
