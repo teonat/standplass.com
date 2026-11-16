@@ -288,6 +288,48 @@ assert.ok(multiSvg.indexOf('tabindex="0"') !== -1, 'multi-series dots are focusa
     assert.ok(/stroke-width="1.25"/.test(svg), 'lines are 1.25 wide');
 })();
 
+// yClamp: y-axis bases on the data range (min-2 .. max+2), not 0..max —
+// for age-style values where a zero baseline wastes the plot.
+(function () {
+    var series = [
+        { label: 'Snitt', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 44 }, { year: 2022, value: 48 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, { title: 'Clamp', yClamp: true });
+    assert.ok(svg.indexOf('>42<') !== -1, 'y-axis bottom label is the clamped min (42)');
+    assert.ok(svg.indexOf('>50<') !== -1, 'y-axis top label is the clamped max (50)');
+    assert.ok(svg.indexOf('>0<') === -1, 'no zero label on a clamped axis');
+    assert.ok(svg.indexOf('NaN') === -1, 'no NaN positions');
+})();
+
+// yClamp with flat data (all values equal): degenerate range must not
+// produce NaN or divide-by-zero — the `range || 1` guard.
+(function () {
+    var series = [
+        { label: 'Flat', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 46 }, { year: 2022, value: 46 }, { year: 2023, value: 46 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, { title: 'Flat clamp', yClamp: true });
+    assert.ok(svg.indexOf('NaN') === -1, 'flat clamped data renders without NaN');
+    assert.ok(/<circle[^>]*cy="[0-9.]+"/.test(svg), 'flat clamped data still renders dots');
+})();
+
+// valueFormat: per-dot value labels go through the formatter.
+(function () {
+    var series = [
+        { label: 'Alder', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 47.25 }, { year: 2022, value: 48 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, {
+        title: 'Fmt', yClamp: true,
+        valueFormat: function (v) { return String(Math.round(v * 10) / 10); }
+    });
+    assert.ok(svg.indexOf('>47.3<') !== -1, 'value label is formatted (47.25 → 47.3)');
+})();
+
 // Single series with < 2 points → message
 var shortSeries = [{ label: 'Felt', color: 'red', points: [{ year: 2025, value: 5 }] }];
 assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1, 'short series → message');

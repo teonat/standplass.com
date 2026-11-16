@@ -483,10 +483,14 @@ var StandplassClubStats = (function () {
         // Collect all years and all values across series
         var yearSet = {};
         var maxVal = 0;
+        var minVal = Infinity;
         series.forEach(function (s) {
             (s.points || []).forEach(function (p) {
                 if (p.year != null) { yearSet[p.year] = true; }
-                if (p.value != null && p.value > maxVal) { maxVal = p.value; }
+                if (p.value != null) {
+                    if (p.value > maxVal) { maxVal = p.value; }
+                    if (p.value < minVal) { minVal = p.value; }
+                }
             });
         });
         var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
@@ -496,7 +500,15 @@ var StandplassClubStats = (function () {
         }
 
         var W = 400, H = 160, PL = 44, PR = 12, PT = 22, PB = 28;
+        // yClamp: base the axis on the data range (min-2 .. max+2) instead
+        // of 0..max — for age-style values where a zero baseline wastes the
+        // plot. Flat data (maxVal == minVal) must not divide by zero.
+        var yMin = 0;
         var range = maxVal || 1;
+        if (opts.yClamp) {
+            yMin = Math.floor((minVal === Infinity ? 0 : minVal) - 2);
+            range = (Math.ceil(maxVal + 2) - yMin) || 1;
+        }
 
         function xPos(i) {
             if (years.length === 1) { return (PL + (W - PR)) / 2; }
@@ -505,7 +517,7 @@ var StandplassClubStats = (function () {
             var step = (W - PL - PR) / years.length;
             return PL + step * (i + 0.5);
         }
-        function yPos(v) { return PT + (1 - v / range) * (H - PT - PB); }
+        function yPos(v) { return PT + (1 - (v - yMin) / range) * (H - PT - PB); }
 
         // Build all dots across all series, grouped by year for collision detection
         var allDots = [];
@@ -549,6 +561,7 @@ var StandplassClubStats = (function () {
         // Value labels above dots with collision avoidance per X position.
         // Group dots by year index, sort by Y within each group, then
         // stagger labels so close ones don't overlap.
+        var fmtVal = opts.valueFormat || function (v) { return String(v); };
         var byYear = {};
         allDots.forEach(function (d) {
             if (!byYear[d.yi]) { byYear[d.yi] = []; }
@@ -568,14 +581,14 @@ var StandplassClubStats = (function () {
                 lastLabelY = labelY;
                 labels += '<text x="' + d.x.toFixed(1) + '" y="' + labelY.toFixed(1)
                     + '" text-anchor="middle" font-size="8" font-weight="400" fill="' + d.color + '">'
-                    + esc(String(d.value)) + '</text>';
+                    + esc(fmtVal(d.value)) + '</text>';
             });
         });
 
         // Y-axis labels
-        var yTop = String(Math.round(maxVal));
-        var yMid = String(Math.round(maxVal / 2));
-        var yBot = '0';
+        var yTop = opts.yClamp ? String(Math.round(yMin + range)) : String(Math.round(maxVal));
+        var yMid = opts.yClamp ? String(Math.round(yMin + range / 2)) : String(Math.round(maxVal / 2));
+        var yBot = opts.yClamp ? String(Math.round(yMin)) : '0';
         var yLabels =
               '<text x="' + (PL - 6) + '" y="' + (PT + 4) + '" text-anchor="end" font-size="9" fill="var(--text-muted)">' + esc(yTop) + '</text>'
             + '<text x="' + (PL - 6) + '" y="' + (((PT + (H - PB)) / 2) + 3).toFixed(1) + '" text-anchor="end" font-size="9" fill="var(--text-muted)">' + esc(yMid) + '</text>'
