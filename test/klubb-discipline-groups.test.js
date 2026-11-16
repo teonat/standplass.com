@@ -3,8 +3,8 @@ var DG = require('../public/js/klubb-discipline-groups.js');
 
 // Shape mirrors the live branchlist's Pistol branch disciplineGroups,
 // trimmed to just enough to exercise both the Felt union (Feltpistol +
-// Spesialfelt) and the Bane union (the 5 BANE_GROUP_NAMES) -- see
-// docs/superpowers/nsf-skyting-api-reference.md for the verified live shape.
+// Spesialfelt) and the Bane union (the 5 BANE_GROUP_NAMES), mirroring
+// the verified live shape.
 var groups = [
     // Deliberately in the live API's own (out-of-order, not source-matching)
     // sequence -- Militærfelt-Rødpunkt/Revolverfelt-Rødpunkt come first in

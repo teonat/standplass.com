@@ -5,9 +5,8 @@ var assert = require('assert');
 global.StandplassFormat = require('../public/js/format.js');
 var TP = require('../public/js/terminliste-page.js');
 
-// Shape mirrors the live branchlist response -- see
-// docs/superpowers/nsf-skyting-api-reference.md's "GET /query/branchlist"
-// section. Includes a deleted branch and a deleted group, both dropped.
+// Shape mirrors the live branchlist response. Includes a deleted branch
+// and a deleted group, both dropped.
 var rawBranchlist = {
     items: [
         {

@@ -8,9 +8,7 @@
 // entries shape once fetched is identical -- see fetchEntriesForYear in
 // create()'s cfg). Extracted 2026-08-29 out of stevner-page.js, which
 // used to nest this ~290 lines directly inside its own init() closure --
-// not reusable from outside that one call. See
-// docs/superpowers/specs/2026-08-29-klubb-view-design.md's "Person-modal
-// widget extraction" section for the full reasoning.
+// not reusable from outside that one call.
 var StandplassPersonModalController = (function () {
     'use strict';
 

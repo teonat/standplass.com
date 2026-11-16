@@ -1,7 +1,6 @@
 // public/js/url-state.js
 //
-// Centralizes the URL-sync on/off + namespacing decision described in
-// docs/superpowers/specs/2026-08-14-webcomponent-embed-core-design.md: a
+// Centralizes the URL-sync on/off + namespacing decision: a
 // direct-mount page (namespace: null) always reads/writes the real,
 // unnamespaced query string, exactly like before this file existed; an
 // embed instance (namespace: <id-or-view>) only touches the real URL when

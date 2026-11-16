@@ -2,9 +2,8 @@ var assert = require('assert');
 global.StandplassKlubbDisciplineGroups = require('../public/js/klubb-discipline-groups.js');
 var NP = require('../public/js/nasjonalt-page.js');
 
-// Shape mirrors the live branchlist response across multiple branches --
-// see docs/superpowers/nsf-skyting-api-reference.md's "GET /query/branchlist"
-// section. Deliberately includes a duplicate discipline id across two
+// Shape mirrors the live branchlist response across multiple branches.
+// Deliberately includes a duplicate discipline id across two
 // groups within the same branch (the real API does this -- see
 // klubb-discipline-groups.js's own precedent for why dedup matters) and a
 // deleted discipline/class to confirm both are dropped.
@@ -80,8 +79,7 @@ assert.ok(ambiguous.some(function (i) { return i.isGroup && i.name === 'Pistol';
 assert.ok(ambiguous.some(function (i) { return i.isGroup && i.name === 'Rifle'; }), 'every matching branch gets its own header');
 
 // buildRankingUrl: classId/kretsId/orgId are each optional and, when
-// given, JSON-array-encoded -- a bare UUID 500s against the real API
-// (see docs/superpowers/nsf-skyting-api-reference.md).
+// given, JSON-array-encoded -- a bare UUID 500s against the real API.
 var urlMinimal = NP.buildRankingUrl({ disciplineId: 'd1', numberOfResults: 1, periodStart: '2025-12-31T23:00:00.000Z', periodEnd: '2026-12-31T22:59:59.999Z' });
 assert.ok(urlMinimal.indexOf('https://nsfapi.azurewebsites.net/ranking?') === 0);
 assert.ok(urlMinimal.indexOf('orderBy=totalScore:desc') !== -1);

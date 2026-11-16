@@ -6,7 +6,7 @@
 // all, unlike every other view in this project. Ported from the source's
 // resultatliste-norgesfelt.js, generalized from a single-club default
 // tab/filter to this project's own "default is unfiltered/national"
-// convention -- see docs/superpowers/specs/2026-09-04-norgesfelt-view-design.md.
+// convention.
 var StandplassNorgesfeltPage = (function () {
     'use strict';
 
@@ -17,9 +17,9 @@ var StandplassNorgesfeltPage = (function () {
     }
 
     // Duplicated from stevner-page.js rather than loading that ~900-line
-    // felt/bane-specific engine for two pure functions -- CLAUDE.md's
-    // "Conventions" section already documents this as the pattern any view
-    // should follow, not a stevner-page.js-only helper.
+    // felt/bane-specific engine for two pure functions -- duplication
+    // is the established pattern for these helpers, not a
+    // stevner-page.js-only import.
     //
     // ponytail: substring match, so ?klubb=eksempel also matches a
     // hypothetical "Eksempel Pistolklubb". Switch to an explicit
