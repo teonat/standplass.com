@@ -10,10 +10,26 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+import birthyears
+
 FIRST_YEAR = 2021
 NSF_BASE = 'https://nsfapi.azurewebsites.net'
 SKYTING_BASE = 'https://app.skyting.no/api'
 OUTPUT_DIR = 'public/data/bane'
+
+# Birth years ride along in the resultlist responses this scraper already
+# fetches (zero extra API calls): collected per run, merged into
+# <family>/birthyears.json at the end. Write rules live in birthyears.py
+# (first write wins; null = polled but the API has none).
+_BIRTHYEAR_UPDATES = {}
+
+
+def _save_birthyears():
+    path = os.path.join(OUTPUT_DIR, 'birthyears.json')
+    merged = birthyears.merge_birthyears(
+        birthyears.load_birthyears(path), _BIRTHYEAR_UPDATES)
+    birthyears.save_birthyears(path, merged)
+    print(f'Birth years: {path} — {len(merged)} entries', flush=True)
 
 FULL_SCAN = os.environ.get('FULL_SCAN', 'false').lower() == 'true'
 YEAR_FILTER = int(os.environ.get('YEAR', '0') or '0')
@@ -250,6 +266,7 @@ def _parse_start(iso):
 # ---------------------------------------------------------------------------
 
 def process_year(year, pistol_branch_id, group_ids, discipline_names, class_names, now):
+    global _BIRTHYEAR_UPDATES
     print(f'\nProcessing year {year}…', flush=True)
 
     file_data = load_year_file(year)
@@ -306,6 +323,8 @@ def process_year(year, pistol_branch_id, group_ids, discipline_names, class_name
         try:
             results = fetch_resultlist(comp['id'])
             print(f'    {len(results)} results', flush=True)
+            _BIRTHYEAR_UPDATES = birthyears.merge_birthyears(
+                _BIRTHYEAR_UPDATES, birthyears.extract_birthyears(results))
             if results:
                 new_competitions.append(
                     build_competition(comp, results, discipline_names, class_names)
@@ -369,6 +388,10 @@ def main():
         except Exception as e:
             print(f'ERROR processing year {year}: {e}', file=sys.stderr, flush=True)
             failed.append(year)
+
+    # Persist collected birth years even when years failed — partial
+    # progress must survive the run.
+    _save_birthyears()
 
     if failed:
         print(f'\nFailed years: {failed}', file=sys.stderr, flush=True)
