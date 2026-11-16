@@ -1,6 +1,7 @@
 .claude/
 .idea/
 .worktrees/
+.wrangler/
 CLAUDE.md
 docs/
 opencode.json
