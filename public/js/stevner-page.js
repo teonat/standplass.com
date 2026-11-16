@@ -856,13 +856,15 @@ var StandplassStevnerPage = (function () {
         // source uses for its own competition/person dialogs.
         compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
 
-        function openCompModal(compId, title, card) {
+        // The card object is deliberately NOT passed in: names shown by the
+        // modal (meta line, Arrangør, Stevnetype) resolve from the live
+        // detail fetch plus comp-modal's own reference data, keeping this
+        // view's modal independent of the scraped card data.
+        function openCompModal(compId, title) {
             var mySeq = ++compOpenSeq;
             compDialog.dataset.compId = compId;
             compDialog.querySelector('.comp-modal-title').textContent = title || '';
-            compDialog.querySelector('.comp-modal-meta').textContent = card
-                ? [StandplassFormat.formatDateRange(card.startDate, card.endDate), card.facilityName, card.organizationName].filter(Boolean).join(' · ')
-                : '';
+            compDialog.querySelector('.comp-modal-meta').textContent = '';
             var detailViewEl = compDialog.querySelector('[data-comp-view="detaljer"]');
             var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
             detailViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
@@ -880,6 +882,8 @@ var StandplassStevnerPage = (function () {
             compDialog.showModal();
             StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
                 if (mySeq !== compOpenSeq) { return; } // a newer competition was opened since this fetch started
+                compDialog.querySelector('.comp-modal-meta').textContent =
+                    StandplassCompModal.formatMetaLine(result.comp, result.facility);
                 detailViewEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 if (mySeq !== compOpenSeq) { return; }
@@ -935,8 +939,7 @@ var StandplassStevnerPage = (function () {
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-comp-btn');
             if (!btn) { return; }
-            var card = visibleCards.filter(function (c) { return String(c.id) === btn.dataset.compId; })[0];
-            openCompModal(btn.dataset.compId, btn.textContent, card);
+            openCompModal(btn.dataset.compId, btn.textContent);
         });
 
         rowsEl.addEventListener('click', function (e) {

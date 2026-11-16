@@ -20,7 +20,7 @@ YEAR_FILTER = int(os.environ.get('YEAR', '0') or '0')
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    'User-Agent': 'Mozilla/5.0 (compatible; KSS-nettsted-scraper/1.0; +https://kongsvinger-sportsskyttere.no/)',
+    'User-Agent': 'Mozilla/5.0 (compatible; standplass-scraper/1.0; +https://standplass.com/)',
     'Accept': 'application/json',
     'Accept-Language': 'nb-NO,nb;q=0.9,no;q=0.8,en;q=0.7',
 })

@@ -193,9 +193,11 @@ var StandplassTerminlistePage = (function () {
         function openCompactModal(compId) {
             var bodyEl = compDialog.querySelector('.comp-modal-body');
             bodyEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            compDialog.querySelector('.comp-modal-meta').textContent = '';
             compDialog.showModal();
             StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
                 compDialog.querySelector('.comp-modal-title').textContent = result.comp.title || '';
+                compDialog.querySelector('.comp-modal-meta').textContent = StandplassCompModal.formatMetaLine(result.comp, result.facility);
                 bodyEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 bodyEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
@@ -613,10 +615,8 @@ var StandplassTerminlistePage = (function () {
             compDialog.showModal();
             StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
                 if (mySeq !== compOpenSeq) { return; }
-                compDialog.querySelector('.comp-modal-meta').textContent = [
-                    StandplassFormat.formatDateRange(result.comp.startDate, result.comp.endDate),
-                    result.comp.facilityName, result.comp.organizationName
-                ].filter(Boolean).join(' · ');
+                compDialog.querySelector('.comp-modal-meta').textContent =
+                    StandplassCompModal.formatMetaLine(result.comp, result.facility);
                 detailViewEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
             }, function () {
                 if (mySeq !== compOpenSeq) { return; }

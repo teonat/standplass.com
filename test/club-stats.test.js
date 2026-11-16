@@ -472,11 +472,9 @@ for (var ri = 0; ri < 14; ri++) {
     manyRows.push({ personId: 'r' + ri, name: 'Skytter ' + ri, total: 1, combos: { 'Finfelt|A': 1 } });
 }
 var pagedHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, {});
-assert.ok(pagedHtml.indexOf('Vis alle (14)') >= 0, 'row paging toggle');
-assert.ok(pagedHtml.indexOf('Skytter 13') < 0, 'only first 10 rows shown');
-var expandedRowsHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, { showAllShooters: true });
-assert.ok(expandedRowsHtml.indexOf('aria-expanded="true"') >= 0, 'row toggle exposes state');
-assert.ok(expandedRowsHtml.indexOf('Skytter 13') >= 0, 'expanded shows all rows');
+assert.ok(pagedHtml.indexOf('Skytter 13') >= 0, 'all rows rendered, no row paging');
+assert.ok(pagedHtml.indexOf('top3-row-toggle') < 0 && pagedHtml.indexOf('Vis alle (') < 0, 'no row paging toggle');
+assert.ok(pagedHtml.indexOf('club-stats-list-scroll') >= 0, 'table region gets the scroll cap');
 // No combo cap: 14 combos all rendered when øvelser shown (zero-padding makes
 // the alphabetical tie order deterministic)
 var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
@@ -497,19 +495,54 @@ assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
 
 // ── empty ranking in a non-default mode keeps the card shell ──────────
 // (mode buttons and øvelser toggle must stay reachable in-card)
-var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false, showAllShooters: false });
+var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false });
 assert.ok(emptyP2Html.indexOf('data-card="top3"') >= 0, 'empty p2 mode keeps card shell');
 assert.ok(emptyP2Html.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'shell keeps current mode pressed');
 assert.ok(emptyP2Html.indexOf('data-mode="top3" aria-pressed="false"') >= 0, 'shell keeps other modes unpressed');
 assert.ok(emptyP2Html.indexOf('Vis øvelser') >= 0, 'shell keeps øvelser toggle');
 assert.ok(emptyP2Html.indexOf('ranking-status-msg') >= 0, 'empty-state uses status msg class');
 assert.ok(emptyP2Html.indexOf('Ingen 2. plasser for denne klubben i 2026.') >= 0, 'empty-state line names mode and year');
-var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false, showAllShooters: false });
+var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false });
 assert.ok(emptyP3Html.indexOf('Ingen 3. plasser for denne klubben i 2026.') >= 0, 'p3 empty-state names 3. plasser');
 assert.ok(emptyP3Html.indexOf('data-mode="p3" aria-pressed="true"') >= 0, 'p3 shell keeps mode pressed');
 // Initial render (default mode, øvelser hidden) with no data: no card at all
 assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + øvelser hidden -> no card');
 // øvelser toggle carries a stable id so the delegated handler can refocus it
 assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
+
+// ── scroll-confined table cards (toplists + per-club lists) ──────────
+// Every klubbstatistikk table renders all rows (no paging, no "Vis
+// alle") inside .club-stats-list-scroll, whose max-height comes from
+// the user's "Rader" setting.
+var expRows = [];
+for (var ei = 0; ei < 14; ei++) { expRows.push({ club: 'Klubb ' + ei, value: 100 - ei }); }
+function expRenderRow(row, i) {
+    return '<tr><td class="ranking-rank">' + (i + 1) + '</td><td>' + row.club + '</td><td class="ranking-score">' + row.value + '</td></tr>';
+}
+var expHead = '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">starter</th></tr></thead>';
+var expCard = CS.buildTableCard({
+    id: 'test-list', title: 'Test toplist', ariaLabel: 'Test toplist 2026',
+    headHtml: expHead, rows: expRows, renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+});
+assert.ok(expCard.indexOf('Klubb 13') >= 0, 'table card: all rows rendered');
+assert.ok(expCard.indexOf('Vis alle') < 0 && expCard.indexOf('data-expand-list') < 0, 'table card: no expand toggle');
+assert.ok(expCard.indexOf('id="test-list-table"') >= 0, 'table card: table id present');
+var expWrapIdx = expCard.indexOf('club-stats-list-scroll');
+var expTableIdx = expCard.indexOf('<table');
+assert.ok(expWrapIdx >= 0 && expWrapIdx < expTableIdx, 'table card: table wrapped in scroll region');
+var expShort = CS.buildTableCard({
+    id: 'short-list', title: 'Short', ariaLabel: 'Short', headHtml: expHead,
+    rows: expRows.slice(0, 4), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+});
+assert.ok(expShort.indexOf('Klubb 3') >= 0, 'table card: all short rows rendered');
+assert.strictEqual(CS.buildTableCard({
+    id: 'empty-list', title: 'Empty', ariaLabel: 'Empty', headHtml: expHead,
+    rows: [], renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+}), '', 'table card: empty rows -> no card');
+var expEvil = CS.buildTableCard({
+    id: 'evil-list', title: '<img src=x>', ariaLabel: 'XSS <script>', headHtml: expHead,
+    rows: expRows.slice(0, 2), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+});
+assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'table card: title/ariaLabel escaped');
 
 console.log('club-stats.test.js: all tests passed');

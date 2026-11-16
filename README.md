@@ -5,8 +5,9 @@ from skyting.no / the NSF API. MIT-licensed.
 
 ## What this is
 
-standplass.com hosts result-list pages (felt, bane, and more to come) that
-can be browsed directly, or embedded in another site as a custom element.
+standplass.com hosts result-list pages (feltskyting, baneskyting,
+terminliste and more) that can be browsed directly, or embedded in another
+site as a custom element.
 
 ## Embedding
 
@@ -26,7 +27,9 @@ loaded — put a link inside as a fallback for visitors where the script
 doesn't load.
 
 Attributes:
-- `view` (required) — `felt` or `bane`.
+- `view` (required) — `felt`, `bane` or `terminliste`.
+- `compact` — terminliste only: render a compact upcoming-competitions
+  widget for the `klubb` you set, instead of the full page.
 - `klubb` — show only results for clubs matching this name. Omit it to show
   every club's results.
 - `club` — brand colour theme.
@@ -35,8 +38,12 @@ Attributes:
   default, so the element never touches your address bar unasked.
 - `id` — required only if you place more than one element on the same page.
 
-The "Opprett innebygging" button on any results page generates this snippet
-with the filters you currently have applied.
+The "Opprett innebygging" button on the felt, bane and terminliste pages
+generates this snippet, carrying over your current `klubb`, `club` and
+`mode` settings — other filters are not carried.
+
+The remaining pages (klubb, nasjonalt, norgesfelt, klubbstatistikk) are
+standalone-only for now; making them embeddable is planned.
 
 ## Deployment
 
@@ -48,3 +55,6 @@ Deployed via Cloudflare Workers Builds (git integration) — every push to
 `public/data/felt/{year}.json` and `public/data/bane/{year}.json` are
 updated daily by `.github/workflows/scrape-felt.yml` and `scrape-bane.yml`,
 which run `.github/scripts/scrape_stevneresultater.py` / `scrape_bane.py`.
+`public/data/norgesfelt.json` is updated by
+`.github/workflows/scrape-norgesfelt.yml`
+(`.github/scripts/scrape_norgesfelt.py`).

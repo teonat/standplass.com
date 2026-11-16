@@ -153,7 +153,9 @@ var StandplassFilterWidgets = (function () {
     // Wires up a checkbox dropdown (click-outside, Escape, rebuild).
     // cfg: { btn, panel, list, clearAllBtn, getItems(), getSelected(), labelNone,
     //        onToggle(id, name, checked), onClearAll(), searchable? }
-    // Returns: { rebuild() }
+    // Returns: { rebuild(), destroy() } -- destroy() removes the root-node
+    // outside-click listener, which outlives this dropdown's elements; a
+    // caller that remounts must call it or that listener leaks per mount.
     function makeCheckboxDropdown(cfg) {
         var searchQuery   = '';
         var searchInputEl = null;
@@ -199,8 +201,18 @@ var StandplassFilterWidgets = (function () {
                 var input = document.createElement('input');
                 input.type = 'checkbox';
                 input.checked = selected.indexOf(item.id) >= 0;
+                input.setAttribute('data-id', item.id);
                 input.addEventListener('change', function () {
+                    var rootNode = input.getRootNode();
+                    var hadFocus = rootNode.activeElement === input;
                     cfg.onToggle(item.id, item.name, input.checked);
+                    // onToggle may rebuild() the list, destroying this
+                    // checkbox mid-interaction -- restore focus to its
+                    // replacement so keyboard users aren't dropped to
+                    // <body> on every toggle.
+                    if (hadFocus && !rootNode.contains(input)) {
+                        focusCheckboxById(item.id);
+                    }
                 });
                 var span = document.createElement('span');
                 span.textContent = item.name;
@@ -209,6 +221,16 @@ var StandplassFilterWidgets = (function () {
                 li.appendChild(label);
                 cfg.list.appendChild(li);
             });
+        }
+
+        function focusCheckboxById(itemId) {
+            var inputs = cfg.list.querySelectorAll('input[type="checkbox"]');
+            for (var i = 0; i < inputs.length; i++) {
+                if (inputs[i].getAttribute('data-id') === String(itemId)) {
+                    inputs[i].focus();
+                    return;
+                }
+            }
         }
 
         function openPanel() {
@@ -292,13 +314,21 @@ var StandplassFilterWidgets = (function () {
         // wrapper.contains() is then always false -- closing the panel on
         // every click, including the one that opened it. Inside a shadow tree
         // events aren't retargeted, and outside one this is document.
-        cfg.btn.getRootNode().addEventListener('click', function (e) {
+        // Captured now, while btn is attached: after the elements are
+        // discarded getRootNode() would return the detached tree instead.
+        var rootNode = cfg.btn.getRootNode();
+        function onOutsideClick(e) {
             if (!wrapper.contains(e.target)) {
                 closePanel();
             }
-        });
+        }
+        rootNode.addEventListener('click', onOutsideClick);
 
-        return { rebuild: rebuild };
+        function destroy() {
+            rootNode.removeEventListener('click', onOutsideClick);
+        }
+
+        return { rebuild: rebuild, destroy: destroy };
     }
 
     // Wires up a multi-select tag combobox (search → add chip, × to remove).

@@ -40,6 +40,9 @@ var StandplassPersonModalController = (function () {
         var modalEl = null;
         var modalOpener = null;
         var personYearCache = {}; // { personId: { year: entry[] } }
+        var liveDropdowns = {};  // suffix -> widget instance, so a remount
+                                 // can destroy() the previous one's root-node
+                                 // listener instead of leaking it
         var personOpenSeq = 0;
         var modalMetric = cfg.initialMetric || 'rankingScore';
         var modalEntries = [];
@@ -205,6 +208,7 @@ var StandplassPersonModalController = (function () {
 
             function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
                 var container = id(suffix);
+                if (liveDropdowns[suffix]) { liveDropdowns[suffix].destroy(); }
                 if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
                     + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
@@ -220,10 +224,11 @@ var StandplassPersonModalController = (function () {
                     onClearAll: function () { onClear(); dropdown.rebuild(); }
                 });
                 dropdown.rebuild();
+                liveDropdowns[suffix] = dropdown;
                 return dropdown;
             }
 
-            function wirePersonModalFilters() {
+            function wireYearFilter() {
                 var years = [];
                 for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
                 mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
@@ -231,10 +236,18 @@ var StandplassPersonModalController = (function () {
                     if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
                     loadYearIfNeeded(yr).then(function () {
                         if (mySeq !== personOpenSeq) { return; }
-                        wirePersonModalFilters();
+                        // Only the value-derived dropdowns need remounting
+                        // when a year's data lands (their options are built
+                        // from it). The Year dropdown's own list is static --
+                        // remounting it too would close its open panel and
+                        // drop keyboard focus on every year toggle.
+                        wireValueDerivedFilters();
                         refresh();
                     });
                 }, function () { selectedYears = [cfg.defaultYear]; refresh(); }, false, 'Kun ' + cfg.defaultYear);
+            }
+
+            function wireValueDerivedFilters() {
                 if (knownValues('competitionType').length > 1) {
                     mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
                         function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
@@ -250,6 +263,11 @@ var StandplassPersonModalController = (function () {
                         function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
                         function () { filters.classes = null; refresh(); });
                 }
+            }
+
+            function wirePersonModalFilters() {
+                wireYearFilter();
+                wireValueDerivedFilters();
             }
 
             Promise.all(selectedYears.map(loadYearIfNeeded)).then(function () {

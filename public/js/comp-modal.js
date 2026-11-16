@@ -36,36 +36,75 @@ var StandplassCompModal = (function () {
     // config. Mutated in place by ensureReferenceData below; read
     // synchronously here, so a lookup requested before that fetch resolves
     // falls back to the raw id for that one render, same as the source.
-    var refData = { disciplines: {}, classes: {}, disciplineGroups: [] };
+    // competitionTypes/organizations follow a stricter contract: the detail
+    // API carries only GUIDs for stevnetype and organizer, and a raw GUID is
+    // noise to a reader -- rows depending on these maps are omitted entirely
+    // (not id-fallback) while unresolved.
+    var refData = { disciplines: {}, classes: {}, disciplineGroups: [], competitionTypes: {}, organizations: {} };
     var refFetchPromise = null;
+
+    // The org list is the same one nsf-orgs.js already fetches and caches
+    // (localStorage, 24h TTL) -- every page that loads this module also
+    // loads nsf-orgs.js, so reuse that single shared fetch/instance rather
+    // than issue a duplicate ~530-org request. The direct-fetch fallback
+    // keeps the module usable standalone (e.g. under Node in tests).
+    function ensureOrgList(fetchFn) {
+        if (typeof StandplassNsfOrgs !== 'undefined' && StandplassNsfOrgs && typeof StandplassNsfOrgs.ensureOrgs === 'function') {
+            return StandplassNsfOrgs.ensureOrgs(fetchFn);
+        }
+        return fetchFn('https://nsfapi.azurewebsites.net/organization?pageSize=600')
+            .then(function (r) { return r.ok ? r.json() : []; });
+    }
+
     function ensureReferenceData(fetchFn) {
         if (refFetchPromise) { return refFetchPromise; }
-        refFetchPromise = fetchFn('https://nsfapi.azurewebsites.net/query/branchlist')
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (data) {
-                (data && data.items || []).forEach(function (branch) {
-                    (branch.disciplineGroups || []).forEach(function (g) {
-                        (g.disciplines || []).forEach(function (d) { if (!d.deleted) { refData.disciplines[d.id] = d.name; } });
+        // Each source fetch is independently best-effort -- one endpoint
+        // failing must not take the others' lookups down with it.
+        refFetchPromise = Promise.all([
+            fetchFn('https://nsfapi.azurewebsites.net/query/branchlist')
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    (data && data.items || []).forEach(function (branch) {
+                        (branch.disciplineGroups || []).forEach(function (g) {
+                            (g.disciplines || []).forEach(function (d) { if (!d.deleted) { refData.disciplines[d.id] = d.name; } });
+                        });
+                        // Class names carry a "Branch\" or "Branch/" prefix (e.g.
+                        // "Pistol\A") that's redundant once shown inside that
+                        // branch's own discipline group -- stripped like the source does.
+                        (branch.classes || []).forEach(function (c) { if (!c.deleted) { refData.classes[c.id] = c.name.replace(/^[^\\/]+[\\/]/, ''); } });
+                        // Kept nested (not flattened like refData.disciplines
+                        // above) -- klubb-discipline-groups.js needs to know
+                        // which group a discipline belongs to, which the flat
+                        // id->name map above discards. Scoped to the Pistol
+                        // branch only (case-insensitive), same as
+                        // scrape_stevneresultater.py's build_mappings() --
+                        // unlike refData.disciplines/classes above, this is a
+                        // stated Pistol-only contract, so Leirdue's groups must
+                        // not leak in here.
+                        if ((branch.name || '').toLowerCase() === 'pistol') {
+                            refData.disciplineGroups = refData.disciplineGroups.concat(branch.disciplineGroups || []);
+                        }
                     });
-                    // Class names carry a "Branch\" or "Branch/" prefix (e.g.
-                    // "Pistol\A") that's redundant once shown inside that
-                    // branch's own discipline group -- stripped like the source does.
-                    (branch.classes || []).forEach(function (c) { if (!c.deleted) { refData.classes[c.id] = c.name.replace(/^[^\\/]+[\\/]/, ''); } });
-                    // Kept nested (not flattened like refData.disciplines
-                    // above) -- klubb-discipline-groups.js needs to know
-                    // which group a discipline belongs to, which the flat
-                    // id->name map above discards. Scoped to the Pistol
-                    // branch only (case-insensitive), same as
-                    // scrape_stevneresultater.py's build_mappings() --
-                    // unlike refData.disciplines/classes above, this is a
-                    // stated Pistol-only contract, so Leirdue's groups must
-                    // not leak in here.
-                    if ((branch.name || '').toLowerCase() === 'pistol') {
-                        refData.disciplineGroups = refData.disciplineGroups.concat(branch.disciplineGroups || []);
-                    }
-                });
-            })
-            .catch(function () { /* best-effort; renders fall back to raw ids */ });
+                })
+                .catch(function () { /* best-effort; renders fall back to raw ids */ }),
+            // Stevnetyper: flat array (not wrapped in items), ~8 entries --
+            // the detail response's competitionTypeId GUID resolves through
+            // this map.
+            fetchFn('https://nsfapi.azurewebsites.net/competitiontype')
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (types) {
+                    (types || []).forEach(function (t) { if (t.id && t.name) { refData.competitionTypes[t.id] = t.name; } });
+                })
+                .catch(function () { /* best-effort; row is omitted */ }),
+            // Organizers: the detail response's organizationId GUID resolves
+            // through the shared org list (~530 entries, includes kretser and
+            // clubs alike).
+            ensureOrgList(fetchFn)
+                .then(function (rawOrgs) {
+                    (rawOrgs || []).forEach(function (o) { if (o.id && o.organizationName) { refData.organizations[o.id] = o.organizationName; } });
+                })
+                .catch(function () { /* best-effort; row is omitted */ })
+        ]);
         return refFetchPromise;
     }
     function getDisciplineGroups() { return refData.disciplineGroups; }
@@ -205,6 +244,24 @@ var StandplassCompModal = (function () {
             + (data.competitionNumber ? '<span class="comp-modal-comp-number">' + esc(String(data.competitionNumber)) + '</span>' : '')
             + badgesHtml + '</span></div>';
 
+        // Arrangør and stevnetype: the detail response carries only GUIDs
+        // (organizationId, competitionTypeId) — names resolve through the
+        // reference maps fetched at page init (ensureReferenceData), keeping
+        // this view independent of whatever row/card data the calling page
+        // holds. Rows are omitted, not id-fallback, while unresolved.
+        var organizerName = refData.organizations[data.organizationId];
+        if (organizerName) {
+            rows += '<div class="comp-modal-infocard-row">'
+                + '<span class="comp-modal-infocard-label">Arrangør</span>'
+                + '<span>' + esc(organizerName) + '</span></div>';
+        }
+        var competitionTypeName = refData.competitionTypes[data.competitionTypeId];
+        if (competitionTypeName) {
+            rows += '<div class="comp-modal-infocard-row">'
+                + '<span class="comp-modal-infocard-label">Stevnetype</span>'
+                + '<span>' + esc(competitionTypeName) + '</span></div>';
+        }
+
         var awardLabel = AWARD_LABELS[data.awardType];
         if (awardLabel) {
             rows += '<div class="comp-modal-infocard-row">'
@@ -231,15 +288,34 @@ var StandplassCompModal = (function () {
                 + '<a href="' + esc(mapsUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(facDisplayName) + '</a></div>';
         }
 
+        // Registration dates: the API's useRegistrationStartTime/EndTime
+        // flags mark whether the time component is meaningful (e.g. a
+        // kl 23:59 påmeldingsfrist). Times are read literally — see
+        // format.js's parseDateParts for why no Date parsing.
+        function regWithTime(iso, useTime) {
+            var t = useTime ? StandplassFormat.formatTime(iso) : null;
+            return StandplassFormat.formatDate(iso) + (t ? ', kl ' + t : '');
+        }
         if (data.registrationStartDate) {
             rows += '<div class="comp-modal-infocard-row">'
                 + '<span class="comp-modal-infocard-label">Påm. åpner</span>'
-                + '<span>' + esc(StandplassFormat.formatDate(data.registrationStartDate)) + '</span></div>';
+                + '<span>' + esc(regWithTime(data.registrationStartDate, data.useRegistrationStartTime)) + '</span></div>';
         }
         if (data.registrationEndDate) {
             rows += '<div class="comp-modal-infocard-row">'
                 + '<span class="comp-modal-infocard-label">Påmeldingsfrist</span>'
-                + '<span>' + esc(StandplassFormat.formatDate(data.registrationEndDate)) + '</span></div>';
+                + '<span>' + esc(regWithTime(data.registrationEndDate, data.useRegistrationEndTime)) + '</span></div>';
+        }
+
+        // Contact person + postal address (the API's contact* block —
+        // often a PO box "v/ Name"; distinct from the venue above).
+        var contactAddr = [data.contactAddress1, data.contactAddress2,
+            data.contactZipCode && data.contactCity ? data.contactZipCode + ' ' + data.contactCity : (data.contactZipCode || data.contactCity)
+        ].filter(Boolean).join(', ');
+        if (contactAddr) {
+            rows += '<div class="comp-modal-infocard-row">'
+                + '<span class="comp-modal-infocard-label">Kontaktadresse</span>'
+                + '<span>' + esc(contactAddr) + '</span></div>';
         }
 
         if (data.contactEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.contactEmail)) {
@@ -345,6 +421,19 @@ var StandplassCompModal = (function () {
         return filterHtml + tablesHtml;
     }
 
+    // Shared meta line under the modal title: date range with start time,
+    // venue, organizer. Names resolve the same way renderDetailBody's rows
+    // do (facility from fetchDetailWithFacility's resolved object, organizer
+    // from the reference org map) — so no host page has to thread names from
+    // its own row/card/scraped data into the modal.
+    function formatMetaLine(comp, facility) {
+        return [
+            StandplassFormat.formatDateRangeTime(comp.startDate, comp.endDate),
+            facility && facility.name,
+            refData.organizations[comp.organizationId]
+        ].filter(Boolean).join(' · ');
+    }
+
     return {
         groupEventsByDiscipline: groupEventsByDiscipline,
         sanitizeDescription: sanitizeDescription,
@@ -354,7 +443,8 @@ var StandplassCompModal = (function () {
         fetchDetailWithFacility: fetchDetailWithFacility,
         fetchResults: fetchResults,
         renderDetailBody: renderDetailBody,
-        renderResultsBody: renderResultsBody
+        renderResultsBody: renderResultsBody,
+        formatMetaLine: formatMetaLine
     };
 })();
 
