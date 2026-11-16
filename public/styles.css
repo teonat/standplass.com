@@ -1271,6 +1271,8 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     margin-bottom: 0.5rem;
 }
 .person-chart-dot { cursor: pointer; }
+.person-chart-dot--linked { stroke: var(--text); stroke-width: 1.5; }
+.person-row-highlight { background: var(--surface-hover); outline: none; }
 .person-chart-dot:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 3px;

@@ -326,6 +326,11 @@ var StandplassPersonModal = (function () {
         }).join('');
 
         var overlapCounts = computeOverlapCounts(pts, metric);
+        // Entry → index into the entries array (the table rows carry the
+        // same index) for dot↔row linking. A Map built once per render
+        // instead of indexOf-per-dot.
+        var entryIdx = new Map();
+        entries.forEach(function (e, i) { entryIdx.set(e, i); });
         var dots = pts.map(function (e) {
             var x = xPos(new Date(e.date).getTime());
             var y = PT + norm(Number(e[metric])) * (H - PT - PB);
@@ -335,7 +340,8 @@ var StandplassPersonModal = (function () {
                 ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="none" stroke="' + color + '"/>' : '';
             return ring + '<circle class="person-chart-dot" tabindex="0" data-date="' + esc(e.date) + '" data-val="' + esc(fmtMetric(e[metric], metric))
                 + '" data-disc="' + esc(e.discipline || '') + '" data-class="' + esc(e.class || '')
-                + '" aria-label="' + esc(fmtMetric(e[metric], metric) + ' – ' + shortDate(e.date)) + '"'
+                + '" data-idx="' + entryIdx.get(e) + '"'
+                + ' aria-label="' + esc(fmtMetric(e[metric], metric) + ' – ' + shortDate(e.date)) + '"'
                 + ' cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2" fill="' + color + '"/>';
         }).join('');
 

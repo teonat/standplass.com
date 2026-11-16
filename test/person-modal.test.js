@@ -170,4 +170,21 @@ var html = StandplassPersonModal.buildTooltipContent({ date: '2025-05-01', ranki
 assert.ok(html.indexOf('90.00') !== -1);
 assert.ok(html.indexOf('Grovfelt') !== -1 && html.indexOf('Fellesfelt') !== -1, 'both overlapping entries get their own line');
 
+// renderChart dots carry data-idx — the entry's index into the entries
+// array passed in, so rows and dots can find each other. Entries filtered
+// out of the plot keep their original array position.
+(function () {
+    var entries = [
+        { date: '2024-01-01', competition: 'A', discipline: 'Felt', class: 'A', position: 3, score: 240, rankingScore: 80 },
+        { date: '2024-02-01', competition: 'B', discipline: 'Felt', class: 'A', position: 1, score: 248, rankingScore: 0 },
+        { date: '2024-03-01', competition: 'C', discipline: 'Felt', class: 'A', position: 2, score: 244, rankingScore: 90 }
+    ];
+    var linkContainer = {};
+    StandplassPersonModal.renderChart(linkContainer, entries, 'rankingScore');
+    // rankingScore 0 drops entry B from the plot; dots 0 and 2 remain.
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="0"') !== -1, 'first dot carries data-idx 0');
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="1"') === -1, 'filtered entry has no dot');
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="2"') !== -1, 'third dot carries data-idx 2 (original position)');
+})();
+
 console.log('person-modal.test.js: all assertions passed');
