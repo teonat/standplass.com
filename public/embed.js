@@ -365,9 +365,9 @@ var StandplassEmbed = (function () {
                     });
                     wrapper.setAttribute('data-mode', mode);
                     // Also on the host: themes.css's dark media query selects
-                    // :host:not([data-mode="light"]), which only ever sees the
-                    // host element -- without this, mode="light" is silently
-                    // ignored whenever the visitor's OS prefers dark.
+                    // :host(:not([data-mode="light"])), which only ever sees
+                    // the host element -- without this, mode="light" is
+                    // silently ignored whenever the visitor's OS prefers dark.
                     el.setAttribute('data-mode', mode);
 
                     var urlState = StandplassUrlState.createController({ namespace: idPrefix, syncUrl: syncUrl });
