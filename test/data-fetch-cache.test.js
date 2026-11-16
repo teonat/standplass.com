@@ -24,7 +24,24 @@ Promise.all([fetcher.fetchYear('/data/felt', 2026), fetcher.fetchYear('/data/fel
         assert.strictEqual(filtered[0].navn, 'A');
         assert.deepStrictEqual(StandplassData.applyFilter(rows, null), rows);
 
-        console.log('data-fetch-cache.test.js: all assertions passed');
+        // fetchBirthyears: same cache discipline as fetchYear — one
+        // request per URL per TTL, resolved to the parsed JSON map.
+        var birthCallCount = 0;
+        function fakeBirthFetch(url) {
+            birthCallCount++;
+            return Promise.resolve({
+                ok: true,
+                json: function () { return Promise.resolve({ p1: 1990, p2: null }); }
+            });
+        }
+        var birthFetcher = StandplassData.createFetcher(fakeBirthFetch, 60000);
+        return Promise.all([birthFetcher.fetchBirthyears('/data/felt'), birthFetcher.fetchBirthyears('/data/felt')])
+            .then(function (maps) {
+                assert.strictEqual(birthCallCount, 1, 'second birthyears call served from cache');
+                assert.deepStrictEqual(maps[0], { p1: 1990, p2: null });
+
+                console.log('data-fetch-cache.test.js: all assertions passed');
+            });
     })
     .catch(function (err) {
         console.error(err);
