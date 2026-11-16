@@ -3,7 +3,7 @@
 // Page glue for /klubb: a club's members ranked per NSF discipline,
 // card-per-discipline, live from nsfapi.azurewebsites.net/ranking. Ported
 // from the source's resultatliste-klubb.js, generalized from a
-// single-club (KSS-hardcoded) design to any ?klubb= club this project
+// single-club-hardcoded design to any ?klubb= club this project
 // already supports elsewhere -- see
 // docs/superpowers/specs/2026-08-29-klubb-view-design.md for the full
 // design and every deliberate divergence from the source.
