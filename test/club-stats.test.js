@@ -264,6 +264,30 @@ assert.ok(multiSvg.indexOf('tabindex="0"') !== -1, 'multi-series dots are focusa
     assert.ok(lastCx < 389, 'last dot clears the right edge (got ' + lastCx + ')');
 })();
 
+// Dashed series + line-swatches legend: series[].dash renders a dashed
+// polyline; legend items are line swatches, not round dots.
+(function () {
+    var dashSeries = [
+        { label: 'Gjennomsnitt', color: 'var(--chart-blue)', dash: false, points: [
+            { year: 2021, value: 5 }, { year: 2022, value: 8 }, { year: 2023, value: 12 }
+        ]},
+        { label: 'Median', color: 'var(--chart-blue)', dash: true, points: [
+            { year: 2021, value: 4 }, { year: 2022, value: 7 }, { year: 2023, value: 10 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(dashSeries, { title: 'Dash test' });
+    var polys = svg.match(/<polyline[^>]*>/g) || [];
+    assert.strictEqual(polys.length, 2, 'two polylines');
+    assert.ok(polys[0].indexOf('stroke-dasharray') === -1, 'first series is solid');
+    assert.ok(polys[1].indexOf('stroke-dasharray="4 3"') !== -1, 'dashed series carries stroke-dasharray="4 3"');
+    assert.ok(svg.indexOf('chart-legend-swatch') !== -1, 'legend uses line swatches');
+    assert.ok(svg.indexOf('chart-legend-swatch--dashed') !== -1, 'dashed legend swatch marked');
+    assert.ok(svg.indexOf('chart-legend-dot') === -1, 'no round legend dots in multi-series charts');
+    // Slimmer styling: dot radius 2.5, stroke width 1.25.
+    assert.ok(/<circle[^>]*r="2.5"/.test(svg), 'dots are r=2.5');
+    assert.ok(/stroke-width="1.25"/.test(svg), 'lines are 1.25 wide');
+})();
+
 // Single series with < 2 points → message
 var shortSeries = [{ label: 'Felt', color: 'red', points: [{ year: 2025, value: 5 }] }];
 assert.ok(CS.renderMultiSeriesChart(shortSeries).indexOf('Ikke nok data') !== -1, 'short series → message');

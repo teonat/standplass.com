@@ -1329,6 +1329,19 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     border-radius: 50%;
     display: inline-block;
 }
+/* Line swatches (multi-series charts): a short line segment in the series
+   color, dashed for dashed series — distinguishes metric, not color. */
+.chart-legend-swatch {
+    width: 14px;
+    height: 2px;
+    display: inline-block;
+    flex: none;
+}
+.chart-legend-swatch--dashed {
+    background: none !important;
+    height: 0;
+    border-top: 2px dashed currentColor;
+}
 
 /* ── Dark-mode text fixes ─────────────────────────────────────────── */
 /* --brand-primary is club brand (navy for the kss preset) and by design

@@ -424,9 +424,9 @@ var StandplassClubStats = (function () {
                 var y = yPos(d[key]).toFixed(1);
                 return '<circle class="club-chart-dot" tabindex="0"'
                     + ' aria-label="' + esc(String(d.year) + ': ' + d[key] + ' ' + label) + '"'
-                    + ' cx="' + x + '" cy="' + y + '" r="3" fill="' + color + '"/>';
+                    + ' cx="' + x + '" cy="' + y + '" r="2.5" fill="' + color + '"/>';
             }).join('');
-            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>'
+            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + color + '" stroke-width="1.25" stroke-linejoin="round"/>'
                 + dots;
         }
 
@@ -451,8 +451,8 @@ var StandplassClubStats = (function () {
 
         // Legend
         var legend = '<div class="chart-legend">'
-            + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--brand-accent)"></span>Skyttere</span>'
-            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--chart-blue)"></span>Starter</span>' : '')
+            + '<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--brand-accent)"></span>Skyttere</span>'
+            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--chart-blue)"></span>Starter</span>' : '')
             + '</div>';
 
         var ariaLabel = 'Aktivitet per år' + (opts.showStarts ? ': skyttere og starter' : ': skyttere');
@@ -539,9 +539,10 @@ var StandplassClubStats = (function () {
                 var y = yPos(p.value).toFixed(1);
                 return '<circle class="club-chart-dot" tabindex="0"'
                     + ' aria-label="' + esc(String(years[p.yi]) + ': ' + p.value + ' ' + s.label) + '"'
-                    + ' cx="' + x + '" cy="' + y + '" r="3" fill="' + s.color + '"/>';
+                    + ' cx="' + x + '" cy="' + y + '" r="2.5" fill="' + s.color + '"/>';
             }).join('');
-            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + s.color + '" stroke-width="1.5" stroke-linejoin="round"/>'
+            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + s.color + '" stroke-width="1.25" stroke-linejoin="round"'
+                + (s.dash ? ' stroke-dasharray="4 3"' : '') + '/>'
                 + dots;
         }).join('');
 
@@ -566,7 +567,7 @@ var StandplassClubStats = (function () {
                 }
                 lastLabelY = labelY;
                 labels += '<text x="' + d.x.toFixed(1) + '" y="' + labelY.toFixed(1)
-                    + '" text-anchor="middle" font-size="9" font-weight="600" fill="' + d.color + '">'
+                    + '" text-anchor="middle" font-size="8" font-weight="400" fill="' + d.color + '">'
                     + esc(String(d.value)) + '</text>';
             });
         });
@@ -590,7 +591,8 @@ var StandplassClubStats = (function () {
         // Legend
         var legend = '<div class="chart-legend">'
             + series.map(function (s) {
-                return '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + s.color + '"></span>' + esc(s.label) + '</span>';
+                return '<span class="chart-legend-item"><span class="chart-legend-swatch'
+                    + (s.dash ? ' chart-legend-swatch--dashed' : '') + '" style="background:' + s.color + ';color:' + s.color + '"></span>' + esc(s.label) + '</span>';
             }).join('')
             + '</div>';
 
