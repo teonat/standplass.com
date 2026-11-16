@@ -18,6 +18,129 @@ var StandplassClubStats = (function () {
 
     // ── Stats computation ──────────────────────────────────────────────
 
+    // ── Age series computation ─────────────────────────────────────────
+
+    // The only luft (air gun) disciplines in the data are the 10m
+    // luftpistol/luftsprint ones — identified by name; no powder
+    // discipline contains "luft".
+    function isLuftDiscipline(discipline) {
+        return String(discipline || '').indexOf('luft') >= 0;
+    }
+
+    // Luft-only shooters are plausible from age 9; any shooter with at
+    // least one powder result is plausible only from age 11. The
+    // classification is a property of the SHOOTER across the whole
+    // family (all clubs, all years) — the view scope never changes it.
+    var AGE_FLOOR_LUFT = 9;
+    var AGE_FLOOR_POWDER = 11;
+
+    // familyRows: ALL rows of one family. Returns { personId: true } for
+    // shooters whose every row is a luft discipline.
+    function computeLuftOnlyShooters(familyRows) {
+        var luftOnly = {};
+        var seenPowder = {};
+        (familyRows || []).forEach(function (r) {
+            if (!r.personId) { return; }
+            if (isLuftDiscipline(r.discipline)) {
+                if (!seenPowder[r.personId]) { luftOnly[r.personId] = true; }
+            } else {
+                seenPowder[r.personId] = true;
+                delete luftOnly[r.personId];
+            }
+        });
+        return luftOnly;
+    }
+
+    // rowsByYear: [{ year, rows }] — rows in scope (national or one
+    // club). Per year: unique personIds, age = year − birthYear, null or
+    // absent birth year excluded, ages below the shooter's floor
+    // excluded. Returns [{ year, count, avg, median }] — avg rounded to
+    // 1 decimal, median the middle value or the mean of the two middle
+    // values (can be .5). Years where nobody survives are omitted.
+    function computeAgeSeries(rowsByYear, luftOnly, birthyears) {
+        luftOnly = luftOnly || {};
+        birthyears = birthyears || {};
+        var out = [];
+        (rowsByYear || []).forEach(function (ye) {
+            var seen = {};
+            var ages = [];
+            (ye.rows || []).forEach(function (r) {
+                var pid = r.personId;
+                if (!pid || seen[pid]) { return; }
+                seen[pid] = true;
+                var by = birthyears[pid];
+                if (by == null) { return; } // not collected or API has none
+                var age = ye.year - by;
+                var floor = luftOnly[pid] ? AGE_FLOOR_LUFT : AGE_FLOOR_POWDER;
+                if (age < floor) { return; } // implausible birth year
+                ages.push(age);
+            });
+            if (!ages.length) { return; }
+            ages.sort(function (a, b) { return a - b; });
+            var mid = Math.floor(ages.length / 2);
+            var median = ages.length % 2 ? ages[mid] : (ages[mid - 1] + ages[mid]) / 2;
+            var sum = ages.reduce(function (a, b) { return a + b; }, 0);
+            out.push({
+                year: ye.year,
+                count: ages.length,
+                avg: Math.round((sum / ages.length) * 10) / 10,
+                median: median
+            });
+        });
+        return out;
+    }
+
+    // Age values for chart labels: 1 decimal, trailing .0 trimmed.
+    function formatAgeValue(v) {
+        var rounded = Math.round(Number(v) * 10) / 10;
+        return String(rounded).replace(/\.0$/, '');
+    }
+
+    // ── Club chart metric switcher ────────────────────────────────────
+
+    // One visible chart behind a toggle (person-modal "Vis i graf"
+    // pattern) instead of stacked charts.
+    var CLUB_CHART_METRICS = [
+        { key: 'shooters', label: 'Skyttere' },
+        { key: 'starts', label: 'Starter' },
+        { key: 'avgAge', label: 'Snittalder' },
+        { key: 'medianAge', label: 'Medianalder' }
+    ];
+
+    function normalizeClubChartMetric(v) {
+        for (var i = 0; i < CLUB_CHART_METRICS.length; i++) {
+            if (CLUB_CHART_METRICS[i].key === v) { return v; }
+        }
+        return 'shooters';
+    }
+
+    function renderMetricToggleHtml(activeMetric) {
+        return '<div class="program-toggle" role="group" aria-label="Vis i graf">'
+            + CLUB_CHART_METRICS.map(function (m) {
+                return '<button type="button" class="program-btn club-metric-toggle'
+                    + (m.key === activeMetric ? ' program-btn--active' : '') + '"'
+                    + ' data-metric="' + m.key + '" aria-pressed="' + (m.key === activeMetric) + '">'
+                    + esc(m.label) + '</button>';
+            }).join('')
+            + '</div>';
+    }
+
+    // Memoizes an expensive, immutable-input computation per scope key.
+    // Used for the age-series walk (a full flatten of both families,
+    // ~225k rows) so it runs once per scope — never per toggle click or
+    // filter change. Valid because yearData/birthyears/luftOnlyMaps are
+    // immutable after load, the same assumption statsCache already makes.
+    function createAgeSeriesCache(compute) {
+        var cache = {};
+        return function (scopeClub) {
+            var key = scopeClub == null ? '\u0000national' : scopeClub;
+            if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+                cache[key] = compute(scopeClub);
+            }
+            return cache[key];
+        };
+    }
+
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
@@ -403,8 +526,11 @@ var StandplassClubStats = (function () {
         var range = maxVal || 1;
 
         function xPos(i) {
-            if (pts.length === 1) { return PL; }
-            return PL + (i / (pts.length - 1)) * (W - PL - PR);
+            if (pts.length === 1) { return (PL + (W - PR)) / 2; }
+            // Half-step inset: first/last points sit half an x-step inside
+            // the plot area so labels above them clear the axis lines.
+            var step = (W - PL - PR) / pts.length;
+            return PL + step * (i + 0.5);
         }
         function yPos(v) { return PT + (1 - v / range) * (H - PT - PB); }
 
@@ -421,14 +547,14 @@ var StandplassClubStats = (function () {
                 var y = yPos(d[key]).toFixed(1);
                 return '<circle class="club-chart-dot" tabindex="0"'
                     + ' aria-label="' + esc(String(d.year) + ': ' + d[key] + ' ' + label) + '"'
-                    + ' cx="' + x + '" cy="' + y + '" r="3" fill="' + color + '"/>';
+                    + ' cx="' + x + '" cy="' + y + '" r="2.5" fill="' + color + '"/>';
             }).join('');
-            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>'
+            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + color + '" stroke-width="1.25" stroke-linejoin="round"/>'
                 + dots;
         }
 
         var shootersLine = buildLine('shooters', 'var(--brand-accent)', 'skyttere');
-        var startsLine = opts.showStarts ? buildLine('starts', '#4a90d9', 'starter') : '';
+        var startsLine = opts.showStarts ? buildLine('starts', 'var(--chart-blue)', 'starter') : '';
 
         // Y-axis labels (top, middle, bottom)
         var yTop = String(Math.round(maxVal));
@@ -448,8 +574,8 @@ var StandplassClubStats = (function () {
 
         // Legend
         var legend = '<div class="chart-legend">'
-            + '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--brand-accent)"></span>Skyttere</span>'
-            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:#4a90d9"></span>Starter</span>' : '')
+            + '<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--brand-accent)"></span>Skyttere</span>'
+            + (opts.showStarts ? '<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--chart-blue)"></span>Starter</span>' : '')
             + '</div>';
 
         var ariaLabel = 'Aktivitet per år' + (opts.showStarts ? ': skyttere og starter' : ': skyttere');
@@ -480,10 +606,14 @@ var StandplassClubStats = (function () {
         // Collect all years and all values across series
         var yearSet = {};
         var maxVal = 0;
+        var minVal = Infinity;
         series.forEach(function (s) {
             (s.points || []).forEach(function (p) {
                 if (p.year != null) { yearSet[p.year] = true; }
-                if (p.value != null && p.value > maxVal) { maxVal = p.value; }
+                if (p.value != null) {
+                    if (p.value > maxVal) { maxVal = p.value; }
+                    if (p.value < minVal) { minVal = p.value; }
+                }
             });
         });
         var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
@@ -493,13 +623,24 @@ var StandplassClubStats = (function () {
         }
 
         var W = 400, H = 160, PL = 44, PR = 12, PT = 22, PB = 28;
+        // yClamp: base the axis on the data range (min-2 .. max+2) instead
+        // of 0..max — for age-style values where a zero baseline wastes the
+        // plot. Flat data (maxVal == minVal) must not divide by zero.
+        var yMin = 0;
         var range = maxVal || 1;
+        if (opts.yClamp) {
+            yMin = Math.floor((minVal === Infinity ? 0 : minVal) - 2);
+            range = (Math.ceil(maxVal + 2) - yMin) || 1;
+        }
 
         function xPos(i) {
-            if (years.length === 1) { return PL; }
-            return PL + (i / (years.length - 1)) * (W - PL - PR);
+            if (years.length === 1) { return (PL + (W - PR)) / 2; }
+            // Half-step inset: first/last points sit half an x-step inside
+            // the plot area so labels above them clear the axis lines.
+            var step = (W - PL - PR) / years.length;
+            return PL + step * (i + 0.5);
         }
-        function yPos(v) { return PT + (1 - v / range) * (H - PT - PB); }
+        function yPos(v) { return PT + (1 - (v - yMin) / range) * (H - PT - PB); }
 
         // Build all dots across all series, grouped by year for collision detection
         var allDots = [];
@@ -533,15 +674,23 @@ var StandplassClubStats = (function () {
                 var y = yPos(p.value).toFixed(1);
                 return '<circle class="club-chart-dot" tabindex="0"'
                     + ' aria-label="' + esc(String(years[p.yi]) + ': ' + p.value + ' ' + s.label) + '"'
-                    + ' cx="' + x + '" cy="' + y + '" r="3" fill="' + s.color + '"/>';
+                    + ' cx="' + x + '" cy="' + y + '" r="2.5" fill="' + s.color + '"/>';
             }).join('');
-            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + s.color + '" stroke-width="1.5" stroke-linejoin="round"/>'
+            return '<polyline points="' + esc(polyPts) + '" fill="none" stroke="' + s.color + '" stroke-width="1.25" stroke-linejoin="round"'
+                + (s.dash ? ' stroke-dasharray="4 3"' : '') + '/>'
                 + dots;
         }).join('');
 
-        // Value labels above dots with collision avoidance per X position.
-        // Group dots by year index, sort by Y within each group, then
-        // stagger labels so close ones don't overlap.
+        // Value labels: the upper series labels ABOVE its dots, the lower
+        // series BELOW its dots — close pairs split instead of stacking.
+        // At a same-point collision the series that is mostly above
+        // (higher mean value) wins the above slot.
+        var fmtVal = opts.valueFormat || function (v) { return String(v); };
+        var seriesMean = series.map(function (s) {
+            var vals = (s.points || []).filter(function (p) { return p.value != null; });
+            if (!vals.length) { return -Infinity; }
+            return vals.reduce(function (a, p) { return a + p.value; }, 0) / vals.length;
+        });
         var byYear = {};
         allDots.forEach(function (d) {
             if (!byYear[d.yi]) { byYear[d.yi] = []; }
@@ -550,25 +699,33 @@ var StandplassClubStats = (function () {
 
         var labels = '';
         Object.keys(byYear).forEach(function (yi) {
-            var group = byYear[yi].sort(function (a, b) { return a.y - b.y; });
-            var lastLabelY = -Infinity;
-            group.forEach(function (d) {
-                var labelY = d.y - 8;
-                // If too close to the previous label at this X, push it up
-                if (labelY < lastLabelY + 10) {
-                    labelY = lastLabelY + 1;
+            var group = byYear[yi].slice().sort(function (a, b) {
+                if (Math.abs(a.y - b.y) > 3) { return a.y - b.y; }
+                return (seriesMean[b.seriesIdx] || 0) - (seriesMean[a.seriesIdx] || 0);
+            });
+            var lastAboveY = -Infinity;
+            var lastBelowY = Infinity;
+            group.forEach(function (d, i) {
+                var labelY;
+                if (i === 0) {
+                    labelY = d.y - 8;
+                    if (labelY < lastAboveY + 10) { labelY = lastAboveY - 1; }
+                    lastAboveY = labelY;
+                } else {
+                    labelY = d.y + 13;
+                    if (lastBelowY !== Infinity && labelY < lastBelowY + 10) { labelY = lastBelowY + 10; }
+                    lastBelowY = labelY;
                 }
-                lastLabelY = labelY;
                 labels += '<text x="' + d.x.toFixed(1) + '" y="' + labelY.toFixed(1)
-                    + '" text-anchor="middle" font-size="9" font-weight="600" fill="' + d.color + '">'
-                    + esc(String(d.value)) + '</text>';
+                    + '" text-anchor="middle" font-size="8" font-weight="400" fill="' + d.color + '">'
+                    + esc(fmtVal(d.value)) + '</text>';
             });
         });
 
         // Y-axis labels
-        var yTop = String(Math.round(maxVal));
-        var yMid = String(Math.round(maxVal / 2));
-        var yBot = '0';
+        var yTop = opts.yClamp ? String(Math.round(yMin + range)) : String(Math.round(maxVal));
+        var yMid = opts.yClamp ? String(Math.round(yMin + range / 2)) : String(Math.round(maxVal / 2));
+        var yBot = opts.yClamp ? String(Math.round(yMin)) : '0';
         var yLabels =
               '<text x="' + (PL - 6) + '" y="' + (PT + 4) + '" text-anchor="end" font-size="9" fill="var(--text-muted)">' + esc(yTop) + '</text>'
             + '<text x="' + (PL - 6) + '" y="' + (((PT + (H - PB)) / 2) + 3).toFixed(1) + '" text-anchor="end" font-size="9" fill="var(--text-muted)">' + esc(yMid) + '</text>'
@@ -584,7 +741,8 @@ var StandplassClubStats = (function () {
         // Legend
         var legend = '<div class="chart-legend">'
             + series.map(function (s) {
-                return '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + s.color + '"></span>' + esc(s.label) + '</span>';
+                return '<span class="chart-legend-item"><span class="chart-legend-swatch'
+                    + (s.dash ? ' chart-legend-swatch--dashed' : '') + '" style="background:' + s.color + ';color:' + s.color + '"></span>' + esc(s.label) + '</span>';
             }).join('')
             + '</div>';
 
@@ -621,6 +779,72 @@ var StandplassClubStats = (function () {
         var programParam = params.get('program');
         var activeProgram = (programParam === 'felt' || programParam === 'bane') ? programParam : 'alle';
         var yearParam = parseInt(params.get('year'), 10);
+        var activeMetric = normalizeClubChartMetric(params.get('metric'));
+        // The drilldown's data-derived club name (set by renderDrilldown);
+        // the metric-toggle handler re-renders the chart section with it.
+        var resolvedClub = null;
+
+        // ── Alder metric data ───────────────────────────────────────────
+        var birthyears = { felt: null, bane: null };      // personId → year|null
+        var luftOnlyMaps = { felt: null, bane: null };    // personId → true
+
+        function ageRowsByYear(base, scopeClub) {
+            var out = [];
+            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
+                var key = base + '|' + y;
+                if (!yearData[key]) { continue; }
+                var rows = StandplassStevnerPage.flattenRows(yearData[key]);
+                if (scopeClub) {
+                    rows = rows.filter(function (r) {
+                        return r.club && StandplassStevnerPage.normalizeClub(r.club) === StandplassStevnerPage.normalizeClub(scopeClub);
+                    });
+                }
+                out.push({ year: y, rows: rows });
+            }
+            return out;
+        }
+
+        // The age-series walk flattens both families (~225k rows) — it is
+        // memoized per scope (national / per club) so it runs once, never
+        // on toggle clicks or filter changes.
+        var getAgeSeriesData = createAgeSeriesCache(function (scopeClub) {
+            var out = {};
+            ['felt', 'bane'].forEach(function (fam) {
+                var perYear = computeAgeSeries(
+                    ageRowsByYear('/data/' + fam, scopeClub),
+                    luftOnlyMaps[fam] || {},
+                    birthyears[fam] || {});
+                out[fam] = {
+                    avg: perYear.map(function (s) { return { year: s.year, value: s.avg }; }),
+                    median: perYear.map(function (s) { return { year: s.year, value: s.median }; })
+                };
+            });
+            return out;
+        });
+
+        function ageChartSeries(scopeClub) {
+            // After the avg/median split: two single-metric charts, one
+            // series per family — solid lines, family colors.
+            var data = getAgeSeriesData(scopeClub);
+            return {
+                avg: [
+                    { label: 'Felt', color: 'var(--brand-accent)', points: data.felt.avg },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: data.bane.avg }
+                ],
+                median: [
+                    { label: 'Felt', color: 'var(--brand-accent)', points: data.felt.median },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: data.bane.median }
+                ]
+            };
+        }
+
+        // The charts react to the alle/felt/bane program filter like every
+        // other section on the page: 'alle' shows both family series.
+        function visibleSeries(series) {
+            if (activeProgram === 'felt') { return series.slice(0, 1); }
+            if (activeProgram === 'bane') { return series.slice(1); }
+            return series;
+        }
         var activeYear = isNaN(yearParam) ? CURRENT_YEAR : yearParam;
 
         var fetcher = StandplassData.createFetcher(window.fetch.bind(window));
@@ -840,7 +1064,133 @@ var StandplassClubStats = (function () {
             });
         }
 
+        // Overview charts: one chart behind the metric switcher — always
+        // both programs (felt + bane) regardless of the active program
+        // filter. Defined at init level so the toggle's click handler can
+        // re-render just this section.
+        function renderOverviewChartSection() {
+            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
+            for (var oy = FIRST_YEAR; oy <= CURRENT_YEAR; oy++) {
+                var ofs = getStatsForYear(oy, 'felt');
+                var obs = getStatsForYear(oy, 'bane');
+                var fsCount = 0, fsStarts = 0, bsCount = 0, bsStarts = 0;
+                Object.keys(ofs).forEach(function (c) { fsCount += ofs[c].uniqueShooters; fsStarts += ofs[c].totalStarts; });
+                Object.keys(obs).forEach(function (c) { bsCount += obs[c].uniqueShooters; bsStarts += obs[c].totalStarts; });
+                if (Object.keys(ofs).length) {
+                    feltShooters.push({ year: oy, value: fsCount });
+                    feltStarts.push({ year: oy, value: fsStarts });
+                }
+                if (Object.keys(obs).length) {
+                    baneShooters.push({ year: oy, value: bsCount });
+                    baneStarts.push({ year: oy, value: bsStarts });
+                }
+            }
+            if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
+            var chart;
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var ageSeries = activeMetric === 'avgAge' ? ageChartSeries(null).avg : ageChartSeries(null).median;
+                chart = renderMultiSeriesChart(visibleSeries(ageSeries),
+                    { title: 'Alder per år: ' + (activeMetric === 'avgAge' ? 'gjennomsnitt' : 'median') + ', felt og bane', yClamp: true, valueFormat: formatAgeValue })
+                    + '<p class="club-stats-note">Skyttere uten kjent fødselsår er ikke med i beregningen.</p>';
+            } else if (activeMetric === 'starts') {
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }]),
+                    { title: 'Totalt antall starter per år: felt og bane' });
+            } else {
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }]),
+                    { title: 'Totalt antall skyttere per år: felt og bane' });
+            }
+            return '<section class="ranking-card club-stats-section club-stats-overview" data-club-chart-section>'
+                + '<div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet i hele Norge</h2></div>'
+                + '<div class="club-stats-chart-toggle">' + renderMetricToggleHtml(activeMetric) + '</div>'
+                + chart
+                + '</section>';
+        }
+
+        // Drilldown charts: same metric switcher, per club. Series are
+        // computed per call (getStatsForYear caches underneath), so the
+        // toggle's click handler can re-render just this section.
+        function renderDrilldownChartSection(resolved) {
+            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
+            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
+                var fStats = getStatsForYear(y, 'felt');
+                var bStats = getStatsForYear(y, 'bane');
+                if (fStats[resolved]) {
+                    feltShooters.push({ year: y, value: fStats[resolved].uniqueShooters });
+                    feltStarts.push({ year: y, value: fStats[resolved].totalStarts });
+                }
+                if (bStats[resolved]) {
+                    baneShooters.push({ year: y, value: bStats[resolved].uniqueShooters });
+                    baneStarts.push({ year: y, value: bStats[resolved].totalStarts });
+                }
+            }
+            if (feltShooters.length < 2 && baneShooters.length < 2) { return ''; }
+            var chart;
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var ageSeries = activeMetric === 'avgAge' ? ageChartSeries(resolved).avg : ageChartSeries(resolved).median;
+                chart = renderMultiSeriesChart(visibleSeries(ageSeries),
+                    { title: 'Alder per år: ' + (activeMetric === 'avgAge' ? 'gjennomsnitt' : 'median') + ', felt og bane', yClamp: true, valueFormat: formatAgeValue })
+                    + '<p class="club-stats-note">Skyttere uten kjent fødselsår er ikke med i beregningen.</p>';
+            } else if (activeMetric === 'starts') {
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneStarts }]),
+                    { title: 'Starter per år: felt og bane' });
+            } else {
+                chart = renderMultiSeriesChart(visibleSeries([
+                    { label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
+                    { label: 'Bane', color: 'var(--chart-blue)', points: baneShooters }]),
+                    { title: 'Unike skyttere per år: felt og bane' });
+            }
+
+            // Details table follows the active metric.
+            var head, body;
+            if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
+                var data = getAgeSeriesData(resolved);
+                var ageArr = activeMetric === 'avgAge' ? { felt: data.felt.avg, bane: data.bane.avg } : { felt: data.felt.median, bane: data.bane.median };
+                function byYearAge(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
+                var yearSetA = {};
+                ageArr.felt.concat(ageArr.bane).forEach(function (p) { yearSetA[p.year] = true; });
+                var yearsA = Object.keys(yearSetA).map(Number).sort(function (a, b) { return a - b; });
+                var ageColLabel = activeMetric === 'avgAge' ? 'snittalder' : 'medianalder';
+                head = '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt ' + ageColLabel + '</th><th scope="col" class="ranking-score">Bane ' + ageColLabel + '</th></tr></thead>';
+                body = yearsA.map(function (yr) {
+                    var fa = byYearAge(ageArr.felt, yr), ba = byYearAge(ageArr.bane, yr);
+                    return '<tr><td>' + esc(String(yr)) + '</td>'
+                        + '<td class="ranking-score">' + (fa ? formatAgeValue(fa.value) : '–') + '</td>'
+                        + '<td class="ranking-score">' + (ba ? formatAgeValue(ba.value) : '–') + '</td></tr>';
+                }).join('');
+            } else {
+                var yearSet = {};
+                feltShooters.concat(baneShooters).concat(feltStarts).concat(baneStarts)
+                    .forEach(function (p) { yearSet[p.year] = true; });
+                var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
+                function byYear(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
+                head = activeMetric === 'starts'
+                    ? '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead>'
+                    : '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th></tr></thead>';
+                body = years.map(function (yr) {
+                    var a = byYear(activeMetric === 'starts' ? feltStarts : feltShooters, yr);
+                    var b = byYear(activeMetric === 'starts' ? baneStarts : baneShooters, yr);
+                    return '<tr><td>' + esc(String(yr)) + '</td>'
+                        + '<td class="ranking-score">' + (a ? a.value : '–') + '</td>'
+                        + '<td class="ranking-score">' + (b ? b.value : '–') + '</td></tr>';
+                }).join('');
+            }
+
+            return '<section class="ranking-card club-stats-section" data-club-chart-section>'
+                + '<div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet over tid</h2></div>'
+                + '<div class="club-stats-chart-toggle">' + renderMetricToggleHtml(activeMetric) + '</div>'
+                + chart
+                + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
+                + '<table class="ranking-table">' + head + '<tbody>' + body + '</tbody></table></div></details></section>';
+        }
+
         function renderToplists() {
+            resolvedClub = null;
             titleEl.textContent = 'Klubbstatistikk';
             leadEl.innerHTML = 'Topplister og statistikk for skytteklubber. '
                 + 'Data fra skyting.no – kun pistol og revolver (feltskyting og baneskyting).';
@@ -909,40 +1259,10 @@ var StandplassClubStats = (function () {
                 + '<div class="club-stats-summary-card"><span class="club-stats-summary-value">' + Object.keys(nationalClubs).length + '</span><span class="club-stats-summary-label">Aktive klubber</span></div>'
                 + '</div>';
 
-            // Overview charts: total skyttere/starter across all clubs, felt vs bane, per year.
-            // Always shows both programs regardless of the active program toggle.
-            var overviewFeltShooters = [], overviewFeltStarts = [];
-            var overviewBaneShooters = [], overviewBaneStarts = [];
-            for (var oy = FIRST_YEAR; oy <= CURRENT_YEAR; oy++) {
-                var ofs = getStatsForYear(oy, 'felt');
-                var obs = getStatsForYear(oy, 'bane');
-                var fsCount = 0, fsStarts = 0, bsCount = 0, bsStarts = 0;
-                Object.keys(ofs).forEach(function (c) { fsCount += ofs[c].uniqueShooters; fsStarts += ofs[c].totalStarts; });
-                Object.keys(obs).forEach(function (c) { bsCount += obs[c].uniqueShooters; bsStarts += obs[c].totalStarts; });
-                if (Object.keys(ofs).length) {
-                    overviewFeltShooters.push({ year: oy, value: fsCount });
-                    overviewFeltStarts.push({ year: oy, value: fsStarts });
-                }
-                if (Object.keys(obs).length) {
-                    overviewBaneShooters.push({ year: oy, value: bsCount });
-                    overviewBaneStarts.push({ year: oy, value: bsStarts });
-                }
-            }
-
-            var overviewHtml = (overviewFeltShooters.length >= 2 || overviewBaneShooters.length >= 2)
-                ? '<section class="ranking-card club-stats-section club-stats-overview"><div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet i hele Norge</h2></div>'
-                + '<h3 class="club-stats-chart-label">Skyttere</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltShooters },
-                     { label: 'Bane', color: '#4a90d9', points: overviewBaneShooters }],
-                    { title: 'Totalt antall skyttere per år: felt og bane' })
-                + '<h3 class="club-stats-chart-label">Starter</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: overviewFeltStarts },
-                     { label: 'Bane', color: '#4a90d9', points: overviewBaneStarts }],
-                    { title: 'Totalt antall starter per år: felt og bane' })
-                + '</section>'
-                : '';
+            // Overview charts: one chart behind the metric switcher —
+            // always both programs (felt + bane) regardless of the active
+            // program filter.
+            var overviewHtml = renderOverviewChartSection();
 
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
@@ -968,6 +1288,9 @@ var StandplassClubStats = (function () {
                     resolved = name;
                 }
             });
+            // Expose the resolved name for the metric-toggle handler, which
+            // re-renders the chart section without a full drilldown render.
+            resolvedClub = resolved;
             if (!resolved) {
                 // No match — fall back to toplists with info message
                 klubbParam = null;
@@ -987,20 +1310,7 @@ var StandplassClubStats = (function () {
             var stats = getStatsForYear(activeYear, activeProgram);
             var clubStat = stats[resolved];
 
-            // Multi-year chart data — separate felt/bane per year
-            var feltShooters = [], feltStarts = [], baneShooters = [], baneStarts = [];
-            for (var y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
-                var fStats = getStatsForYear(y, 'felt');
-                var bStats = getStatsForYear(y, 'bane');
-                if (fStats[resolved]) {
-                    feltShooters.push({ year: y, value: fStats[resolved].uniqueShooters });
-                    feltStarts.push({ year: y, value: fStats[resolved].totalStarts });
-                }
-                if (bStats[resolved]) {
-                    baneShooters.push({ year: y, value: bStats[resolved].uniqueShooters });
-                    baneStarts.push({ year: y, value: bStats[resolved].totalStarts });
-                }
-            }
+            var chartHtml = renderDrilldownChartSection(resolved);
 
             // Mest aktive skyttere (per club, from raw rows)
             var rows = getRowsForYear(activeYear, activeProgram);
@@ -1053,43 +1363,6 @@ var StandplassClubStats = (function () {
                 + '<div class="club-stats-summary-card"><span class="club-stats-summary-value">' + clubStat.topThree + '</span><span class="club-stats-summary-label">Topp-3 plasseringer</span></div>'
                 + '</div>'
                 : '<p class="ranking-status-msg">Ingen data for ' + esc(resolved) + ' i ' + activeYear + '.</p>';
-
-            var chartHtml = (feltShooters.length >= 2 || baneShooters.length >= 2)
-                ? '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet over tid</h2></div>'
-                + '<h3 class="club-stats-chart-label">Skyttere</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltShooters },
-                     { label: 'Bane', color: '#4a90d9', points: baneShooters }],
-                    { title: 'Unike skyttere per år: felt og bane' })
-                + '<h3 class="club-stats-chart-label">Starter</h3>'
-                + renderMultiSeriesChart(
-                    [{ label: 'Felt', color: 'var(--brand-accent)', points: feltStarts },
-                     { label: 'Bane', color: '#4a90d9', points: baneStarts }],
-                    { title: 'Starter per år: felt og bane' })
-                + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
-                + '<table class="ranking-table"><thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead><tbody>'
-                + years0().map(function (yr) {
-                    var fs = feltShooters.filter(function (p) { return p.year === yr; })[0];
-                    var bs = baneShooters.filter(function (p) { return p.year === yr; })[0];
-                    var fst = feltStarts.filter(function (p) { return p.year === yr; })[0];
-                    var bst = baneStarts.filter(function (p) { return p.year === yr; })[0];
-                    return '<tr><td>' + esc(String(yr)) + '</td>'
-                        + '<td class="ranking-score">' + (fs ? fs.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (bs ? bs.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (fst ? fst.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (bst ? bst.value : '–') + '</td></tr>';
-                }).join('')
-                + '</tbody></table></div></details></section>'
-                : '';
-
-            function years0() {
-                var set = {};
-                feltShooters.forEach(function (p) { set[p.year] = true; });
-                baneShooters.forEach(function (p) { set[p.year] = true; });
-                feltStarts.forEach(function (p) { set[p.year] = true; });
-                baneStarts.forEach(function (p) { set[p.year] = true; });
-                return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
-            }
 
             var topShootersHtml = topShooters.length
                 ? buildTableCard({
@@ -1173,6 +1446,26 @@ var StandplassClubStats = (function () {
 
         buildFilters();
 
+        // Metric toggle: one delegated listener for the chart sections'
+        // toggle group (overview and drilldown). Swaps only the chart
+        // section's DOM — the toplists and drilldown cards stay put.
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.club-metric-toggle') : null;
+            if (!btn) { return; }
+            activeMetric = normalizeClubChartMetric(btn.getAttribute('data-metric'));
+            var qs = new URLSearchParams(urlState.getSearch());
+            if (activeMetric === 'shooters') { qs.delete('metric'); } else { qs.set('metric', activeMetric); }
+            urlState.setSearch('?' + qs.toString());
+            var section = contentEl.querySelector('[data-club-chart-section]');
+            if (section) {
+                section.outerHTML = resolvedClub
+                    ? renderDrilldownChartSection(resolvedClub)
+                    : renderOverviewChartSection();
+                var refocus = contentEl.querySelector('.club-metric-toggle[aria-pressed="true"]');
+                if (refocus) { refocus.focus(); }
+            }
+        });
+
         // Top-3 card toggles: one delegated listener for the drilldown's
         // top-3 card. Registered once here — the section's inner HTML is
         // replaced on toggle, so per-render bindings would be lost and
@@ -1199,15 +1492,32 @@ var StandplassClubStats = (function () {
 
         statusEl.textContent = 'Laster data…';
 
-        loadAllYears().then(function () {
+        // Birthyear maps for the Alder metric — loaded alongside the year
+        // files. A missing/failed file must not break the page: Alder then
+        // renders "Ikke nok data for graf." while everything else works.
+        function fetchBirthyearsSafe(base) {
+            return fetcher.fetchBirthyears(base).catch(function () { return null; });
+        }
+
+        Promise.all([loadAllYears(), fetchBirthyearsSafe('/data/felt'), fetchBirthyearsSafe('/data/bane')]).then(function (loaded) {
             dataLoaded = true;
-            // Accumulate club names from all years
+            birthyears.felt = loaded[1];
+            birthyears.bane = loaded[2];
+            // One walk over all year files: accumulates club names AND the
+            // per-family row sets for the luft-only classification (a
+            // property of the shooter across the whole family — all clubs,
+            // all years).
+            var famRows = { felt: [], bane: [] };
             Object.keys(yearData).forEach(function (key) {
                 var rows = StandplassStevnerPage.flattenRows(yearData[key]);
                 rows.forEach(function (r) {
                     if (r.club) { allClubNames[r.club] = true; }
                 });
+                var fam = key.split('|')[0] === '/data/felt' ? 'felt' : 'bane';
+                famRows[fam] = famRows[fam].concat(rows);
             });
+            luftOnlyMaps.felt = computeLuftOnlyShooters(famRows.felt);
+            luftOnlyMaps.bane = computeLuftOnlyShooters(famRows.bane);
             render();
         }, function () {
             statusEl.textContent = 'Kunne ikke laste data. Prøv igjen senere.';
@@ -1226,6 +1536,13 @@ var StandplassClubStats = (function () {
         renderClassDistributionHtml: renderClassDistributionHtml,
         computeTopThreeRanking: computeTopThreeRanking,
         renderTopThreeHtml: renderTopThreeHtml,
+        isLuftDiscipline: isLuftDiscipline,
+        computeLuftOnlyShooters: computeLuftOnlyShooters,
+        computeAgeSeries: computeAgeSeries,
+        formatAgeValue: formatAgeValue,
+        normalizeClubChartMetric: normalizeClubChartMetric,
+        renderMetricToggleHtml: renderMetricToggleHtml,
+        createAgeSeriesCache: createAgeSeriesCache,
         renderLineChart: renderLineChart,
         renderMultiSeriesChart: renderMultiSeriesChart,
         buildTableCard: buildTableCard,

@@ -79,6 +79,15 @@ assert.ok(container.innerHTML.includes('<polyline'), 'renders a polyline for the
 assert.match(container.innerHTML, /<circle[^>]*>[\s\S]*<circle[^>]*>[\s\S]*<circle/, 'renders one circle per entry');
 assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 3, 'one dot per entry, no extra overlap rings');
 
+// Plot-area inset: the first dot sits half an x-step right of the y-axis
+// (PL=40, three points a month apart → half-step ≈ 28 → first cx ≈ 68).
+(function () {
+    var cxMatch = /<circle[^>]*cx="([0-9.]+)"/.exec(container.innerHTML);
+    assert.ok(cxMatch, 'renderChart produced a dot');
+    var firstCx = Number(cxMatch[1]);
+    assert.ok(firstCx > 60, 'first dot clears the y-axis (got ' + firstCx + ')');
+})();
+
 // Legend: a fixed 5-item legend describing what each color *means*
 // (2+ over/at opprykk/in class/under/2+ under), not per-class numeric
 // thresholds -- same regardless of which classes are actually in view.
@@ -105,23 +114,31 @@ var emptyContainer = {};
 StandplassPersonModal.renderChart(emptyContainer, [chartEntries[0]], 'rankingScore');
 assert.ok(!emptyContainer.innerHTML.includes('<svg'), 'single data point falls back to a message instead of a chart');
 
-// dotColor: class-relative rankingScore color bands, one threshold crossing per class.
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 96 }, 'rankingScore'), '#ef4444');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 97 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 84 }, 'rankingScore'), '#ef4444');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 85 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 84 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 85 }, 'rankingScore'), '#22c55e');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 84 }, 'rankingScore'), '#eab308');
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 85 }, 'rankingScore'), '#a855f7');
-// Unknown/missing class falls back to the brand accent (not a color band).
-assert.strictEqual(StandplassPersonModal.dotColor({ class: 'E', rankingScore: 99 }, 'rankingScore'), 'var(--brand-accent)');
+// dotColor: rankingScore bands per class. B has no orange band — nothing
+// is 2+ classes below B (C is below B; D is the entry class, doesn't count).
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 98 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 96 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'A', rankingScore: 84 }, 'rankingScore'), 'var(--chart-orange)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 98 }, 'rankingScore'), 'var(--chart-green)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 86 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 80 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'B', rankingScore: 60 }, 'rankingScore'), 'var(--chart-red)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 98 }, 'rankingScore'), 'var(--chart-purple)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 86 }, 'rankingScore'), 'var(--chart-green)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'C', rankingScore: 70 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 86 }, 'rankingScore'), 'var(--chart-purple)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'D', rankingScore: 70 }, 'rankingScore'), 'var(--chart-blue)');
+// Non-klasseføring competition classes (Åpen, Menn, veteran, '') and unknown
+// classes fall back to the neutral chart line color — never red.
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'Åpen', rankingScore: 90 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: '', rankingScore: 90 }, 'rankingScore'), 'var(--chart-blue)');
+assert.strictEqual(StandplassPersonModal.dotColor({ class: 'E', rankingScore: 99 }, 'rankingScore'), 'var(--chart-blue)');
 
 // dotColor: position medal colors, 1st/2nd/3rd plus the "other" fallback.
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 1 }, 'position'), '#e8b923');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 2 }, 'position'), '#c8d0d8');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 3 }, 'position'), '#b87333');
-assert.strictEqual(StandplassPersonModal.dotColor({ position: 4 }, 'position'), '#4a90d9');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 1 }, 'position'), 'var(--chart-gold)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 2 }, 'position'), 'var(--chart-silver)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 3 }, 'position'), 'var(--chart-bronze)');
+assert.strictEqual(StandplassPersonModal.dotColor({ position: 4 }, 'position'), 'var(--chart-blue)');
 
 var e2024 = [{ date: '2024-05-01', discipline: 'Grovfelt', class: 'A', competitionType: 'Feltskyting', score: 28 }];
 var e2025 = [{ date: '2025-05-01', discipline: 'Fellesfelt', class: 'B', competitionType: 'Feltskyting', score: 30 }];
@@ -152,5 +169,22 @@ var html = StandplassPersonModal.buildTooltipContent({ date: '2025-05-01', ranki
     'rankingScore');
 assert.ok(html.indexOf('90.00') !== -1);
 assert.ok(html.indexOf('Grovfelt') !== -1 && html.indexOf('Fellesfelt') !== -1, 'both overlapping entries get their own line');
+
+// renderChart dots carry data-idx — the entry's index into the entries
+// array passed in, so rows and dots can find each other. Entries filtered
+// out of the plot keep their original array position.
+(function () {
+    var entries = [
+        { date: '2024-01-01', competition: 'A', discipline: 'Felt', class: 'A', position: 3, score: 240, rankingScore: 80 },
+        { date: '2024-02-01', competition: 'B', discipline: 'Felt', class: 'A', position: 1, score: 248, rankingScore: 0 },
+        { date: '2024-03-01', competition: 'C', discipline: 'Felt', class: 'A', position: 2, score: 244, rankingScore: 90 }
+    ];
+    var linkContainer = {};
+    StandplassPersonModal.renderChart(linkContainer, entries, 'rankingScore');
+    // rankingScore 0 drops entry B from the plot; dots 0 and 2 remain.
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="0"') !== -1, 'first dot carries data-idx 0');
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="1"') === -1, 'filtered entry has no dot');
+    assert.ok(linkContainer.innerHTML.indexOf('data-idx="2"') !== -1, 'third dot carries data-idx 2 (original position)');
+})();
 
 console.log('person-modal.test.js: all assertions passed');

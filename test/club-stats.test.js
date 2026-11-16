@@ -238,7 +238,7 @@ var multiSeries = [
     { label: 'Felt', color: 'var(--brand-accent)', points: [
         { year: 2021, value: 5 }, { year: 2022, value: 8 }, { year: 2023, value: 12 }
     ]},
-    { label: 'Bane', color: '#4a90d9', points: [
+    { label: 'Bane', color: 'var(--chart-blue)', points: [
         { year: 2021, value: 3 }, { year: 2022, value: 6 }, { year: 2023, value: 9 }
     ]}
 ];
@@ -251,6 +251,142 @@ assert.ok(multiSvg.indexOf('role="img"') !== -1, 'multi-series chart has role="i
 assert.ok(multiSvg.indexOf('Felt') !== -1, 'legend has Felt');
 assert.ok(multiSvg.indexOf('Bane') !== -1, 'legend has Bane');
 assert.ok(multiSvg.indexOf('tabindex="0"') !== -1, 'multi-series dots are focusable');
+
+// Plot-area inset: the first point sits half an x-step right of the y-axis
+// (W=400, PL=44, PR=12 → step 114.67 → first cx ≈ 101.3), and the last
+// point half a step from the right edge.
+(function () {
+    var circles = multiSvg.match(/<circle[^>]*cx="([0-9.]+)"/g) || [];
+    assert.ok(circles.length >= 2, 'multi-series chart has dots');
+    var firstCx = Number(/cx="([0-9.]+)"/.exec(circles[0])[1]);
+    var lastCx = Number(/cx="([0-9.]+)"/.exec(circles[circles.length - 1])[1]);
+    assert.ok(firstCx > 100, 'first dot clears the y-axis (got ' + firstCx + ')');
+    assert.ok(lastCx < 389, 'last dot clears the right edge (got ' + lastCx + ')');
+})();
+
+// Dashed series + line-swatches legend: series[].dash renders a dashed
+// polyline; legend items are line swatches, not round dots.
+(function () {
+    var dashSeries = [
+        { label: 'Gjennomsnitt', color: 'var(--chart-blue)', dash: false, points: [
+            { year: 2021, value: 5 }, { year: 2022, value: 8 }, { year: 2023, value: 12 }
+        ]},
+        { label: 'Median', color: 'var(--chart-blue)', dash: true, points: [
+            { year: 2021, value: 4 }, { year: 2022, value: 7 }, { year: 2023, value: 10 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(dashSeries, { title: 'Dash test' });
+    var polys = svg.match(/<polyline[^>]*>/g) || [];
+    assert.strictEqual(polys.length, 2, 'two polylines');
+    assert.ok(polys[0].indexOf('stroke-dasharray') === -1, 'first series is solid');
+    assert.ok(polys[1].indexOf('stroke-dasharray="4 3"') !== -1, 'dashed series carries stroke-dasharray="4 3"');
+    assert.ok(svg.indexOf('chart-legend-swatch') !== -1, 'legend uses line swatches');
+    assert.ok(svg.indexOf('chart-legend-swatch--dashed') !== -1, 'dashed legend swatch marked');
+    assert.ok(svg.indexOf('chart-legend-dot') === -1, 'no round legend dots in multi-series charts');
+    // Slimmer styling: dot radius 2.5, stroke width 1.25.
+    assert.ok(/<circle[^>]*r="2.5"/.test(svg), 'dots are r=2.5');
+    assert.ok(/stroke-width="1.25"/.test(svg), 'lines are 1.25 wide');
+})();
+
+// yClamp: y-axis bases on the data range (min-2 .. max+2), not 0..max —
+// for age-style values where a zero baseline wastes the plot.
+(function () {
+    var series = [
+        { label: 'Snitt', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 44 }, { year: 2022, value: 48 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, { title: 'Clamp', yClamp: true });
+    assert.ok(svg.indexOf('>42<') !== -1, 'y-axis bottom label is the clamped min (42)');
+    assert.ok(svg.indexOf('>50<') !== -1, 'y-axis top label is the clamped max (50)');
+    assert.ok(svg.indexOf('>0<') === -1, 'no zero label on a clamped axis');
+    assert.ok(svg.indexOf('NaN') === -1, 'no NaN positions');
+})();
+
+// yClamp with flat data (all values equal): degenerate range must not
+// produce NaN or divide-by-zero — the `range || 1` guard.
+(function () {
+    var series = [
+        { label: 'Flat', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 46 }, { year: 2022, value: 46 }, { year: 2023, value: 46 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, { title: 'Flat clamp', yClamp: true });
+    assert.ok(svg.indexOf('NaN') === -1, 'flat clamped data renders without NaN');
+    assert.ok(/<circle[^>]*cy="[0-9.]+"/.test(svg), 'flat clamped data still renders dots');
+})();
+
+// valueFormat: per-dot value labels go through the formatter.
+(function () {
+    var series = [
+        { label: 'Alder', color: 'var(--chart-blue)', points: [
+            { year: 2021, value: 47.25 }, { year: 2022, value: 48 }
+        ]}
+    ];
+    var svg = CS.renderMultiSeriesChart(series, {
+        title: 'Fmt', yClamp: true,
+        valueFormat: function (v) { return String(Math.round(v * 10) / 10); }
+    });
+    assert.ok(svg.indexOf('>47.3<') !== -1, 'value label is formatted (47.25 → 47.3)');
+})();
+
+// Label placement: the upper series labels ABOVE its dots, the lower
+// series BELOW its dots; at a same-point collision the series that is
+// mostly above (higher mean value) wins the above slot.
+(function () {
+    function parse(svg) {
+        var dots = [], labels = [];
+        (svg.match(/<circle[^>]*class="club-chart-dot"[^>]*>/g) || []).forEach(function (m) {
+            dots.push({ x: Number(/cx="([0-9.]+)"/.exec(m)[1]), y: Number(/cy="([0-9.]+)"/.exec(m)[1]),
+                       color: /fill="([^"]+)"/.exec(m)[1] });
+        });
+        (svg.match(/<text[^>]*text-anchor="middle"[^>]*>[0-9.]+<\/text>/g) || []).forEach(function (m) {
+            labels.push({ x: Number(/ x="([0-9.]+)"/.exec(m)[1]), y: Number(/ y="([0-9.]+)"/.exec(m)[1]),
+                          color: /fill="([^"]+)"/.exec(m)[1] });
+        });
+        return { dots: dots, labels: labels };
+    }
+    function labelAt(parsed, x, color) {
+        var l = parsed.labels.filter(function (t) { return Math.abs(t.x - x) < 0.05 && t.color === color; })[0];
+        assert.ok(l, 'label found at x=' + x + ' for ' + color);
+        return l.y;
+    }
+    function dotAt(parsed, x, color) {
+        var d = parsed.dots.filter(function (c) { return Math.abs(c.x - x) < 0.05 && c.color === color; })[0];
+        assert.ok(d, 'dot found at x=' + x + ' for ' + color);
+        return d.y;
+    }
+
+    // Clear separation: Felt always above Bane → Felt labels above dots,
+    // Bane labels below dots.
+    var svg = CS.renderMultiSeriesChart([
+        { label: 'Felt', color: 'var(--brand-accent)', points: [{ year: 2021, value: 50 }, { year: 2022, value: 52 }] },
+        { label: 'Bane', color: 'var(--chart-blue)', points: [{ year: 2021, value: 40 }, { year: 2022, value: 42 }] }
+    ], { title: 'Label placement' });
+    var p = parse(svg);
+    p.dots.forEach(function (d) {
+        var ly = labelAt(p, d.x, d.color);
+        if (d.color === 'var(--brand-accent)') {
+            assert.ok(ly < d.y, 'upper series label sits above its dot (y ' + ly + ' vs ' + d.y + ')');
+        } else {
+            assert.ok(ly > d.y, 'lower series label sits below its dot (y ' + ly + ' vs ' + d.y + ')');
+        }
+    });
+
+    // Same-point collision in 2022 (both 50): Felt's mean (52.5) is above
+    // Bane's (47.5), so Felt takes the above slot, Bane below.
+    var svg2 = CS.renderMultiSeriesChart([
+        { label: 'Felt', color: 'var(--brand-accent)', points: [{ year: 2021, value: 55 }, { year: 2022, value: 50 }] },
+        { label: 'Bane', color: 'var(--chart-blue)', points: [{ year: 2021, value: 45 }, { year: 2022, value: 50 }] }
+    ], { title: 'Collision' });
+    var p2 = parse(svg2);
+    var colX = p2.dots[2].x; // 2022 position (second of four dots)
+    var feltLy = labelAt(p2, colX, 'var(--brand-accent)');
+    var baneLy = labelAt(p2, colX, 'var(--chart-blue)');
+    var colY = dotAt(p2, colX, 'var(--brand-accent)');
+    assert.ok(feltLy < colY, 'mostly-above series labels above the shared point');
+    assert.ok(baneLy > colY, 'other series labels below the shared point');
+})();
 
 // Single series with < 2 points → message
 var shortSeries = [{ label: 'Felt', color: 'red', points: [{ year: 2025, value: 5 }] }];
@@ -544,5 +680,158 @@ var expEvil = CS.buildTableCard({
     rows: expRows.slice(0, 2), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
 });
 assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'table card: title/ariaLabel escaped');
+
+// ── Age series computation ──────────────────────────────────────────────
+
+// isLuftDiscipline: the only luft disciplines in the data are the 10m
+// luftpistol/luftsprint ones; every powder discipline lacks "luft".
+assert.strictEqual(CS.isLuftDiscipline('10m luftpistol 40 skudd'), true);
+assert.strictEqual(CS.isLuftDiscipline('10m luftpistol 60 skudd'), true);
+assert.strictEqual(CS.isLuftDiscipline('10m luftsprint, pistol'), true);
+assert.strictEqual(CS.isLuftDiscipline('25m finpistol'), false);
+assert.strictEqual(CS.isLuftDiscipline('Finfelt'), false);
+assert.strictEqual(CS.isLuftDiscipline('T96 grov'), false);
+assert.strictEqual(CS.isLuftDiscipline(''), false);
+
+// computeLuftOnlyShooters: a shooter is luft-only when EVERY row in the
+// family is a luft discipline — any powder row anywhere (other club, other
+// year) gives the powder floor.
+(function () {
+    var rows = [
+        { personId: 'p1', discipline: '10m luftpistol 40 skudd', club: 'A' },
+        { personId: 'p1', discipline: '10m luftpistol 60 skudd', club: 'B' },
+        { personId: 'p2', discipline: '10m luftpistol 40 skudd', club: 'A' },
+        { personId: 'p2', discipline: '25m finpistol', club: 'B' },
+        { personId: 'p3', discipline: 'Finfelt', club: 'A' }
+    ];
+    var luftOnly = CS.computeLuftOnlyShooters(rows);
+    assert.deepStrictEqual(luftOnly, { p1: true }, 'only all-luft shooters are luft-only');
+})();
+
+// computeAgeSeries: unique shooters per year, age = year - birthYear,
+// null/absent birth year excluded, discipline-aware floors (luft-only 9,
+// powder 11), avg rounded to 1 decimal, median middle-or-mean-of-two.
+(function () {
+    var rowsByYear = [
+        { year: 2021, rows: [
+            // p1: born 2010 → age 11 in 2021 (powder floor ok); 3 starts, counted once.
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p1', discipline: 'Grovfelt', club: 'A' },
+            { personId: 'p1', discipline: 'Spesialpistol', club: 'B' }
+        ]},
+        { year: 2022, rows: [
+            // p1 a year older (12); p2 has null birth year → excluded.
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p2', discipline: 'Finfelt', club: 'A' }
+        ]},
+        { year: 2023, rows: [
+            // p3 absent from birthyears entirely → excluded; p1 only (13).
+            { personId: 'p1', discipline: 'Finfelt', club: 'A' },
+            { personId: 'p3', discipline: 'Finfelt', club: 'A' }
+        ]}
+    ];
+    var birthyears = { p1: 2010, p2: null };
+    var series = CS.computeAgeSeries(rowsByYear, {}, birthyears);
+    assert.strictEqual(series.length, 3, 'all three years have data');
+    var y2021 = series[0];
+    assert.strictEqual(y2021.year, 2021);
+    assert.strictEqual(y2021.count, 1, 'multiple starts count once per year');
+    assert.strictEqual(y2021.avg, 11, 'age 11 in 2021 (born 2010)');
+    assert.strictEqual(y2021.median, 11);
+    assert.strictEqual(series[1].avg, 12, 'same shooter one year older in 2022');
+    assert.strictEqual(series[1].count, 1, 'null birth year excluded');
+    assert.strictEqual(series[2].count, 1, 'absent-from-map birth year excluded');
+    assert.strictEqual(series[2].avg, 13);
+})();
+
+// Floors: luft-only shooters are plausible from age 9, powder from 11.
+(function () {
+    var luftOnly = { pl: true };
+    var birthyears = { pl: 2016, pp: 2016, py: 2015, ppow11: 2015 };
+    // pl: luft-only, age 10 in 2026 → kept. pp: powder, age 10 → excluded.
+    // py: powder, age 11 → kept. ppow11: age 11 → kept.
+    var rowsByYear = [{ year: 2026, rows: [
+        { personId: 'pl', discipline: '10m luftpistol 40 skudd' },
+        { personId: 'pp', discipline: '25m finpistol' },
+        { personId: 'py', discipline: '25m finpistol' }
+    ]}];
+    var series = CS.computeAgeSeries(rowsByYear, luftOnly, birthyears);
+    assert.strictEqual(series.length, 1);
+    assert.strictEqual(series[0].count, 2, 'age-10 luft kept, age-10 powder excluded');
+    var ages = [10, 11];
+    assert.strictEqual(series[0].avg, 10.5, 'avg of 10 and 11');
+    assert.strictEqual(series[0].median, 10.5, 'even count → mean of two middle values (.5)');
+})();
+
+// Median/avg rounding: odd count → middle; even → mean of two middle;
+// avg rounds to 1 decimal.
+(function () {
+    var birthyears = { a: 1980, b: 1970, c: 1990 };
+    var rowsByYear = [{ year: 2020, rows: [
+        { personId: 'a', discipline: 'Finfelt' },
+        { personId: 'b', discipline: 'Finfelt' },
+        { personId: 'c', discipline: 'Finfelt' }
+    ]}];
+    var series = CS.computeAgeSeries(rowsByYear, {}, birthyears);
+    // ages 40, 50, 30
+    assert.strictEqual(series[0].median, 40, 'odd count → middle value');
+    assert.strictEqual(series[0].avg, 40, 'avg of 40/50/30');
+    var birthyears2 = { a: 1980, b: 1970, c: 1990, d: 1991 };
+    var rowsByYear2 = [{ year: 2020, rows: [
+        { personId: 'a', discipline: 'Finfelt' }, { personId: 'b', discipline: 'Finfelt' },
+        { personId: 'c', discipline: 'Finfelt' }, { personId: 'd', discipline: 'Finfelt' }
+    ]}];
+    var series2 = CS.computeAgeSeries(rowsByYear2, {}, birthyears2);
+    // ages 40, 50, 30, 29 → sorted 29,30,40,50
+    assert.strictEqual(series2[0].median, 35, 'even count → mean of two middle (30,40)');
+    assert.strictEqual(series2[0].avg, 37.3, 'avg rounds to 1 decimal (37.25 → 37.3)');
+})();
+
+// formatAgeValue: 1 decimal, trailing .0 trimmed.
+assert.strictEqual(CS.formatAgeValue(47), '47');
+assert.strictEqual(CS.formatAgeValue(47.5), '47.5');
+assert.strictEqual(CS.formatAgeValue(47.25), '47.3');
+assert.strictEqual(CS.formatAgeValue(47.04), '47');
+
+// ── Metric switcher ────────────────────────────────────────────────────
+
+assert.strictEqual(CS.normalizeClubChartMetric('starts'), 'starts');
+assert.strictEqual(CS.normalizeClubChartMetric('avgAge'), 'avgAge');
+assert.strictEqual(CS.normalizeClubChartMetric('medianAge'), 'medianAge');
+assert.strictEqual(CS.normalizeClubChartMetric('age'), 'shooters', 'pre-split age key is no longer a metric');
+assert.strictEqual(CS.normalizeClubChartMetric('shooters'), 'shooters');
+assert.strictEqual(CS.normalizeClubChartMetric('garbage'), 'shooters');
+assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
+
+(function () {
+    var html = CS.renderMetricToggleHtml('starts');
+    assert.ok(html.indexOf('club-metric-toggle') !== -1, 'toggle buttons carry the class');
+    assert.ok(html.indexOf('data-metric="starts"') !== -1, 'starts button present');
+    assert.ok(html.indexOf('data-metric="shooters"') !== -1, 'shooters button present');
+    assert.strictEqual((html.match(/program-btn--active/g) || []).length, 1, 'exactly one active button');
+    assert.ok(/data-metric="starts"[^>]*aria-pressed="true"/.test(html), 'active button is aria-pressed=true');
+    assert.ok(/data-metric="shooters"[^>]*aria-pressed="false"/.test(html), 'inactive button is aria-pressed=false');
+    // After the split: Snittalder and Medianalder are separate metrics.
+    var ageHtml = CS.renderMetricToggleHtml('avgAge');
+    assert.ok(ageHtml.indexOf('>Snittalder<') !== -1, 'Snittalder metric present');
+    assert.ok(ageHtml.indexOf('>Medianalder<') !== -1, 'Medianalder metric present');
+    assert.ok(ageHtml.indexOf('>Alder<') === -1, 'combined Alder metric is gone');
+})();
+
+// createAgeSeriesCache: memoizes the (expensive, immutable-input) age
+// walk per scope — one full flatten of both families per scope, never
+// re-run on toggle clicks or filter changes.
+(function () {
+    var calls = [];
+    var cached = CS.createAgeSeriesCache(function (scopeClub) {
+        calls.push(scopeClub);
+        return { scope: scopeClub };
+    });
+    assert.deepStrictEqual(cached(null), { scope: null }, 'returns the computed value');
+    assert.deepStrictEqual(cached('Klubb A'), { scope: 'Klubb A' });
+    cached(null); cached('Klubb A'); cached(null);
+    assert.strictEqual(calls.length, 2, 'same scope is served from cache');
+    assert.deepStrictEqual(calls, [null, 'Klubb A']);
+})();
 
 console.log('club-stats.test.js: all tests passed');

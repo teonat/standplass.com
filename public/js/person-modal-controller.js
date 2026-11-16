@@ -157,10 +157,15 @@ var StandplassPersonModalController = (function () {
                 syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
+                // Row↔dot linking: rows carry the entry's index into
+                // modalEntries — the same index renderChart stamps on dots.
+                var rowIdx = new Map();
+                modalEntries.forEach(function (e, i) { rowIdx.set(e, i); });
                 var body = modalEntries.slice().sort(function (a, b) {
                     return (a.date || '') < (b.date || '') ? -1 : 1;
                 }).map(function (r) {
-                    return '<tr><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
+                    return '<tr data-idx="' + rowIdx.get(r) + '" tabindex="-1"'
+                        + ' aria-label="Klikk for å markere resultatet i grafen"><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
                         + '<td>' + esc(r.competition || '–') + '</td>'
                         + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
                         + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
@@ -194,8 +199,8 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table>';
+                    + '<div class="person-table-scroll"><table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
+                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table></div>';
             }
 
             function toggleSetValue(current, known, v, checked) {
@@ -294,8 +299,41 @@ var StandplassPersonModalController = (function () {
                 b.classList.toggle('program-btn--active', isActive);
                 b.setAttribute('aria-pressed', String(isActive));
             });
+            // The chart re-renders (killing any linked-dot ring), so the
+            // row tint must not linger either.
+            clearRowHighlight();
             syncCurrentPersonModalUrl();
             drawChart();
+        });
+
+        // Row↔dot linking (both directions, delegated on the persistent
+        // modal element so it survives every refresh). Dots remain the
+        // keyboard entry point: rows are tabindex="-1", focused
+        // programmatically only when a dot is clicked.
+        function clearRowHighlight() {
+            Array.prototype.forEach.call(modalEl.querySelectorAll('.person-row-highlight'), function (el) {
+                el.classList.remove('person-row-highlight');
+            });
+        }
+        modalEl.addEventListener('click', function (e) {
+            var dot = e.target.closest('.person-chart-dot');
+            if (dot && dot.getAttribute('data-idx') != null) {
+                clearRowHighlight();
+                var row = modalEl.querySelector('tr[data-idx="' + dot.getAttribute('data-idx') + '"]');
+                if (row) {
+                    row.classList.add('person-row-highlight');
+                    row.scrollIntoView({ block: 'nearest' });
+                    row.focus();
+                }
+                return;
+            }
+            var row = e.target.closest('tr[data-idx]');
+            if (!row) { return; }
+            Array.prototype.forEach.call(modalEl.querySelectorAll('.person-chart-dot--linked'), function (el) {
+                el.classList.remove('person-chart-dot--linked');
+            });
+            var linkDot = modalEl.querySelector('.person-chart-dot[data-idx="' + row.getAttribute('data-idx') + '"]');
+            if (linkDot) { linkDot.classList.add('person-chart-dot--linked'); }
         });
 
         function open(triggerEl, opts) {

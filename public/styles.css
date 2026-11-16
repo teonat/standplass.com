@@ -25,6 +25,19 @@
 
   --green: #2d6a4f;
   --white: #ffffff;
+
+  /* Chart colors — mode-aware (dark overrides in themes.css).
+     Used in SVG fill/stroke attributes the same way var(--text-muted)
+     already is. Brand colors (var(--brand-accent)) are deliberately
+     mode-invariant and not duplicated here. */
+  --chart-blue:   #4a90d9;
+  --chart-purple: #a855f7;
+  --chart-green:  #22c55e;
+  --chart-red:    #ef4444;
+  --chart-orange: #f97316;
+  --chart-gold:   #e8b923;
+  --chart-silver: #c8d0d8;
+  --chart-bronze: #b87333;
   --text:        #1c1f26;
   --text-muted:  #6b6558;
 
@@ -1258,6 +1271,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     margin-bottom: 0.5rem;
 }
 .person-chart-dot { cursor: pointer; }
+.person-chart-dot--linked { stroke: var(--text); stroke-width: 1.5; }
+.person-row-highlight { background: var(--surface-hover); outline: none; }
+/* The person modal's result table scrolls internally (same treatment as
+   the klubbstatistikk lists): clicking a chart dot scrolls to the row
+   INSIDE this region, so the modal — and the chart — never jump away.
+   overflow-y: auto, never hidden: browser find-in-page must be able to
+   scroll the region to matches. */
+.person-table-scroll { overflow-y: auto; max-height: 40dvh; }
 .person-chart-dot:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 3px;
@@ -1315,6 +1336,19 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     height: 8px;
     border-radius: 50%;
     display: inline-block;
+}
+/* Line swatches (multi-series charts): a short line segment in the series
+   color, dashed for dashed series — distinguishes metric, not color. */
+.chart-legend-swatch {
+    width: 14px;
+    height: 2px;
+    display: inline-block;
+    flex: none;
+}
+.chart-legend-swatch--dashed {
+    background: none !important;
+    height: 0;
+    border-top: 2px dashed currentColor;
 }
 
 /* ── Dark-mode text fixes ─────────────────────────────────────────── */

@@ -6,13 +6,22 @@ var StandplassData = (function () {
         ttlMs = ttlMs || 5 * 60 * 1000;
 
         function fetchYear(dataBase, year) {
-            var key = dataBase + '/' + year;
+            return fetchJson(dataBase + '/' + year, dataBase + '/' + year + '.json');
+        }
+
+        // Birthyear maps (public/data/<family>/birthyears.json) — same
+        // cache discipline as year files: one request per URL per TTL.
+        function fetchBirthyears(dataBase) {
+            return fetchJson(dataBase + '/birthyears', dataBase + '/birthyears.json');
+        }
+
+        function fetchJson(key, url) {
             var entry = cache[key];
             var now = Date.now();
             if (entry && (now - entry.time) < ttlMs) {
                 return entry.promise;
             }
-            var promise = fetchImpl(dataBase + '/' + year + '.json').then(function (res) {
+            var promise = fetchImpl(url).then(function (res) {
                 if (!res.ok) {
                     var err = new Error('Failed to fetch ' + key + ': ' + res.status);
                     err.status = res.status;
@@ -28,7 +37,7 @@ var StandplassData = (function () {
             cache = {};
         }
 
-        return { fetchYear: fetchYear, clearCache: clearCache };
+        return { fetchYear: fetchYear, fetchBirthyears: fetchBirthyears, clearCache: clearCache };
     }
 
     function applyFilter(rows, filter) {
