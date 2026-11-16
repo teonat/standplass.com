@@ -5,10 +5,9 @@
 // fixed discipline set), nasjonalt is the general-purpose search this
 // project's other views don't need to be. Ported from the source's
 // resultatliste-nasjonalt.js, generalized nowhere (the source itself is
-// already club-neutral) except in how shooter-name clickability is gated
-// -- see docs/superpowers/specs/2026-08-30-nasjonalt-view-design.md's
-// "Clickability gate" section for why this project's own
-// klubb-discipline-groups.js resolution is used instead of the source's
+// already club-neutral) except in how shooter-name clickability is gated:
+// this project's own klubb-discipline-groups.js resolution is used
+// instead of the source's
 // own STEVNERESULTATER_DISC_IDS/BANE_IDS sets (found overinclusive during
 // design: it wrongly counts PPC-group disciplines as felt-covered, which
 // the felt scraper never actually collects).

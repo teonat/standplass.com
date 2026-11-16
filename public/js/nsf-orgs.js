@@ -3,12 +3,8 @@
 // Resolves an arbitrary ?klubb= club name to its NSF org GUID at runtime,
 // via nsfapi.azurewebsites.net/organization -- the source repo's
 // resultatliste-klubb.js never needed this (it hardcodes its own club's
-// GUID), but standplass.com is club-neutral. See
-// docs/superpowers/nsf-skyting-api-reference.md's "GET /organization"
-// section for the response shape (a flat array, unlike branchlist) and
-// docs/superpowers/specs/2026-08-29-klubb-view-design.md's "Org GUID
-// resolution" section for the caching design. Changed 2026-08-30 (see
-// docs/superpowers/specs/2026-08-30-nasjonalt-view-design.md): ensureOrgs
+// GUID), but standplass.com is club-neutral. The /organization response
+// is a flat array (unlike branchlist). Changed 2026-08-30: ensureOrgs
 // now caches/returns the RAW org list, not pre-filtered clubs, so
 // nasjonalt's own need for kretser (filterKretser) can share the same
 // one fetch/cache instead of a second /organization call.

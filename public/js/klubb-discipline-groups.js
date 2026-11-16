@@ -3,9 +3,8 @@
 // Resolves the Felt/Bane discipline sets for the klubb-view ranking-card
 // grid, dynamically from the live NSF branchlist's disciplineGroups --
 // not from a hardcoded GUID array (the source's resultatliste-klubb.js
-// approach) and not from a hardcoded discipline-name list either. See
-// docs/superpowers/specs/2026-08-29-klubb-view-design.md's "Discipline
-// resolution (Felt/Bane)" section for why: diffing the live API against
+// approach) and not from a hardcoded discipline-name list either:
+// diffing the live API against
 // the source's hardcoded Bane list found it missing one discipline
 // (Presisjon Landsdelsmatch) that its own matching group actually
 // contains -- a real oversight in the original build. This module

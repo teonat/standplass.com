@@ -4,9 +4,7 @@
 // card-per-discipline, live from nsfapi.azurewebsites.net/ranking. Ported
 // from the source's resultatliste-klubb.js, generalized from a
 // single-club-hardcoded design to any ?klubb= club this project
-// already supports elsewhere -- see
-// docs/superpowers/specs/2026-08-29-klubb-view-design.md for the full
-// design and every deliberate divergence from the source.
+// already supports elsewhere.
 var StandplassKlubbPage = (function () {
     'use strict';
 
@@ -20,7 +18,7 @@ var StandplassKlubbPage = (function () {
     function yearTo(y) { return y + '-12-31T22:59:59.999Z'; }
 
     // Pure -- no fetch, easy to test the query-string shape directly
-    // against the documented gotchas (docs/superpowers/nsf-skyting-api-reference.md).
+    // against the API's documented gotchas.
     //
     // ponytail: orderBy kept as a literal string, not via qs.set(), for
     // parity with this task's own test (URLSearchParams would

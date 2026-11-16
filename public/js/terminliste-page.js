@@ -4,8 +4,7 @@
 // 4 branches, plus a compact club-scoped widget mode sharing the same
 // engine. Ported from the source's terminliste.js + stevner-widget.js
 // (the widget mode replaces the source's separate front-page
-// stevner-widget.js -- see
-// docs/superpowers/specs/2026-08-30-terminliste-view-design.md). Unlike
+// stevner-widget.js). Unlike
 // nasjonalt-page.js's processBranchlist, this does NOT flatten to a
 // per-discipline list -- terminliste filters by branch (Gren) and
 // disciplineGroup (Øvelsesgruppe) only, never by individual discipline.

@@ -4,8 +4,8 @@
 // from the source's classSortKey/sortClasses -- there is no live NSF API
 // field this order comes from (checked disciplineCode, classCode itself,
 // no numeric sortOrder anywhere on a class object), the same "not
-// derivable from the API" situation klubb's discipline-card order had
-// (see docs/superpowers/STATUS.md's klubb gotchas section). Bucket order:
+// derivable from the API" situation klubb's discipline-card order had.
+// Bucket order:
 // A/B/C/D, then Å/Sr/Å-2/ÅR, then junior variants, then youth variants,
 // then veteran/military/women age brackets (parsed numerically), then
 // M/K, then SH, then PPC's own P-numbered classes, then -N/-NM suffixed
