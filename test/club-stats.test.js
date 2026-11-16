@@ -512,4 +512,55 @@ assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking
 // øvelser toggle carries a stable id so the delegated handler can refocus it
 assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
 
+// ── expandable list cards (toplists + per-club lists) ────────────────
+// Generic builder: toggle in the card header, rows confined to an
+// internally scrolling region; collapsed to pageSize rows, "Vis alle"
+// renders every row as real DOM so Ctrl+F can reach them inside the
+// scroll area.
+var expRows = [];
+for (var ei = 0; ei < 14; ei++) { expRows.push({ club: 'Klubb ' + ei, value: 100 - ei }); }
+function expRenderRow(row, i) {
+    return '<tr><td class="ranking-rank">' + (i + 1) + '</td><td>' + row.club + '</td><td class="ranking-score">' + row.value + '</td></tr>';
+}
+var expHead = '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">starter</th></tr></thead>';
+var expCard = CS.buildExpandableCard({
+    id: 'test-list', title: 'Test toplist', ariaLabel: 'Test toplist 2026',
+    headHtml: expHead, rows: expRows, renderRow: expRenderRow,
+    pageSize: 10, cardClass: 'club-stats-toplist'
+});
+assert.ok(expCard.indexOf('Vis alle (14)') >= 0, 'expandable: toggle shows full count');
+assert.ok(expCard.indexOf('data-expand-list="test-list"') >= 0, 'expandable: toggle keyed by list id');
+assert.ok(expCard.indexOf('aria-expanded="false"') >= 0, 'expandable: collapsed state exposed');
+assert.ok(expCard.indexOf('aria-controls="test-list-table"') >= 0 && expCard.indexOf('id="test-list-table"') >= 0, 'expandable: toggle controls the table');
+assert.ok(expCard.indexOf('Klubb 9') >= 0, 'expandable: collapsed shows first 10');
+assert.ok(expCard.indexOf('Klubb 10') < 0, 'expandable: collapsed hides row 11+');
+var expHeadRowIdx = expCard.indexOf('club-stats-card-head-row');
+var expToggleIdx = expCard.indexOf('data-expand-list');
+var expTableIdx = expCard.indexOf('<table');
+assert.ok(expHeadRowIdx >= 0 && expToggleIdx > expHeadRowIdx && expToggleIdx < expTableIdx, 'expandable: toggle in the header, before the table');
+assert.ok(expCard.indexOf('club-stats-list-scroll') >= 0 && expCard.indexOf('club-stats-list-scroll') < expTableIdx, 'expandable: table wrapped in scroll region');
+var expShort = CS.buildExpandableCard({
+    id: 'short-list', title: 'Short', ariaLabel: 'Short', headHtml: expHead,
+    rows: expRows.slice(0, 4), renderRow: expRenderRow, pageSize: 10, cardClass: 'club-stats-toplist'
+});
+assert.ok(expShort.indexOf('Vis alle') < 0 && expShort.indexOf('data-expand-list') < 0, 'expandable: no toggle when rows fit one page');
+assert.ok(expShort.indexOf('Klubb 3') >= 0, 'expandable: all short rows rendered');
+assert.strictEqual(CS.buildExpandableCard({
+    id: 'empty-list', title: 'Empty', ariaLabel: 'Empty', headHtml: expHead,
+    rows: [], renderRow: expRenderRow, pageSize: 10, cardClass: 'club-stats-toplist'
+}), '', 'expandable: empty rows -> no card');
+var expEvil = CS.buildExpandableCard({
+    id: 'evil-list', title: '<img src=x>', ariaLabel: 'XSS <script>', headHtml: expHead,
+    rows: expRows.slice(0, 2), renderRow: expRenderRow, pageSize: 10, cardClass: 'club-stats-toplist'
+});
+assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'expandable: title/ariaLabel escaped');
+
+// Top-3 card: row toggle moved into the header (reachable without
+// scrolling a long expanded list), table region gets the scroll cap.
+var p3HeadRowIdx = pagedHtml.indexOf('club-stats-card-head-row');
+var p3ToggleIdx = pagedHtml.indexOf('id="top3-row-toggle"');
+var p3TableIdx = pagedHtml.indexOf('<table');
+assert.ok(p3HeadRowIdx >= 0 && p3ToggleIdx > p3HeadRowIdx && p3ToggleIdx < p3TableIdx, 'top3: row toggle sits in the header, above the table');
+assert.ok(pagedHtml.indexOf('club-stats-list-scroll') >= 0, 'top3: table region gets the scroll cap');
+
 console.log('club-stats.test.js: all tests passed');
