@@ -1056,7 +1056,11 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     inset: 0;
     z-index: 300;
     display: flex;
-    align-items: center;
+    /* Top-anchored, not centered: the shell's height is content-driven
+       (year toggles add/remove table rows), and vertical centering made
+       every height change shift the whole modal -- header and filter
+       dropdowns included -- away from under the mouse. */
+    align-items: flex-start;
     justify-content: center;
     padding: 1rem;
     background: rgba(0,0,0,0.5);
@@ -1076,7 +1080,10 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     min-height: min(520px, 60dvh);
     max-height: 88dvh;
     overflow: hidden;
-    margin: auto;
+    /* Fixed top offset, growth goes downward -- not margin:auto, which
+       vertically centered and re-centered the shell on every content
+       height change (see .person-modal's align-items note). */
+    margin: 8dvh auto 1rem;
     background: var(--surface-card);
     color: var(--text);
 }
@@ -1143,6 +1150,11 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    every other surface in this project, it doesn't inherit the page's mode
    variables from anywhere, so it has to be set explicitly here. */
 .comp-modal-dialog {
+    /* Top-anchored like .person-modal-shell: the UA stylesheet centers
+       dialogs with margin:auto, and this dialog's content height changes
+       after open (detail fetch, lazy-loaded results, filter re-render),
+       which would recenter -- visibly jump -- the whole modal each time. */
+    margin: 8vh auto auto;
     max-width: 640px;
     width: 90vw;
     max-height: 85vh;
