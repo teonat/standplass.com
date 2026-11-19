@@ -1535,6 +1535,79 @@ tr[data-idx] { cursor: pointer; }
    find-in-page (Ctrl+F) must be able to scroll the region to matches. */
 .club-stats-list-scroll { overflow-y: auto; max-height: var(--club-stats-rows-max, 33.5rem); }
 
+/* ── Data-table base affordances ──────────────────────────────────── */
+/* Rendered by public/js/data-table.js. All colors are mode-flipping
+   vars, inherit, or currentColor — nothing here needs a
+   [data-mode="dark"] override. First consumer: klubbstatistikk. */
+
+/* Bare-<button> chrome reset: buttons inherit the th's font and color. */
+.dt-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.dt-sort-btn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
+}
+
+/* Sort direction glyph: a border-triangle shown only on the active
+   (aria-sort) column, pointing per direction, tracking text color. */
+.dt-sort-arrow { display: none; }
+th[aria-sort] .dt-sort-arrow { display: inline-block; }
+th[aria-sort="ascending"] .dt-sort-arrow::before,
+th[aria-sort="descending"] .dt-sort-arrow::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+th[aria-sort="ascending"] .dt-sort-arrow::before { border-bottom: 5px solid currentColor; }
+th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid currentColor; }
+
+.dt-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+/* Same visual treatment as .checkbox-dropdown-btn (values copied, not
+   restyled) minus the filter-bar width:100%. */
+.dt-picker-btn {
+  text-align: left;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface-card)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236c757d' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 0.75rem center;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-picker-btn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.dt-picker-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
 .club-stats-note {
   font-size: 0.8125rem;
   color: var(--text-muted);
