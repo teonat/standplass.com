@@ -112,6 +112,14 @@ var StandplassNorgesfeltPage = (function () {
         return String(dateStr).split('.').reverse().join('');
     }
 
+    // Both norgesfelt tables flatten entries to the same row shape so
+    // every sortable column is row[key]-backed (cell fns are invisible
+    // to sorting); dateSort rides along for the Dato columns.
+    function entryRow(e) {
+        return { rank: e.rank, name: e.name, club: e.club, discipline: e.discipline,
+            date: e.date, dateSort: dateSortKey(e.date), points: e.points, innertreff: e.innertreff };
+    }
+
     // "Alle resultater" table spec (shared base). Gren appears only when
     // no discipline is filtered, Dato only for enkeltresultater; the
     // responsive cellClasses keep today's viewport breakpoints exactly
@@ -136,10 +144,35 @@ var StandplassNorgesfeltPage = (function () {
         cols.push({ key: 'innertreff', label: 'Innertreff', align: 'right', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'desc' });
         return {
             columns: cols,
-            rows: filtered.map(function (e) {
-                return { rank: e.rank, name: e.name, club: e.club, discipline: e.discipline,
-                    date: e.date, dateSort: dateSortKey(e.date), points: e.points, innertreff: e.innertreff };
-            })
+            rows: filtered.map(entryRow)
+        };
+    }
+
+    // "Toppliste klubb" card spec (shared base). Same row shape as the
+    // flat table (incl. dateSort). # is NOT sortable here — it is the
+    // entry's own rank, not a placement. Klubb appears only when
+    // exactly-one-club isn't selected, Dato only for enkeltresultater;
+    // the responsive cellClasses keep today's card breakpoints exactly.
+    // Null for empty entries — the page renders a message-only card.
+    function toplisteCardSpec(filtered, showClubCol, activeSubType) {
+        filtered = filtered || [];
+        if (!filtered.length) { return null; }
+        var cols = [
+            { key: 'rank', label: '#', align: 'center' },
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' }
+        ];
+        if (showClubCol) {
+            cols.push({ key: 'club', label: 'Klubb', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'asc' });
+        }
+        if (activeSubType === 'individual') {
+            cols.push({ key: 'dateSort', label: 'Dato', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc',
+                cell: function (row) { return row.date || '–'; } });
+        }
+        cols.push({ key: 'points', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc' });
+        cols.push({ key: 'innertreff', label: 'Innertreff', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'desc' });
+        return {
+            columns: cols,
+            rows: filtered.map(entryRow)
         };
     }
 
@@ -163,7 +196,6 @@ var StandplassNorgesfeltPage = (function () {
         var urlState = config.urlState;
         var dataUrl = config.dataUrl || '/data/norgesfelt.json';
 
-        var TOP_N = 10;
         var DEBOUNCE_MS = 300;
 
         var params = new URLSearchParams(urlState.getSearch());
@@ -216,7 +248,6 @@ var StandplassNorgesfeltPage = (function () {
 
         var data = null;
         var debounceTimer = null;
-        var cardState = {}; // { discName: expanded }
         var clubWidget = null;
 
         function setUrl() {
@@ -328,41 +359,63 @@ var StandplassNorgesfeltPage = (function () {
 
         // --- "Toppliste klubb" tab ---
 
+        // Per-card sort state + spec, keyed by discName (session-only).
+        // Survives club-filter re-renders — changing the club selection
+        // re-sorts nothing.
+        var toplisteSort = {};
+        var toplisteSpecs = {};
+
+        function cardTableState(discName) {
+            return { sort: toplisteSort[discName] || null, hidden: {}, runtimeHidden: [], widthTier: null };
+        }
+
+        function wireCardTable(cell, discName) {
+            var spec = toplisteSpecs[discName];
+            if (!spec) { return; }
+            var dtId = 'norgesfelt-card-' + discName;
+            var tableSel = 'table[data-dt-id="' + dtId.replace(/"/g, '\\"') + '"]';
+            if (!cell.querySelector(tableSel)) { return; }
+            StandplassDataTable.wireTable(cell, dtId, spec, {
+                onSortChange: function (sort) {
+                    toplisteSort[discName] = sort;
+                    // Surgical: replace only this card's BARE table —
+                    // re-wrapping would nest scroll regions, and sibling
+                    // cards stay untouched.
+                    var tableEl = cell.querySelector(tableSel);
+                    if (tableEl) {
+                        tableEl.outerHTML = StandplassDataTable.renderTable(dtId, spec, cardTableState(discName));
+                        wireCardTable(cell, discName);
+                    }
+                    var btn = cell.querySelector(tableSel + ' .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, cardTableState(discName));
+        }
+
         function renderCard(discName) {
             var cell = cardsWrap.querySelector('[data-disc-name="' + discName.replace(/"/g, '\\"') + '"]');
             if (!cell) { return; }
             var rows = (data.disciplines[discName][activeSubType] || []);
             var filtered = getFilteredEntries(rows, activeClubs);
-            var expanded = !!cardState[discName];
-            var visible = expanded ? filtered : filtered.slice(0, TOP_N);
-            var showClubCol = activeClubs.length !== 1;
-            var colCount = 4 + (showClubCol ? 1 : 0) + (activeSubType === 'individual' ? 1 : 0); // #, Navn, Poeng, Innertreff always shown
-            var body = !filtered.length
-                ? '<tr><td colspan="' + colCount + '" class="ranking-empty">Ingen resultater</td></tr>'
-                : visible.map(function (e) {
-                    return '<tr><td class="ranking-rank">' + esc(e.rank) + '</td>'
-                        + '<td>' + esc(e.name) + '</td>'
-                        + (showClubCol ? '<td class="norgesfelt-tablet-hide">' + esc(e.club) + '</td>' : '')
-                        + (activeSubType === 'individual' ? '<td class="norgesfelt-mobile-hide">' + esc(e.date || '–') + '</td>' : '')
-                        + '<td class="ranking-score">' + esc(e.points) + '</td>'
-                        + '<td class="norgesfelt-tablet-hide">' + esc(e.innertreff) + '</td></tr>';
-                }).join('');
-            var toggleHtml = filtered.length > TOP_N
-                ? '<button type="button" class="ranking-toggle" data-disc-name="' + esc(discName) + '" aria-label="'
-                    + (expanded ? 'Vis kun topp ' + TOP_N + ' for ' + esc(discName) : 'Vis alle ' + filtered.length + ' resultater for ' + esc(discName)) + '">'
-                    + (expanded ? 'Vis topp ' + TOP_N : 'Vis alle (' + filtered.length + ')') + '</button>'
-                : '';
+            var spec = toplisteCardSpec(filtered, activeClubs.length !== 1, activeSubType);
+            if (!spec) {
+                cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(discName) + '</h2></div>'
+                    + '<p class="ranking-status-msg">Ingen resultater</p></div>';
+                return;
+            }
+            toplisteSpecs[discName] = spec;
+            // club-stats-list-scroll is ADDED alongside the existing
+            // ranking-card-table-wrap (that rule is untouched) — the
+            // contained scroll region caps height, Rader-driven.
             cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(discName) + '</h2></div>'
-                + '<div class="ranking-card-table-wrap"><table class="ranking-table"><thead><tr><th>#</th><th>Navn</th>'
-                + (showClubCol ? '<th class="norgesfelt-tablet-hide">Klubb</th>' : '')
-                + (activeSubType === 'individual' ? '<th class="norgesfelt-mobile-hide">Dato</th>' : '')
-                + '<th>Poeng</th><th class="norgesfelt-tablet-hide">Innertreff</th></tr></thead><tbody>' + body + '</tbody></table></div>'
-                + toggleHtml + '</div>';
+                + '<div class="ranking-card-table-wrap club-stats-list-scroll">'
+                + StandplassDataTable.renderTable('norgesfelt-card-' + discName, spec, cardTableState(discName))
+                + '</div></div>';
+            wireCardTable(cell, discName);
         }
 
         function renderCards() {
             if (!data) { return; }
-            cardState = {};
             var discs = disciplineOrder(data).filter(function (discName) {
                 var rows = data.disciplines[discName][activeSubType] || [];
                 return getFilteredEntries(rows, activeClubs).length > 0;
@@ -376,14 +429,6 @@ var StandplassNorgesfeltPage = (function () {
             }).join('');
             discs.forEach(function (discName) { renderCard(discName); });
         }
-
-        cardsWrap.addEventListener('click', function (e) {
-            var btn = e.target.closest('.ranking-toggle');
-            if (!btn) { return; }
-            var discName = btn.getAttribute('data-disc-name');
-            cardState[discName] = !cardState[discName];
-            renderCard(discName);
-        });
 
         function setSubType(type) {
             activeSubType = type;
@@ -464,6 +509,7 @@ var StandplassNorgesfeltPage = (function () {
         filterSearchEntries: filterSearchEntries,
         dateSortKey: dateSortKey,
         searchTableSpec: searchTableSpec,
+        toplisteCardSpec: toplisteCardSpec,
         parseClubsParam: parseClubsParam,
         buildClubsParam: buildClubsParam
     };

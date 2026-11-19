@@ -128,4 +128,42 @@ var nfPoints = nfSorted(nfSpecFull, 'points', 'desc');
 assert.ok(nfPoints.indexOf('<td>Anne</td>') < nfPoints.indexOf('<td>Cecilie</td>'),
     'norgesfelt search: Poeng desc reorders');
 
+// ── toplisteCardSpec (batch 1: shared table base) ───────────────────────
+// The "Toppliste klubb" cards: same row shape as the flat table (incl.
+// the derived dateSort key), toggle machinery deleted — a contained
+// scroll region caps the height. # is not sortable here (it is the
+// entry's own rank, not a placement), matching today's card headers.
+assert.strictEqual(NP.toplisteCardSpec([], true, 'individual'), null,
+    'topliste: empty entries produce no spec (message-only card)');
+var tpEntries = [
+    { rank: 1, name: 'Anne', club: 'Oslo PK', date: '01.11.2026', points: 289, innertreff: 41 },
+    { rank: 2, name: 'Bjarne', club: 'Bergen PK', date: '08.03.2026', points: 275, innertreff: 37 },
+    { rank: 3, name: 'Cecilie', club: 'Oslo PK', date: null, points: 260, innertreff: 33 }
+];
+var tpSpecFull = NP.toplisteCardSpec(tpEntries, true, 'individual');
+var tpFull = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecFull, NF_STATE);
+assert.ok(tpFull.indexOf('<thead><tr>'
+    + '<th scope="col" class="ranking-rank">#</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'topliste: full header — Navn/Klubb/Dato/Poeng/Innertreff sortable, # plain');
+assert.ok(tpFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td class="norgesfelt-tablet-hide">Oslo PK</td><td class="norgesfelt-mobile-hide">01.11.2026</td><td class="ranking-score">289</td><td class="norgesfelt-tablet-hide">41</td></tr>') !== -1,
+    'topliste: full row markup matches today\'s card cells');
+var tpDate = nfSorted(tpSpecFull, 'dateSort', 'asc');
+assert.ok(tpDate.indexOf('08.03.2026') < tpDate.indexOf('01.11.2026') && tpDate.indexOf('–') > tpDate.indexOf('01.11.2026'),
+    'topliste: Dato sorts chronologically via the derived key, nulls last');
+// One club selected (no Klubb col) + sammenlagt (no Dato col).
+var tpSpecSlim = NP.toplisteCardSpec(tpEntries, false, 'total');
+var tpSlim = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecSlim, NF_STATE);
+assert.ok(tpSlim.indexOf('data-dt-sort="club"') === -1 && tpSlim.indexOf('data-dt-sort="dateSort"') === -1,
+    'topliste: Klubb and Dato columns absent in the slim variant');
+assert.ok(tpSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td class="ranking-score">289</td><td class="norgesfelt-tablet-hide">41</td></tr>') !== -1,
+    'topliste: slim row markup — #/Navn/Poeng/Innertreff only');
+assert.ok(tpFull.indexOf('ranking-toggle') === -1 && tpFull.indexOf('Vis alle') === -1,
+    'topliste: no toggle remains');
+
 console.log('norgesfelt-page.test.js: all assertions passed');
