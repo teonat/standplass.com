@@ -3,6 +3,10 @@ var assert = require('node:assert');
 // resolveKlubbParam decodes ?klubb= via StandplassFormat.decodeIdList, a
 // browser global -- shim it here the same way comp-modal.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
+// Page-test convention: globals in HTML/dependency script order --
+// data-table.js calls into StandplassTable for numeric sorts.
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var SP = require('../public/js/stevner-page.js');
 var PM = require('../public/js/person-modal.js');
 
@@ -152,5 +156,109 @@ assert.deepStrictEqual(s4, { clubs: ['Kongsvinger Sportsskyttere'], hasUnmatched
     'exact name passes through and dedupes with its own slug');
 assert.deepStrictEqual(SP.resolveSlugElements([], names), { clubs: [], hasUnmatched: false }, 'empty elements -> empty');
 assert.deepStrictEqual(SP.resolveSlugElements(null, names), { clubs: [], hasUnmatched: false }, 'null elements -> empty');
+
+// ── competitionCardTableSpec (batch 2: shared table base) ───────────────
+// The per-competition card tables render through the base: six sortable
+// columns (Øvelse stays plain — it is the group key), group rows via
+// dt-group-row ONLY on multi-group cards, cells completely unclassed
+// (no rank/score styling — owner ruling), and rows flattened from
+// card.groups so single-group cards keep the comparator order.
+var NF_STATE = { hidden: {}, runtimeHidden: [], widthTier: null };
+function nfRender(spec, state) {
+    return StandplassDataTable.renderTable('stevner-card-test', spec, state || NF_STATE);
+}
+function nfSorted(spec, key, dir) {
+    return StandplassDataTable.renderTable('stevner-card-test', spec,
+        { sort: { key: key, dir: dir }, hidden: {}, runtimeHidden: [], widthTier: null });
+}
+
+// Multi-group card, klasse mode (c1: three discipline+class groups; cards built with baseFilters' groupMode).
+var klasseSpec = SP.competitionCardTableSpec(cards[0]);
+assert.ok(klasseSpec.groupRows, 'multi-group card carries the groupRows opt');
+assert.ok(nfRender(klasseSpec).indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="position">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col">Øvelse</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="class">Klasse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="score">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="rankingScore">Ranking<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'card table: six sortable headers, plain Øvelse, no align classes anywhere');
+var klasseHtml = nfRender(klasseSpec);
+assert.ok(klasseHtml.indexOf('ranking-rank') === -1 && klasseHtml.indexOf('ranking-score') === -1,
+    'card table: cells stay completely unclassed (owner ruling — plain look)');
+assert.ok(klasseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – A</th></tr>') !== -1,
+    'card table: group rows via dt-group-row with today\'s labels');
+assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td>2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td>90.00</td></tr>') !== -1,
+    'card table: person button byte-exact, num/toFixed(2) cells, no cell classes (comparator order: Fellesfelt < Grovfelt puts Ola at index 1)');
+
+// Single-group card (c2): NO groupRows opt, flat path, rows present.
+var singleSpec = SP.competitionCardTableSpec(cards[1]);
+assert.ok(!singleSpec.groupRows, 'single-group card omits groupRows (an empty array renders an empty body)');
+var singleHtml = nfRender(singleSpec);
+assert.ok(singleHtml.indexOf('dt-group-row') === -1, 'single-group card has no group row');
+assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td>1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td>92.00</td></tr>') !== -1,
+    'single-group card: flat rows render with comparator order');
+
+// Single-group card in poeng mode keeps the comparator (poeng desc) order.
+var poengComps = [{
+    id: 'c3', title: 'Sommerskyting', status: 1, startDate: '2025-07-01',
+    applicableForClassification: true,
+    results: [
+        { personId: '9', name: 'Åse', club: 'Klubb C', discipline: 'Grovfelt', class: 'A', position: 3, score: 25, rankingScore: 80 },
+        { personId: '8', name: 'Bent', club: 'Klubb C', discipline: 'Grovfelt', class: 'A', position: 1, score: 30, rankingScore: 95 },
+        { personId: '7', name: 'Cato', club: 'Klubb D', discipline: 'Grovfelt', class: 'B', position: 2, score: 28, rankingScore: 90 }
+    ]
+}];
+var poengCards = SP.buildCompetitionCards(poengComps, Object.assign({}, baseFilters, { groupMode: 'poeng' }));
+assert.strictEqual(poengCards[0].groups.length, 1, 'poeng mode: one discipline-only group');
+var poengSpec = SP.competitionCardTableSpec(poengCards[0]);
+assert.ok(!poengSpec.groupRows, 'single-group card in poeng mode also omits groupRows');
+var poengHtml = nfRender(poengSpec);
+assert.ok(poengHtml.indexOf('dt-group-row') === -1, 'poeng single-group: no group row');
+assert.ok(poengHtml.indexOf('<td>30</td>') < poengHtml.indexOf('<td>28</td>') && poengHtml.indexOf('<td>28</td>') < poengHtml.indexOf('<td>25</td>'),
+    'single-group card keeps comparator order (poeng desc) through the flat path');
+
+// Sorts apply WITHIN groups; group order and group rows stay fixed.
+// ovelse mode: groups are [Fellesfelt: Per], [Grovfelt: Kari, Ola]
+// (discipline collation; within-group comparator order = position).
+var ovelseSpec = SP.competitionCardTableSpec(ovelseMode[0]);
+var ovelseHtml = nfRender(ovelseSpec);
+assert.ok(ovelseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt</th></tr>') !== -1
+    && ovelseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Fellesfelt</th></tr>') !== -1
+    && ovelseHtml.indexOf('Fellesfelt') < ovelseHtml.indexOf('Grovfelt'),
+    'ovelse mode: discipline-only group labels, Fellesfelt group first');
+assert.ok(ovelseHtml.indexOf('data-person-name="Per"') < ovelseHtml.indexOf('data-person-name="Kari"')
+    && ovelseHtml.indexOf('data-person-name="Kari"') < ovelseHtml.indexOf('data-person-name="Ola"'),
+    'default order: comparator order through the flattened rows');
+var scoreAsc = nfSorted(ovelseSpec, 'score', 'asc');
+assert.ok(scoreAsc.indexOf('data-person-name="Per"') < scoreAsc.indexOf('data-person-name="Ola"')
+    && scoreAsc.indexOf('data-person-name="Ola"') < scoreAsc.indexOf('data-person-name="Kari"'),
+    'score asc reorders rows INSIDE the Grovfelt group (Ola 28 before Kari 30), group order fixed');
+var nameDesc = nfSorted(ovelseSpec, 'name', 'desc');
+assert.ok(nameDesc.indexOf('<tr data-dt-row="2"><td>2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td>') !== -1
+    && nameDesc.indexOf('data-person-name="Ola"') < nameDesc.indexOf('data-person-name="Kari"'),
+    'name desc: # travels with the row (Ola keeps position 2 and his data index)');
+var posAsc = nfSorted(ovelseSpec, 'position', 'asc');
+assert.ok(posAsc.indexOf('data-person-name="Kari"') < posAsc.indexOf('data-person-name="Ola"'),
+    'position asc restores placement order within groups');
+
+// Responsive defaults and runtime hiding through the state.
+var tier700 = nfRender(ovelseSpec, { hidden: {}, runtimeHidden: [], widthTier: 700 });
+assert.ok(tier700.indexOf('data-dt-sort="club"') === -1 && tier700.indexOf('data-dt-sort="rankingScore"') === -1
+    && tier700.indexOf('data-dt-sort="score"') !== -1,
+    'widthTier 700 hides Klubb and Ranking by default (no user choice)');
+assert.ok(tier700.indexOf('<th scope="colgroup" colspan="5">') !== -1,
+    'group-row colspan tracks the visible column count');
+var runtimeClub = nfRender(ovelseSpec, { hidden: {}, runtimeHidden: ['club'], widthTier: null });
+assert.ok(runtimeClub.indexOf('data-dt-sort="club"') === -1 && runtimeClub.indexOf('<th scope="colgroup" colspan="6">') !== -1,
+    'runtimeHidden club column: absent, colspan adjusts');
+var specCols = ovelseSpec.columns;
+function colBy(key) { for (var i = 0; i < specCols.length; i++) { if (specCols[i].key === key) { return specCols[i]; } } }
+assert.strictEqual(colBy('club').hideBelow, 700, 'Klubb declares hideBelow 700');
+assert.strictEqual(colBy('rankingScore').hideBelow, 700, 'Ranking declares hideBelow 700');
+assert.strictEqual(colBy('position').hideBelow, undefined, '# has no hideBelow');
+assert.ok(!colBy('discipline').sortable, 'Øvelse is not sortable (group key)');
 
 console.log('stevner-page.test.js: all assertions passed');

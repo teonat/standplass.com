@@ -225,6 +225,39 @@ var StandplassStevnerPage = (function () {
 
     function num(v) { var n = Number(v); return isNaN(n) ? '–' : String(n); }
 
+    // Competition card table spec (shared base). Øvelse is NOT sortable —
+    // it is the group key in every mode, so it never varies within a
+    // group; a sort button there would be a guaranteed no-op. Cells are
+    // deliberately UNCLASSED (no align/rank/score styling — owner ruling:
+    // the tables look exactly like today). rows are the flattened
+    // card.groups so single-group cards — which omit the groupRows opt —
+    // keep the comparator order through the base's flat path (returning
+    // an empty group array would render an EMPTY body, never do that).
+    // The card's groups already carry the group mode (built by
+    // buildCompetitionCards); the spec takes the card as-is.
+    function competitionCardTableSpec(card) {
+        var flat = [];
+        (card.groups || []).forEach(function (g) {
+            (g.rows || []).forEach(function (r) { flat.push(r); });
+        });
+        var cols = [
+            { key: 'position', label: '#', sortable: true, defaultDir: 'asc', format: num },
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) { return row.nameHtml; } },
+            { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },
+            { key: 'discipline', label: 'Øvelse' },
+            { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
+            { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
+            { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc', hideBelow: 700,
+                cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
+        ];
+        var spec = { columns: cols, rows: flat };
+        if ((card.groups || []).length > 1) {
+            spec.groupRows = function () { return card.groups; };
+        }
+        return spec;
+    }
+
     // Column order mirrors the sort order (discipline → class → position), so
     // the "#" column is readable when several disciplines are in view.
     var columns = [
@@ -981,7 +1014,7 @@ var StandplassStevnerPage = (function () {
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,
-        statsLine: statsLine, formatUpdated: formatUpdated };
+        competitionCardTableSpec: competitionCardTableSpec, statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
