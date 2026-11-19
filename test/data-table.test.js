@@ -308,6 +308,27 @@ var zebraLoneHtml = StandplassDataTable.renderTable(
 assert.ok(zebraLoneHtml.indexOf('top3-col-alt') === -1,
     'a lone visible zebra column is 1st — unshaded');
 
+// 10. data-dt-row identity semantics (pinning tests for the lookup-map
+// refactor): a row object appearing twice in rows stamps BOTH <tr>s
+// with the FIRST occurrence's index; groupRows-synthesized rows not
+// present in opts.rows yield -1.
+var dupRow = { n: 'X' };
+var dupHtml = StandplassDataTable.renderTable(
+    'dup-test',
+    { columns: [{ key: 'n', label: 'N' }], rows: [dupRow, { n: 'Y' }, dupRow], ariaLabel: 'dup' },
+    { hidden: {}, runtimeHidden: [], widthTier: null }
+);
+assert.ok(dupHtml.indexOf('<tr data-dt-row="0"><td>X</td></tr><tr data-dt-row="1"><td>Y</td></tr><tr data-dt-row="0"><td>X</td></tr>') >= 0,
+    'duplicate row references stamp the first occurrence\'s index');
+var grpHtml = StandplassDataTable.renderTable(
+    'grp-test',
+    { columns: [{ key: 'n', label: 'N' }], rows: [], ariaLabel: 'grp',
+        groupRows: function () { return [{ label: 'G', rows: [{ n: 'Z' }] }]; } },
+    { hidden: {}, runtimeHidden: [], widthTier: null }
+);
+assert.ok(grpHtml.indexOf('<tr data-dt-row="-1"><td>Z</td></tr>') >= 0,
+    'groupRows-synthesized rows yield -1');
+
 // --- wireTable: guard against non-DOM roots (Node stand-in) ---
 var wired = StandplassDataTable.wireTable({}, 'guard-test', { columns: [], rows: [] }, {});
 assert.strictEqual(typeof wired.destroy, 'function', 'wireTable returns { destroy }');

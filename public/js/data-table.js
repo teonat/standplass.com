@@ -76,11 +76,6 @@ var StandplassDataTable = (function () {
         return row[col.key];
     }
 
-    function dataIndexOf(rows, row) {
-        for (var k = 0; k < rows.length; k++) { if (rows[k] === row) { return k; } }
-        return -1;
-    }
-
     // The picker affordance for pages that host the button in their own
     // controls row (outside the table's scroll wrap): button + anchor.
     // The anchor is the dropdown's positioning context (position:
@@ -99,6 +94,15 @@ var StandplassDataTable = (function () {
         var columns = opts.columns || [];
         var rows = opts.rows || [];
         var vis = visibleColumns(columns, state);
+        // Row identity → data index, built once per render (a linear
+        // scan per row is O(n²) and norgesfelt renders thousands of
+        // rows). First occurrence wins for duplicate references — the
+        // same semantics the scan had — and rows absent from opts.rows
+        // (groupRows-synthesized) read as -1.
+        var rowIndex = new Map();
+        for (var ri = 0; ri < rows.length; ri++) {
+            if (!rowIndex.has(rows[ri])) { rowIndex.set(rows[ri], ri); }
+        }
         var sort = state.sort || null;
         // defaultSort only marks the initial aria-sort; rows stay in page
         // order until the page's state.sort says otherwise.
@@ -147,8 +151,9 @@ var StandplassDataTable = (function () {
                 return '<td' + (cls ? ' class="' + esc(cls) + '"' : '') + '>'
                     + (col.raw ? value : esc(value)) + '</td>';
             }).join('');
-            var extra = opts.rowAttrs ? (opts.rowAttrs(row, dataIndexOf(rows, row)) || '') : '';
-            return '<tr data-dt-row="' + dataIndexOf(rows, row) + '"' + (extra ? ' ' + extra : '') + '>' + cells + '</tr>';
+            var di = rowIndex.has(row) ? rowIndex.get(row) : -1;
+            var extra = opts.rowAttrs ? (opts.rowAttrs(row, di) || '') : '';
+            return '<tr data-dt-row="' + di + '"' + (extra ? ' ' + extra : '') + '>' + cells + '</tr>';
         }
 
         var bodyHtml;
