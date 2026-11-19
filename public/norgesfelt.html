@@ -90,6 +90,15 @@
               <option value="total">Sammenlagt</option>
             </select>
           </div>
+          <div class="filter-group">
+            <label for="norgesfelt-rows">Rader</label>
+            <select id="norgesfelt-rows">
+              <option value="15">15</option>
+              <option value="30" selected>30</option>
+              <option value="50">50</option>
+              <option value="all">Alle</option>
+            </select>
+          </div>
         </div>
         <div id="norgesfelt-search-table-wrap"></div>
       </div>
@@ -105,6 +114,15 @@
               <ul class="autocomplete-list" id="norgesfelt-club-list" role="listbox" aria-label="Klubber" hidden></ul>
             </div>
           </div>
+          <div class="filter-group">
+            <label for="norgesfelt-rows-topp">Rader</label>
+            <select id="norgesfelt-rows-topp">
+              <option value="15">15</option>
+              <option value="30" selected>30</option>
+              <option value="50">50</option>
+              <option value="all">Alle</option>
+            </select>
+          </div>
         </div>
         <div class="program-toggle" role="group" aria-label="Resultattype">
           <button type="button" id="norgesfelt-sub-individual" class="program-btn program-btn--active" aria-pressed="true">Enkeltresultater</button>
@@ -119,6 +137,8 @@
   <script src="/js/format.js"></script>
   <script src="/js/filter-widgets.js"></script>
   <script src="/js/url-state.js"></script>
+  <script src="/js/table-renderer.js"></script>
+  <script src="/js/data-table.js"></script>
   <script src="/js/norgesfelt-page.js"></script>
   <script>
     StandplassNorgesfeltPage.init({

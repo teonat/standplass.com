@@ -3,6 +3,10 @@ var assert = require('assert');
 // shim the browser global before requiring, the same way
 // terminliste-page.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
+// Page-test convention: globals in HTML script order — data-table.js
+// calls into StandplassTable for sort semantics.
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var NP = require('../public/js/norgesfelt-page.js');
 
 // normalizeClub / matchesClub -- same substring-match convention as
@@ -68,5 +72,60 @@ assert.strictEqual(NP.buildClubsParam(['Oslo Pistolklubb', 'Bergen Pistolklubb']
 assert.deepStrictEqual(NP.parseClubsParam(NP.buildClubsParam(['Ås Skytterlag'])), ['Ås Skytterlag'], 'round-trip through encode/decode preserves æøå');
 assert.deepStrictEqual(NP.parseClubsParam('%E0%A4%A'), ['%E0%A4%A'],
     'malformed escape falls back to raw instead of dead-ending init');
+
+// ── dateSortKey + searchTableSpec (batch 1: shared table base) ─────────
+// Norgesfelt dates display as DD.MM.YYYY, which collated as text sort
+// day-then-month; the derived YYYYMMDD key sorts chronologically while
+// the display string is untouched.
+assert.strictEqual(NP.dateSortKey('08.03.2026'), '20260308');
+assert.strictEqual(NP.dateSortKey('01.11.2026'), '20261101');
+assert.strictEqual(NP.dateSortKey(null), null, 'absent date -> null key');
+assert.strictEqual(NP.dateSortKey(''), null, 'empty date -> null key');
+
+var NF_STATE = { hidden: {}, runtimeHidden: [], widthTier: null };
+function nfSorted(spec, key, dir) {
+    return StandplassDataTable.renderTable('norgesfelt-search', spec,
+        { sort: { key: key, dir: dir }, hidden: {}, runtimeHidden: [], widthTier: null });
+}
+var nfEntries = [
+    { rank: 1, name: 'Anne', club: 'Oslo PK', discipline: 'Finfelt', date: '01.11.2026', points: 289, innertreff: 41 },
+    { rank: 2, name: 'Bjarne', club: 'Bergen PK', discipline: 'Finfelt', date: '08.03.2026', points: 275, innertreff: null },
+    { rank: 3, name: 'Cecilie', club: 'Oslo PK', discipline: 'Grovfelt', date: null, points: 260, innertreff: 38 }
+];
+// Full variant: Gren shown (no disc filter), Dato shown (individual).
+var nfSpecFull = NP.searchTableSpec(nfEntries, true, 'individual');
+var nfFull = StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, NF_STATE);
+assert.ok(nfFull.indexOf('<thead><tr>'
+    + '<th scope="col" class="ranking-rank norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="rank">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Forening<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Gren<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'norgesfelt search: full header — all columns sortable, responsive cellClasses on th');
+assert.ok(nfFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank norgesfelt-mobile-hide">1</td><td>Anne</td><td>Oslo PK</td><td>Finfelt</td><td class="norgesfelt-mobile-hide">01.11.2026</td><td class="ranking-score">289</td><td class="ranking-score norgesfelt-tablet-hide">41</td></tr>') !== -1,
+    'norgesfelt search: row markup with responsive cellClasses on td');
+assert.ok(nfFull.indexOf('<td class="norgesfelt-mobile-hide">–</td>') !== -1,
+    'norgesfelt search: missing date renders –');
+// Chronological Dato sort (lexicographic would put 01.11 first).
+var nfDate = nfSorted(nfSpecFull, 'dateSort', 'asc');
+assert.ok(nfDate.indexOf('08.03.2026') < nfDate.indexOf('01.11.2026'),
+    'norgesfelt search: Dato asc sorts chronologically, not lexicographically');
+assert.ok(nfDate.indexOf('–') > nfDate.indexOf('01.11.2026'),
+    'norgesfelt search: null dates sort last');
+// Reduced variant: disc filtered (no Gren), total type (no Dato).
+var nfSpecSlim = NP.searchTableSpec(nfEntries, false, 'total');
+var nfSlim = StandplassDataTable.renderTable('norgesfelt-search', nfSpecSlim, NF_STATE);
+assert.ok(nfSlim.indexOf('data-dt-sort="discipline"') === -1 && nfSlim.indexOf('<th>Gren</th>') === -1,
+    'norgesfelt search: Gren column absent when a discipline is filtered');
+assert.ok(nfSlim.indexOf('data-dt-sort="dateSort"') === -1,
+    'norgesfelt search: Dato column absent for total type');
+assert.ok(nfSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank norgesfelt-mobile-hide">1</td><td>Anne</td><td>Oslo PK</td><td class="ranking-score">289</td><td class="ranking-score norgesfelt-tablet-hide">41</td></tr>') !== -1,
+    'norgesfelt search: reduced row markup — #/Navn/Forening/Poeng/Innertreff only');
+var nfPoints = nfSorted(nfSpecFull, 'points', 'desc');
+assert.ok(nfPoints.indexOf('<td>Anne</td>') < nfPoints.indexOf('<td>Cecilie</td>'),
+    'norgesfelt search: Poeng desc reorders');
 
 console.log('norgesfelt-page.test.js: all assertions passed');

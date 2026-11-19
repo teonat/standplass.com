@@ -104,6 +104,45 @@ var StandplassNorgesfeltPage = (function () {
         });
     }
 
+    // Norgesfelt dates display as DD.MM.YYYY, which sorted as text would
+    // order day-then-month; the derived YYYYMMDD key sorts
+    // chronologically while the display string is untouched.
+    function dateSortKey(dateStr) {
+        if (!dateStr) { return null; }
+        return String(dateStr).split('.').reverse().join('');
+    }
+
+    // "Alle resultater" table spec (shared base). Gren appears only when
+    // no discipline is filtered, Dato only for enkeltresultater; the
+    // responsive cellClasses keep today's viewport breakpoints exactly
+    // (the base applies them to th and td alike). Rows carry the
+    // derived dateSort key; rank/name/club/points/innertreff come
+    // straight off the entry.
+    function searchTableSpec(filtered, showDiscCol, activeType) {
+        filtered = filtered || [];
+        var cols = [
+            { key: 'rank', label: '#', align: 'center', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc' },
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
+            { key: 'club', label: 'Forening', sortable: true, defaultDir: 'asc' }
+        ];
+        if (showDiscCol) {
+            cols.push({ key: 'discipline', label: 'Gren', sortable: true, defaultDir: 'asc' });
+        }
+        if (activeType === 'individual') {
+            cols.push({ key: 'dateSort', label: 'Dato', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc',
+                cell: function (row) { return row.date || '–'; } });
+        }
+        cols.push({ key: 'points', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc' });
+        cols.push({ key: 'innertreff', label: 'Innertreff', align: 'right', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'desc' });
+        return {
+            columns: cols,
+            rows: filtered.map(function (e) {
+                return { rank: e.rank, name: e.name, club: e.club, discipline: e.discipline,
+                    date: e.date, dateSort: dateSortKey(e.date), points: e.points, innertreff: e.innertreff };
+            })
+        };
+    }
+
     // Multi-value `clubs` URL param, comma-joined per-element encoded --
     // url-state.js's tracked params are opaque strings with no shape
     // assumption. Encoding/decoding is format.js's hardened implementation
@@ -154,6 +193,27 @@ var StandplassNorgesfeltPage = (function () {
         var subTotalBtn = id('-sub-total');
         var cardsWrap = id('-cards-wrap');
 
+        // "Rader" — one select per tab panel (the page's precedent: the
+        // individual/total choice is also per-panel), both bound to the
+        // shared site-wide preference and kept in sync. The var is set
+        // on the root — the common ancestor of both panels' scroll
+        // regions. wireRowsSelect's initial apply fires onChange too;
+        // the sibling-sync guard makes that a no-op (same value).
+        var rowsSokSelect = id('-rows');
+        var rowsToppSelect = id('-rows-topp');
+        StandplassFilterWidgets.wireRowsSelect({
+            select: rowsSokSelect,
+            contentEl: id('-root'),
+            storageKey: 'standplass_list_rows',
+            onChange: function (v) { if (rowsToppSelect.value !== v) { rowsToppSelect.value = v; } }
+        });
+        StandplassFilterWidgets.wireRowsSelect({
+            select: rowsToppSelect,
+            contentEl: id('-root'),
+            storageKey: 'standplass_list_rows',
+            onChange: function (v) { if (rowsSokSelect.value !== v) { rowsSokSelect.value = v; } }
+        });
+
         var data = null;
         var debounceTimer = null;
         var cardState = {}; // { discName: expanded }
@@ -188,31 +248,51 @@ var StandplassNorgesfeltPage = (function () {
 
         // --- "Alle resultater" tab ---
 
+        // Sort state for the shared-base table (session-only). Survives
+        // search debounce and disc/type re-renders.
+        var searchSort = null;
+        var searchSpec = null;
+
+        function searchTableState() {
+            return { sort: searchSort, hidden: {}, runtimeHidden: [], widthTier: null };
+        }
+
+        function wireSearchTable() {
+            if (!searchSpec) { return; }
+            if (!tableWrap.querySelector('table[data-dt-id="norgesfelt-search"]')) { return; }
+            StandplassDataTable.wireTable(tableWrap, 'norgesfelt-search', searchSpec, {
+                onSortChange: function (sort) {
+                    searchSort = sort;
+                    // Wrap+table replace tableWrap.innerHTML together —
+                    // nothing else lives in the wrap, and re-rendering
+                    // through renderSearchTable re-applies the active
+                    // filters with the new sort.
+                    renderSearchTable();
+                    var btn = tableWrap.querySelector('table[data-dt-id="norgesfelt-search"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, searchTableState());
+        }
+
         function renderSearchTable() {
             if (!data) { return; }
             var entries = flattenAll(data, activeType);
             var filtered = filterSearchEntries(entries, { discipline: activeDisc, query: activeQuery });
             statusEl.textContent = 'Viser ' + filtered.length + ' av ' + entries.length + ' resultater.';
             if (!filtered.length) {
+                searchSpec = null;
                 tableWrap.innerHTML = '<p class="ranking-status-msg">Ingen treff.</p>';
                 return;
             }
             var showDiscCol = !activeDisc;
-            var rows = filtered.map(function (e) {
-                return '<tr><td class="norgesfelt-mobile-hide">' + esc(e.rank) + '</td>'
-                    + '<td>' + esc(e.name) + '</td>'
-                    + '<td>' + esc(e.club) + '</td>'
-                    + (showDiscCol ? '<td>' + esc(e.discipline) + '</td>' : '')
-                    + (activeType === 'individual' ? '<td class="norgesfelt-mobile-hide">' + esc(e.date || '–') + '</td>' : '')
-                    + '<td class="ranking-score">' + esc(e.points) + '</td>'
-                    + '<td class="norgesfelt-tablet-hide">' + esc(e.innertreff) + '</td></tr>';
-            }).join('');
-            tableWrap.innerHTML = '<table class="ranking-table"><thead><tr>'
-                + '<th class="norgesfelt-mobile-hide">#</th><th>Navn</th><th>Forening</th>'
-                + (showDiscCol ? '<th>Gren</th>' : '')
-                + (activeType === 'individual' ? '<th class="norgesfelt-mobile-hide">Dato</th>' : '')
-                + '<th>Poeng</th><th class="norgesfelt-tablet-hide">Innertreff</th>'
-                + '</tr></thead><tbody>' + rows + '</tbody></table>';
+            searchSpec = searchTableSpec(filtered, showDiscCol, activeType);
+            // Previously deliberately uncapped (owner-ruled change): a
+            // contained scroll region now caps the height; every row
+            // stays real DOM (Ctrl+F reaches all of them).
+            tableWrap.innerHTML = '<div class="club-stats-list-scroll">'
+                + StandplassDataTable.renderTable('norgesfelt-search', searchSpec, searchTableState())
+                + '</div>';
+            wireSearchTable();
         }
 
         function populateDiscSelect() {
@@ -382,6 +462,8 @@ var StandplassNorgesfeltPage = (function () {
         getFilteredEntries: getFilteredEntries,
         searchMatchesEntry: searchMatchesEntry,
         filterSearchEntries: filterSearchEntries,
+        dateSortKey: dateSortKey,
+        searchTableSpec: searchTableSpec,
         parseClubsParam: parseClubsParam,
         buildClubsParam: buildClubsParam
     };
