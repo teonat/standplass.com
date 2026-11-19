@@ -593,6 +593,10 @@ assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle remov
 assert.ok(top3Html.indexOf('Vis øvelser') < 0, 'øvelser reveal toggle replaced by the column picker');
 assert.ok(top3Html.indexOf('data-dt-picker') >= 0, 'column picker button (Kolonner) present');
 assert.ok(top3Html.indexOf('dt-picker-anchor') >= 0, 'picker scaffold anchor present');
+assert.ok(top3Html.indexOf('3. plass</button><button type="button" class="dt-picker-btn"') !== -1
+    && top3Html.indexOf('Kolonner</button><div class="dt-picker-anchor"></div></div>') !== -1,
+    'picker button + anchor sit inline in the mode row');
+assert.ok(top3Html.indexOf('dt-toolbar') === -1, 'no separate toolbar row above the table');
 assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
 assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
 assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');

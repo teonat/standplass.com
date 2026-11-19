@@ -81,6 +81,18 @@ var StandplassDataTable = (function () {
         return -1;
     }
 
+    // The picker affordance for pages that host the button in their own
+    // controls row (outside the table's scroll wrap): button + anchor.
+    // The anchor is the dropdown's positioning context (position:
+    // relative in styles.css); wireTable finds the pair via
+    // root.querySelector when it is not in a .dt-toolbar.
+    function renderPickerButton(picker) {
+        picker = picker || {};
+        return '<button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">'
+            + esc(picker.buttonLabel || 'Kolonner')
+            + '</button><div class="dt-picker-anchor"></div>';
+    }
+
     function renderTable(id, opts, state) {
         opts = opts || {};
         state = state || {};
@@ -140,9 +152,9 @@ var StandplassDataTable = (function () {
             + '</table>';
 
         var toolbar = opts.picker
-            ? '<div class="dt-toolbar"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">'
-                + esc((opts.picker && opts.picker.buttonLabel) || 'Kolonner')
-                + '</button><div class="dt-picker-anchor"></div></div>'
+            ? (opts.picker.toolbar === false
+                ? ''
+                : '<div class="dt-toolbar">' + renderPickerButton(opts.picker) + '</div>')
             : '';
 
         return opts.wrapClass
@@ -330,6 +342,7 @@ var StandplassDataTable = (function () {
         visibleColumns: visibleColumns,
         sortRowsNullsLast: sortRowsNullsLast,
         renderTable: renderTable,
+        renderPickerButton: renderPickerButton,
         wireTable: wireTable
     };
 })();

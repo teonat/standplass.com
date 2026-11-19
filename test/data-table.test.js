@@ -254,6 +254,24 @@ assert.ok(wHtml.indexOf('<div class="ranking-card-table-wrap club-stats-list-scr
     && wHtml.slice(-6) === '</div>',
     'wrapClass wraps toolbar + table');
 
+// 8. renderPickerButton: the button + anchor for pages that host the
+// picker in their own controls row; picker.toolbar === false keeps
+// renderTable from emitting its own toolbar row.
+assert.strictEqual(StandplassDataTable.renderPickerButton({ buttonLabel: 'Kolonner' }),
+    '<button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button>'
+    + '<div class="dt-picker-anchor"></div>',
+    'renderPickerButton emits the button + anchor');
+
+var noToolbarHtml = StandplassDataTable.renderTable(
+    'nt-test',
+    { columns: gCols, rows: gRows, ariaLabel: 'nt', wrapClass: 'some-wrap', picker: { buttonLabel: 'Kolonner', toolbar: false } },
+    emptyState
+);
+assert.ok(noToolbarHtml.indexOf('<div class="some-wrap"><table class="ranking-table"') === 0,
+    'toolbar:false — the wrap contains only the table');
+assert.ok(noToolbarHtml.indexOf('dt-toolbar') === -1 && noToolbarHtml.indexOf('dt-picker-btn') === -1,
+    'toolbar:false — no toolbar or picker button emitted');
+
 // --- wireTable: guard against non-DOM roots (Node stand-in) ---
 var wired = StandplassDataTable.wireTable({}, 'guard-test', { columns: [], rows: [] }, {});
 assert.strictEqual(typeof wired.destroy, 'function', 'wireTable returns { destroy }');

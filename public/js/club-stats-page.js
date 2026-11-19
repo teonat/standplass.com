@@ -440,14 +440,13 @@ var StandplassClubStats = (function () {
             { key: 'p2', label: '2. plass' },
             { key: 'p3', label: '3. plass' }
         ];
-        var modeHtml = '<div class="top3-mode" id="top3-mode" role="group" aria-label="Plasseringstype">'
-            + MODES.map(function (m) {
-                return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
-                    + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
-            }).join('') + '</div>';
+        var modeButtons = MODES.map(function (m) {
+            return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
+                + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
+        }).join('');
         if (empty) {
             return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
-                + modeHtml
+                + '<div class="top3-mode" id="top3-mode" role="group" aria-label="Plasseringstype">' + modeButtons + '</div>'
                 + '<p class="ranking-status-msg">Ingen ' + esc(top3ModeLabel(mode)) + ' for denne klubben i ' + esc(String(year)) + '.</p>'
                 + '</section>';
         }
@@ -482,14 +481,24 @@ var StandplassClubStats = (function () {
             ariaLabel: 'Flest topp-3 plasseringer i ' + String(year) + ' for ' + clubName,
             wrapClass: 'ranking-card-table-wrap club-stats-list-scroll',
             defaultSort: { key: 'total', dir: 'desc' },
-            picker: { buttonLabel: 'Kolonner' }
+            // toolbar: false — the page hosts the picker button in the
+            // mode row itself (see below); renderTable must not emit its
+            // own toolbar.
+            picker: { buttonLabel: 'Kolonner', toolbar: false }
         };
 
         // All shooters render at once (row paging removed) — the wrap's
         // scroll cap (from the user's "Rader" setting) confines the height
         // instead. overflow-x: auto stays for wide øvelser tables.
+        // The picker button sits in the mode row where the old "Vis
+        // øvelser" toggle sat — outside the table's scroll wrap, so its
+        // dropdown panel overlays the table instead of becoming
+        // scrollable content beside it.
         return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
-            + modeHtml
+            + '<div class="top3-mode" id="top3-mode" role="group" aria-label="Plasseringstype">'
+            + modeButtons
+            + StandplassDataTable.renderPickerButton({ buttonLabel: 'Kolonner' })
+            + '</div>'
             + StandplassDataTable.renderTable('top3', top3Spec, {
                 sort: opts.sort || null,
                 hidden: opts.hidden || {},
