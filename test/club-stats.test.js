@@ -834,4 +834,80 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     assert.deepStrictEqual(calls, [null, 'Klubb A']);
 })();
 
+// ── Toplists through the shared table base ──────────────────────────────
+// The migrated toplistCard builds its <table> via
+// StandplassDataTable.renderTable inside buildTableCard's tableHtml path.
+// This mirrors that composition and pins today's observable markup: same
+// thead cells, same row cells, club links escaped, all rows rendered.
+
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
+
+(function () {
+    function escT(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Same column spec the migrated toplistCard builds (klubbstatistikk).
+    function toplistColumns(valueKey, valueLabel) {
+        return [
+            { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+            { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) { return '<a href="?klubb=' + encodeURIComponent(row.club) + '">' + escT(row.club) + '</a>'; } },
+            { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
+        ];
+    }
+
+    var ranked = [
+        { club: 'A & B', totalStarts: 30 },
+        { club: 'Klubb C', totalStarts: 25 }
+    ];
+
+    var tableHtml = StandplassDataTable.renderTable('toplist-starts', {
+        columns: toplistColumns('totalStarts', 'starter'),
+        rows: ranked,
+        ariaLabel: 'Flest starter 2026',
+        defaultSort: { key: 'totalStarts', dir: 'desc' }
+    }, { hidden: {}, runtimeHidden: [], widthTier: null });
+
+    var card = CS.buildTableCard({
+        title: 'Flest starter',
+        rows: ranked,
+        tableHtml: tableHtml,
+        cardClass: 'club-stats-toplist'
+    });
+
+    // Card wrapper unchanged; the table is the base's output, un-wrapped
+    // (buildTableCard's .club-stats-list-scroll already wraps it).
+    assert.strictEqual(card,
+        '<section class="ranking-card club-stats-toplist">'
+        + '<div class="ranking-card-header"><h2 class="ranking-card-title">Flest starter</h2></div>'
+        + '<div class="club-stats-list-scroll">' + tableHtml + '</div></section>',
+        'buildTableCard tableHtml path keeps the card wrapper, scroll wrap only once');
+
+    // data-dt-id present (replaces the old id="...-table").
+    assert.ok(card.indexOf('data-dt-id="toplist-starts"') !== -1, 'table carries data-dt-id');
+
+    // Full row count rendered — no paging (Review Focus #5).
+    assert.strictEqual((card.match(/<tr data-dt-row=/g) || []).length, ranked.length,
+        'all rows render as real DOM rows');
+
+    // Golden thead: today's cells with the new sort affordance on Klubb
+    // and the value column; the value column is the designated default
+    // sort (desc), so it carries the initial aria-sort.
+    assert.ok(card.indexOf(
+        '<thead><tr><th scope="col" class="ranking-rank">#</th>'
+        + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+        + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts">starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+        + '</tr></thead>') !== -1,
+        'sortable Klubb and value headers, value marked as default sort');
+
+    // Golden row cells: today's markup, & in the club name escaped.
+    assert.ok(card.indexOf(
+        '<tr data-dt-row="0"><td class="ranking-rank">1</td><td><a href="?klubb=A%20%26%20B">A &amp; B</a></td><td class="ranking-score">30</td></tr>'
+        + '<tr data-dt-row="1"><td class="ranking-rank">2</td><td><a href="?klubb=Klubb%20C">Klubb C</a></td><td class="ranking-score">25</td></tr>') !== -1,
+        'row cells match today\'s toplist markup with A & B escaped');
+})();
+
 console.log('club-stats.test.js: all tests passed');

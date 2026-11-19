@@ -492,10 +492,16 @@ var StandplassClubStats = (function () {
         return '<section class="ranking-card ' + esc(opts.cardClass || 'club-stats-section') + '">'
             + '<div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(opts.title) + '</h2></div>'
             + '<div class="club-stats-list-scroll">'
-            + '<table class="ranking-table" id="' + esc(opts.id) + '-table" aria-label="' + esc(opts.ariaLabel) + '">'
-            + opts.headHtml
-            + '<tbody>' + rows.map(function (row, i) { return opts.renderRow(row, i); }).join('') + '</tbody>'
-            + '</table></div></section>';
+            // tableHtml: a fully-built <table> (data-table base) used in
+            // place of the headHtml/renderRow assembly — the scroll wrap
+            // stays exactly once either way.
+            + (opts.tableHtml != null
+                ? opts.tableHtml
+                : '<table class="ranking-table" id="' + esc(opts.id) + '-table" aria-label="' + esc(opts.ariaLabel) + '">'
+                    + opts.headHtml
+                    + '<tbody>' + rows.map(function (row, i) { return opts.renderRow(row, i); }).join('') + '</tbody>'
+                    + '</table>')
+            + '</div></section>';
     }
 
     // ── SVG line chart ─────────────────────────────────────────────────
@@ -860,6 +866,13 @@ var StandplassClubStats = (function () {
         var top3State = { mode: 'top3', showOvelser: false };
         var top3Rows = [];
         var top3Club = '';
+        // Toplist interactivity state (session-only, survives filter
+        // changes): sort per toplist id, column-visibility per toplist id,
+        // and the column spec + designated default sort each toplist last
+        // rendered with (rebuilt every renderToplists, consumed by wiring).
+        var toplistSort = {};
+        var toplistHidden = {};
+        var toplistSpecs = {};
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -1050,16 +1063,27 @@ var StandplassClubStats = (function () {
         // rename away from silently rendering one toplist's data under
         // another's header).
         function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel) {
+            var columns = [
+                { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+                { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } },
+                { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
+            ];
+            toplistSpecs[id] = { columns: columns, defaultSort: { key: valueKey, dir: 'desc' } };
             return buildTableCard({
-                id: id, title: title,
-                ariaLabel: ariaLabel || (title + ' ' + activeYear),
-                headHtml: '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">' + esc(valueLabel) + '</th></tr></thead>',
+                title: title,
                 rows: ranked,
-                renderRow: function (entry, i) {
-                    return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'
-                        + '<td><a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a></td>'
-                        + '<td class="ranking-score">' + esc(String(entry[valueKey])) + '</td></tr>';
-                },
+                tableHtml: StandplassDataTable.renderTable(id, {
+                    columns: columns,
+                    rows: ranked,
+                    ariaLabel: ariaLabel || (title + ' ' + activeYear),
+                    defaultSort: { key: valueKey, dir: 'desc' }
+                }, {
+                    sort: toplistSort[id] || null,
+                    hidden: toplistHidden[id] || {},
+                    runtimeHidden: [],
+                    widthTier: null
+                }),
                 cardClass: 'club-stats-toplist'
             });
         }
@@ -1276,6 +1300,37 @@ var StandplassClubStats = (function () {
                 + yearNote
                 + '<p class="club-stats-note">Aktiv skytter = minst én registrert start i perioden. '
                 + 'Klubbtilhørighet er fra stevne-registrering, ikke bekreftet medlemskap.</p>';
+            wireToplists();
+        }
+
+        function wireToplists() {
+            // Wire each rendered toplist for sorting. The old tables'
+            // listeners die with the innerHTML replacement, so no
+            // destroy() bookkeeping is needed here (no picker, no
+            // matchMedia tiers on toplists).
+            Object.keys(toplistSpecs).forEach(function (tid) {
+                if (!contentEl.querySelector('table[data-dt-id="' + tid + '"]')) { return; }
+                StandplassDataTable.wireTable(contentEl, tid, toplistSpecs[tid], {
+                    onSortChange: function (sort) {
+                        toplistSort[tid] = sort;
+                        renderToplists();
+                        // Same focus-restoration convention as the top-3
+                        // mode buttons: the clicked button was destroyed
+                        // with the re-render.
+                        var btn = contentEl.querySelector('table[data-dt-id="' + tid + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                        if (btn) { btn.focus(); }
+                    },
+                    onColumnsChange: function (hidden) {
+                        toplistHidden[tid] = hidden;
+                        renderToplists();
+                    }
+                }, {
+                    sort: toplistSort[tid] || null,
+                    hidden: toplistHidden[tid] || {},
+                    runtimeHidden: [],
+                    widthTier: null
+                });
+            });
         }
 
         // ── Drilldown rendering ────────────────────────────────────────
