@@ -476,12 +476,17 @@ var StandplassClubStats = (function () {
             { key: 'rank', label: '#', align: 'center' },
             { key: 'name', label: 'Navn', asRowHeader: true, sortable: true, defaultDir: 'asc' }
         ];
-        comboOrder.forEach(function (k, ci) {
+        comboOrder.forEach(function (k) {
             var parts = k.split('|');
             columns.push({
                 key: 'combo|' + k,
                 label: parts[0] + ' ' + parts[1],
-                cellClass: 'ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : ''),
+                cellClass: 'ranking-score',
+                // Shading alternates over the VISIBLE combo columns
+                // (computed in renderTable): picker subsets must keep the
+                // every-other-column accent readable, which baked
+                // ci % 2 positions could not.
+                zebraClass: 'top3-col-alt',
                 defaultHidden: true,
                 sortable: true,
                 defaultDir: 'desc'

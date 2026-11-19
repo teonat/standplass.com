@@ -104,8 +104,27 @@ var StandplassDataTable = (function () {
         // order until the page's state.sort says otherwise.
         var ariaSort = sort || opts.defaultSort || null;
 
-        var headHtml = vis.map(function (col) {
+        // Alternating column shading: every other VISIBLE column carrying
+        // the same zebraClass gets that class, computed here at render
+        // time. Baked absolute positions would strand same-shaded
+        // neighbors once the picker (or a width tier) hides columns;
+        // counting only the visible ones re-flows the alternation. The
+        // class is appended after the static cellClass, reading the same
+        // CSS as a baked 'base alt' string would.
+        var zebraCount = {};
+        var visClass = vis.map(function (col) {
             var cls = colClass(col);
+            if (col.zebraClass) {
+                zebraCount[col.zebraClass] = (zebraCount[col.zebraClass] || 0) + 1;
+                if (zebraCount[col.zebraClass] % 2 === 0) {
+                    cls = cls ? cls + ' ' + col.zebraClass : col.zebraClass;
+                }
+            }
+            return cls;
+        });
+
+        var headHtml = vis.map(function (col, vi) {
+            var cls = visClass[vi];
             var attrs = ' scope="col"' + (cls ? ' class="' + esc(cls) + '"' : '');
             if (ariaSort && ariaSort.key === col.key) {
                 attrs += ' aria-sort="' + (ariaSort.dir === 'desc' ? 'descending' : 'ascending') + '"';
@@ -118,9 +137,9 @@ var StandplassDataTable = (function () {
         }).join('');
 
         function rowHtml(row, renderedIndex) {
-            var cells = vis.map(function (col) {
+            var cells = vis.map(function (col, vi) {
                 var value = cellValue(col, row, renderedIndex);
-                var cls = colClass(col);
+                var cls = visClass[vi];
                 if (col.asRowHeader) {
                     return '<th scope="row"' + (cls ? ' class="' + esc(cls) + '"' : '') + '>'
                         + (col.raw ? value : esc(value)) + '</th>';

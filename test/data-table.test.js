@@ -272,6 +272,42 @@ assert.ok(noToolbarHtml.indexOf('<div class="some-wrap"><table class="ranking-ta
 assert.ok(noToolbarHtml.indexOf('dt-toolbar') === -1 && noToolbarHtml.indexOf('dt-picker-btn') === -1,
     'toolbar:false — no toolbar or picker button emitted');
 
+// 9. zebraClass: alternating column shading computed over the VISIBLE
+// columns carrying it. Baked absolute positions would strand same-shaded
+// neighbors once the picker (or a width tier) hides columns; counting
+// only the visible ones re-flows the alternation.
+var zCols = [
+    { key: 'n', label: 'Navn' },
+    { key: 'a', label: 'A', cellClass: 'ranking-score', zebraClass: 'top3-col-alt' },
+    { key: 'b', label: 'B', cellClass: 'ranking-score', zebraClass: 'top3-col-alt' },
+    { key: 'c', label: 'C', cellClass: 'ranking-score', zebraClass: 'top3-col-alt' }
+];
+var zRows = [{ n: 'X', a: 1, b: 2, c: 3 }];
+var zebraAllHtml = StandplassDataTable.renderTable(
+    'z-test', { columns: zCols, rows: zRows, ariaLabel: 'z' },
+    { hidden: {}, runtimeHidden: [], widthTier: null }
+);
+assert.ok(zebraAllHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">B</th>') >= 0,
+    'all visible: 2nd zebra column shaded');
+assert.ok(zebraAllHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0,
+    'shading reaches the body cells');
+assert.strictEqual((zebraAllHtml.match(/top3-col-alt/g) || []).length, 2,
+    'exactly one th + one td per shaded column');
+var zebraSubsetHtml = StandplassDataTable.renderTable(
+    'z-test', { columns: zCols, rows: zRows, ariaLabel: 'z' },
+    { hidden: { b: true }, runtimeHidden: [], widthTier: null }
+);
+assert.ok(zebraSubsetHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">C</th>') >= 0,
+    'subset: hiding the shaded column shades the next visible one');
+assert.ok(zebraSubsetHtml.indexOf('<th scope="col" class="ranking-score">A</th>') >= 0,
+    'subset: 1st visible zebra column stays unshaded');
+var zebraLoneHtml = StandplassDataTable.renderTable(
+    'z-test', { columns: zCols, rows: zRows, ariaLabel: 'z' },
+    { hidden: { a: true, c: true }, runtimeHidden: [], widthTier: null }
+);
+assert.ok(zebraLoneHtml.indexOf('top3-col-alt') === -1,
+    'a lone visible zebra column is 1st — unshaded');
+
 // --- wireTable: guard against non-DOM roots (Node stand-in) ---
 var wired = StandplassDataTable.wireTable({}, 'guard-test', { columns: [], rows: [] }, {});
 assert.strictEqual(typeof wired.destroy, 'function', 'wireTable returns { destroy }');

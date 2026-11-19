@@ -617,7 +617,7 @@ assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
 assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
 assert.ok(ovelserHtml.indexOf('data-dt-sort="combo|Finfelt|A"') >= 0, 'øvelse columns are sortable');
 // Alternating-column shading on øvelse columns (class-based, never nth-child):
-// odd-index visible combos get .top3-col-alt on their th and every td.
+// every other VISIBLE combo column gets .top3-col-alt on its th and tds.
 var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
 var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: showAllCombos(altRanking) });
 assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Grovfelt|B">Grovfelt B') >= 0, 'odd-index combo header shaded');
@@ -629,6 +629,19 @@ assert.ok(altHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0,
 assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded combo body cells stay plain');
 assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
 assert.strictEqual((altHtml.match(/top3-col-alt/g) || []).length, 2, 'exactly one th and one td shaded (single shooter, one odd combo)');
+// Picker subsets: shading re-flows over the VISIBLE combos — hiding the
+// shaded column shades the next visible one, so the every-other-column
+// accent survives any selection. (comboOrder is total-desc here:
+// Militærfelt C, Grovfelt B, Finfelt A.)
+var subsetHidden = showAllCombos(altRanking);
+subsetHidden['combo|Grovfelt|B'] = true;
+var subsetHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: subsetHidden });
+assert.ok(subsetHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">Finfelt A') >= 0,
+    'hiding the shaded combo shades the next visible combo');
+assert.ok(subsetHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">Militærfelt C') >= 0,
+    'first visible combo stays unshaded');
+assert.strictEqual((subsetHtml.match(/top3-col-alt/g) || []).length, 2,
+    'exactly one th + one td shaded in the subset render');
 assert.strictEqual(CS.renderTopThreeHtml(altRanking, 'K1', 2026, {}).indexOf('top3-col-alt'), -1, 'no shading when øvelser hidden');
 // Row paging: all rows rendered, no toggle
 var manyRows = [];
