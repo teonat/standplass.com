@@ -24,4 +24,14 @@ StandplassFilterWidgets.wireClearAllFilters(
 clickHandler();
 assert.deepStrictEqual(order, ['reset', 'rebuild', 'done'], 'resets run, then widgets rebuild, then onDone');
 
+// rowsToMaxHeight: the "Rader" select's row-count → CSS max-height math
+// (~2.1rem per row + ~2rem thead; "Alle" uncaps entirely). DOM wiring
+// (wireRowsSelect) is manual-QA per project convention.
+assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('15', 2.1, 2), '33.5rem');
+assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('30', 2.1, 2), '65.0rem');
+assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('50', 2.1, 2), '107.0rem');
+assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('all', 2.1, 2), 'none');
+assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('15'), '33.5rem', 'rowRem/headRem default to 2.1/2');
+assert.strictEqual(typeof StandplassFilterWidgets.wireRowsSelect, 'function', 'wireRowsSelect exported');
+
 console.log('filter-widgets.test.js: all assertions passed');

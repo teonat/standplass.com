@@ -1012,21 +1012,13 @@ var StandplassClubStats = (function () {
             // scrolls. Cosmetic view preference, persisted like the
             // dark-mode toggle (localStorage, never a URL param — avoids
             // the tracked-param/mode-collision bug class entirely).
-            var rowsEl = id('-rows');
-            var storedRows = null;
-            try { storedRows = localStorage.getItem('standplass_list_rows'); } catch (e) { storedRows = null; }
-            if (storedRows === '15' || storedRows === '30' || storedRows === '50' || storedRows === 'all') {
-                rowsEl.value = storedRows;
-            }
-            var applyRows = function () {
-                var v = rowsEl.value;
-                // ~2.1rem per row + ~2rem thead; "Alle" uncaps entirely.
-                contentEl.style.setProperty('--club-stats-rows-max',
-                    v === 'all' ? 'none' : (Number(v) * 2.1 + 2).toFixed(1) + 'rem');
-                try { localStorage.setItem('standplass_list_rows', v); } catch (e) { /* ignore */ }
-            };
-            applyRows();
-            rowsEl.addEventListener('change', applyRows);
+            // Shared helper: every contained-table page wires the same
+            // select, so the preference is one site-wide setting.
+            StandplassFilterWidgets.wireRowsSelect({
+                select: id('-rows'),
+                contentEl: contentEl,
+                storageKey: 'standplass_list_rows'
+            });
 
             // Club search (only visible in toplist view)
             var clubInput = id('-club-input');

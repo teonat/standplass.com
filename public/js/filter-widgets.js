@@ -522,6 +522,47 @@ var StandplassFilterWidgets = (function () {
         });
     }
 
+    // "Rader" — how many rows a contained table shows before it scrolls.
+    // Pure math: ~2.1rem per row + ~2rem thead; "all" uncaps entirely.
+    // Shared by every page that hosts contained scroll tables, so the
+    // preference (persisted by wireRowsSelect) is one site-wide setting.
+    function rowsToMaxHeight(v, rowRem, headRem) {
+        if (v === 'all') { return 'none'; }
+        if (rowRem == null) { rowRem = 2.1; }
+        if (headRem == null) { headRem = 2; }
+        return (Number(v) * rowRem + headRem).toFixed(1) + 'rem';
+    }
+
+    // Wires a "Rader" select: applies the stored (or markup-default)
+    // value as --club-stats-rows-max on contentEl, persists changes to
+    // localStorage[storageKey], and fires onChange(v) after every apply
+    // (initial and change) — consumers use it e.g. to sync a sibling
+    // select bound to the same key. A stored value that is not among
+    // the select's own options is ignored (falls back to the markup
+    // default), so a page can default to a different size than another
+    // page stored.
+    function wireRowsSelect(cfg) {
+        var select = cfg.select;
+        function optionValues() {
+            var vals = [];
+            for (var i = 0; i < select.options.length; i++) { vals.push(String(select.options[i].value)); }
+            return vals;
+        }
+        var stored = null;
+        try { stored = localStorage.getItem(cfg.storageKey); } catch (e) { stored = null; }
+        if (stored != null && optionValues().indexOf(String(stored)) !== -1) {
+            select.value = stored;
+        }
+        function apply() {
+            var v = select.value;
+            cfg.contentEl.style.setProperty('--club-stats-rows-max', rowsToMaxHeight(v, cfg.rowRem, cfg.headRem));
+            try { localStorage.setItem(cfg.storageKey, v); } catch (e) { /* ignore */ }
+            if (cfg.onChange) { cfg.onChange(v); }
+        }
+        select.addEventListener('change', apply);
+        apply();
+    }
+
     return {
         esc: esc,
         renderList: renderList,
@@ -529,7 +570,9 @@ var StandplassFilterWidgets = (function () {
         makeComboHandlers: makeComboHandlers,
         makeCheckboxDropdown: makeCheckboxDropdown,
         makeTagComboHandlers: makeTagComboHandlers,
-        wireClearAllFilters: wireClearAllFilters
+        wireClearAllFilters: wireClearAllFilters,
+        rowsToMaxHeight: rowsToMaxHeight,
+        wireRowsSelect: wireRowsSelect
     };
 })();
 
