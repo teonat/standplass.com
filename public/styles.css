@@ -571,6 +571,15 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     cursor: pointer;
     color: var(--text-muted);
 }
+/* The stats bar's right group: updated stamp, the shared "Kolonner"
+   picker (anchor-wrapped, Fold-alle-styled) and "Fold alle" on one
+   row. */
+.stevner-stats-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
 .dt-group-row th {
     font-size: 0.75rem;
     font-weight: 700;
@@ -1024,9 +1033,6 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    (resultatliste-felt.html:120, 194, 201, 210). */
 .ranking-filters { margin-top: 1rem; }
 .program-toggle { margin-top: 0.5rem; }
-/* The shared "Kolonner" picker row (felt/bane) — same spacing as the
-   toggle rows it follows. */
-.stevner-table-controls { margin-top: 0.5rem; }
 #felt-root > .ranking-table,
 #bane-root > .ranking-table { margin-top: 1.5rem; }
 

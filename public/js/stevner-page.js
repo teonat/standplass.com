@@ -305,8 +305,16 @@ var StandplassStevnerPage = (function () {
             + totals.skyttere + ' deltakelse' + (totals.skyttere !== 1 ? 'r' : '') + ' · '
             + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
             + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
-            + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
-            + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
+            + '<div class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
+            // Shared column picker (owner QA: next to "Fold alle", same
+            // style). The anchor WRAPS the button — the dropdown panel is
+            // absolutely positioned against the anchor's box (its right
+            // edge to the anchor's right edge), so wrapping is what keeps
+            // the panel aligned with the button. data-dt-picker, not the
+            // dt-picker-btn class, is the wiring hook: this button wears
+            // the Fold-alle look.
+            + ' <div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>'
+            + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></div></div>';
     }
 
     function statusBadge(applicableForClassification) {
@@ -501,11 +509,12 @@ var StandplassStevnerPage = (function () {
             // destroy-before-rewire (top3Wire precedent): the dropdown's
             // outside-click listener outlives its DOM, and the wiring
             // must pick up the CURRENT runtimeHidden list (single-club
-            // filter) and width tier. root is document for direct-mount
-            // and the shadow root for embeds — the button comes from the
-            // one buildMarkup, so it is inside root either way. Pages
-            // without the button (klubb, nasjonalt) get null and no
-            // picker.
+            // filter) and width tier. The button lives in the stats bar
+            // (overallStatsBar output, inside rowsEl) — re-created per
+            // render and wired here right after. root is document for
+            // direct-mount and the shadow root for embeds; pages without
+            // the stats bar (< 2 cards, or klubb/nasjonalt which never
+            // run this init) get null and no picker.
             if (pickerWire) { pickerWire.destroy(); pickerWire = null; }
             pickerWire = StandplassDataTable.wirePicker(root, { columns: CARD_COLUMNS }, {
                 onColumnsChange: function (hidden) {
@@ -1135,7 +1144,8 @@ var StandplassStevnerPage = (function () {
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, countUniqueShooters: countUniqueShooters,
-        competitionCardTableSpec: competitionCardTableSpec, statsLine: statsLine, formatUpdated: formatUpdated };
+        competitionCardTableSpec: competitionCardTableSpec, overallStatsBar: overallStatsBar,
+        statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

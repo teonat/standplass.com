@@ -1,10 +1,5 @@
 'use strict';
 var assert = require('node:assert');
-// Global-shim convention from the page tests (dependency script order):
-// table-renderer.js before data-table.js — the cross-check below calls
-// the real renderPickerButton to keep the "byte-mirror" honest.
-global.StandplassTable = require('../public/js/table-renderer.js');
-global.StandplassDataTable = require('../public/js/data-table.js');
 var StandplassEmbed = require('../public/embed.js');
 
 assert.deepStrictEqual(Object.keys(StandplassEmbed.VIEWS).sort(), ['bane', 'felt', 'terminliste']);
@@ -20,27 +15,17 @@ assert.ok(markup.indexOf('id="felt-rows"') !== -1);
 assert.ok(markup.indexOf('id="felt-person-modal"') !== -1);
 assert.ok(markup.indexOf('id="felt-embed-builder"') !== -1);
 
-// The shared "Kolonner" picker for the card tables: buildMarkup emits it
-// as STATIC markup right after the group toggle. It must byte-mirror the
-// base's renderPickerButton() output — buildMarkup runs before the
-// dependency scripts load, so it cannot call into data-table.js; the
-// page wires this button via wirePicker once everything is up.
-var pickerGolden = '<div class="stevner-table-controls">'
-    + '<button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button>'
-    + '<div class="dt-picker-anchor"></div>'
-    + '</div>';
-assert.ok(markup.indexOf(pickerGolden) !== -1,
-    'buildMarkup emits the static shared-picker markup (byte-mirror of renderPickerButton)');
-// The mirror, enforced: the base's own renderPickerButton output must
-// appear verbatim in buildMarkup — if the base's markup ever changes,
-// this fails instead of letting the hardcoded golden above drift.
-assert.ok(markup.indexOf(StandplassDataTable.renderPickerButton()) !== -1,
-    'static picker markup stays a byte-mirror of the real renderPickerButton output');
+// The shared "Kolonner" picker button is NOT buildMarkup's to emit:
+// it lives in the stats bar (stevner-page.js's overallStatsBar, next to
+// "Fold alle") — emitted per render, after the dependencies load, and
+// discovered by wirePicker through its data-dt-picker attribute. The
+// embed markup must stay picker-free.
+assert.ok(markup.indexOf('dt-picker') === -1, 'buildMarkup emits no picker markup (the stats bar owns it)');
 
 var baneMarkup = StandplassEmbed.buildMarkup('bane', 'bane');
 assert.ok(baneMarkup.indexOf('<h1 class="section-title">Baneskyting</h1>') !== -1);
 assert.ok(baneMarkup.indexOf('id="bane-rows"') !== -1);
-assert.ok(baneMarkup.indexOf(pickerGolden) !== -1, 'bane gets the same shared picker');
+assert.ok(baneMarkup.indexOf('dt-picker') === -1, 'bane markup stays picker-free too');
 
 // A second felt instance with a different idPrefix (multiple embeds of the
 // same view on one host page) must not collide on element ids.

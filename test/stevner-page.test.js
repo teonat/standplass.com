@@ -265,4 +265,18 @@ assert.ok(!colBy('discipline').sortable, 'Øvelse is not sortable (group key)');
 // direct renderRows usage (batch 2 renders through the base only).
 assert.strictEqual(SP.columns, undefined, 'the legacy columns export is deleted');
 
+// ── overallStatsBar (batch 2: hosts the shared Kolonner picker) ────────
+// QA round 1 (owner): the Kolonner button lives in the stats bar, left
+// of "Fold alle", with the Fold-alle button style — and the anchor WRAPS
+// the button so the dropdown panel (absolutely positioned against the
+// anchor box) aligns with the button instead of the page edge.
+var statsBar = SP.overallStatsBar(cards, '2026-11-19T10:00:00', 'test');
+assert.ok(statsBar.indexOf('stevner-stats-right') !== -1, 'stats bar renders its right group');
+assert.ok(statsBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
+    'Kolonner: anchor-wrapped, Fold-alle-styled, data-dt-picker hook');
+assert.ok(statsBar.indexOf('data-dt-picker') < statsBar.indexOf('stevner-collapse-all-btn" id="test-collapse-all"'),
+    'Kolonner sits to the LEFT of Fold alle');
+assert.strictEqual(SP.overallStatsBar([cards[0]], '2026-11-19T10:00:00', 'test'), '',
+    'single-card results render no stats bar (and thus no picker)');
+
 console.log('stevner-page.test.js: all assertions passed');

@@ -105,14 +105,6 @@ var StandplassEmbed = (function () {
             + '  <button type="button" class="program-btn" data-group="ovelse" aria-pressed="false">Per øvelse</button>'
             + '  <button type="button" class="program-btn" data-group="poeng" aria-pressed="false">Poengsum</button>'
             + '</div>'
-            // Shared "Kolonner" picker for the card tables. STATIC markup,
-            // byte-mirroring the base's renderPickerButton() output:
-            // buildMarkup runs before the dependency scripts load, so it
-            // cannot call into data-table.js — the page wires this button
-            // with wirePicker once the dependencies are up.
-            + '<div class="stevner-table-controls">'
-            + '<button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button><div class="dt-picker-anchor"></div>'
-            + '</div>'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
             + '<div id="' + idPrefix + '-rows"></div>'
             + '<button class="ranking-more-btn" id="' + idPrefix + '-load-more" type="button">Last flere</button>'
