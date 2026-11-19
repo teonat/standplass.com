@@ -571,10 +571,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     cursor: pointer;
     color: var(--text-muted);
 }
-.stevner-hide-club-col td:nth-child(3), .stevner-hide-club-col th:nth-child(3) {
-    display: none;
-}
-.stevner-disc-group th {
+.dt-group-row th {
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -583,6 +580,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     padding: 0.5rem 0.5rem 0.2rem;
     background: var(--surface-base);
     text-align: left;
+}
+/* Scroll, not squash: a user who forces Klubb/Ranking visible on a
+   narrow screen (explicit choices override the 700px tier) gets a
+   horizontally scrollable card table instead of a broken layout. */
+.stevner-card-table-wrap {
+    overflow-x: auto;
 }
 
 /* ── Ranking filters ──────────────────────────────────── */
@@ -987,25 +990,6 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    override since it's not one of this project's own CSS variables. */
 .section-lead a, .section-lead a:visited { color: var(--brand-accent); }
 .section-lead a:hover { color: var(--brand-accent-dark); }
-
-/* Reuses this repo's existing 700px breakpoint (already used elsewhere in
-   this file, e.g. above) rather than porting the source's 900px -- this
-   repo already treats 700px as its one tablet/mobile line. */
-/* nth-child, not a class on the <th>s: renderRows() emits plain <td>s with no
-   per-cell classes, so a class-based rule would hide the headers only and
-   misalign every card table. Columns: # / Navn / Klubb / Øvelse / Klasse /
-   Poeng / Ranking -- Klubb is 3, Ranking is 7. Coexists with
-   .stevner-hide-club-col (JS-toggled, column 3 only); display:none is
-   idempotent, so both may apply at once.
-   Scoped to [data-comp-id] (stevner-page.js's per-competition cards only,
-   the 7-column layout this rule was written for) -- klubb-page.js reuses
-   the bare .ranking-card class for its own 3-column (#/Navn/Poeng)
-   per-discipline cards, which have no data-comp-id, so an unscoped
-   :nth-child(3) rule was hiding klubb's Poeng column on mobile instead. */
-@media (max-width: 700px) {
-    .ranking-card[data-comp-id] td:nth-child(3), .ranking-card[data-comp-id] th:nth-child(3),
-    .ranking-card[data-comp-id] td:nth-child(7), .ranking-card[data-comp-id] th:nth-child(7) { display: none; }
-}
 
 .ranking-meta {
     font-size: 0.8125rem;

@@ -261,4 +261,8 @@ assert.strictEqual(colBy('rankingScore').hideBelow, 700, 'Ranking declares hideB
 assert.strictEqual(colBy('position').hideBelow, undefined, '# has no hideBelow');
 assert.ok(!colBy('discipline').sortable, 'Øvelse is not sortable (group key)');
 
+// The hand-rolled table assembly is gone: no legacy columns export, no
+// direct renderRows usage (batch 2 renders through the base only).
+assert.strictEqual(SP.columns, undefined, 'the legacy columns export is deleted');
+
 console.log('stevner-page.test.js: all assertions passed');

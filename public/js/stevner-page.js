@@ -258,18 +258,6 @@ var StandplassStevnerPage = (function () {
         return spec;
     }
 
-    // Column order mirrors the sort order (discipline → class → position), so
-    // the "#" column is readable when several disciplines are in view.
-    var columns = [
-        { key: 'position', format: num },
-        { key: 'nameHtml', format: function (v) { return v; }, raw: true },
-        { key: 'club' },
-        { key: 'discipline' },
-        { key: 'class' },
-        { key: 'score', format: num },
-        { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
-    ];
-
     // Rounds for display only -- competitionStats keeps its raw numbers. The
     // extra Number() drops a trailing ".0" so whole numbers stay whole.
     function fmtNum(n) { return n == null ? '–' : String(Number(Number(n).toFixed(1))).replace('.', ','); }
@@ -322,18 +310,12 @@ var StandplassStevnerPage = (function () {
             : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>';
     }
 
-    function renderCard(card, showClassBadge) {
+    function renderCard(card, showClassBadge, spec, state) {
         var titleHtml = esc(card.title || 'Ukjent stevne') + (card.status === 3 ? ' (Avlyst)' : '');
         var links = (card.resultFileUrl ? '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> ' : '')
             + (card.deepLink ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>' : '');
         var meta = [card.startDate ? String(card.startDate).slice(0, 10) : '', card.facilityName, card.organizationName]
             .filter(Boolean).map(esc).join(' · ');
-        var groupsHtml = card.groups.map(function (g) {
-            var headerRow = card.groups.length > 1
-                ? '<tr class="stevner-disc-group"><th scope="colgroup" colspan="' + columns.length + '">' + esc(g.label) + '</th></tr>'
-                : '';
-            return headerRow + StandplassTable.renderRows(columns, g.rows);
-        }).join('');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
             + '<div class="ranking-card-header">'
             + '<div class="stevner-card-info">'
@@ -347,12 +329,13 @@ var StandplassStevnerPage = (function () {
             + '</div>'
             + '<button type="button" class="stevner-collapse-btn" data-comp-id="' + esc(card.id) + '" aria-expanded="true" aria-label="Fold sammen ' + esc(card.title || '') + '"><span class="stevner-collapse-icon">▾</span></button>'
             + '</div>'
-            + '<table class="ranking-table"><thead><tr>'
-            + '<th scope="col">#</th><th scope="col">Navn</th>'
-            + '<th scope="col">Klubb</th>'
-            + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
-            + '<th scope="col">Poeng</th><th scope="col">Ranking</th>'
-            + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
+            // Shared base: sortable headers within groups, responsive
+            // defaults, runtime club hiding — state from the page wiring.
+            // The wrap exists so a user forcing all columns visible on a
+            // narrow screen gets horizontal scroll, not a broken layout.
+            + '<div class="stevner-card-table-wrap">'
+            + StandplassDataTable.renderTable('stevner-card-' + card.id, spec, state)
+            + '</div>'
             + '</div>';
     }
 
@@ -429,16 +412,74 @@ var StandplassStevnerPage = (function () {
         var rowsEl = id('-rows');
         var loadMoreBtn = id('-load-more');
 
+        // ── Card table state (shared base) ────────────────────────────
+        // Width tier computed ONCE per init: the cards' responsive
+        // defaults (Klubb/Ranking hidden on narrow screens) need a
+        // starting tier, and re-computing per render would only pick up
+        // viewport changes after the next filter change. (A live
+        // matchMedia listener that re-renders on crossing 700px is a
+        // later task in this batch.)
+        var currentWidthTier = window.matchMedia('(max-width: 700px)').matches ? 700 : null;
+        // Per-card sort, keyed by competition id. Session-only by owner
+        // ruling — view preferences are never persisted on standplass.
+        var cardSort = {};
+        // Rendered spec per competition id: render() rebuilds these
+        // (cards regroup when filters change); wireCardTable consumes.
+        var cardSpecs = {};
+
+        function cardTableState(cardId) {
+            return {
+                sort: cardSort[cardId] || null,
+                hidden: {},
+                // Exactly one club filtered: every row would show the
+                // same club, so the column is pure noise. Hidden at
+                // runtime (excluded from any picker) — reversible by
+                // widening the club filter.
+                runtimeHidden: activeClubs.length === 1 ? ['club'] : [],
+                widthTier: currentWidthTier
+            };
+        }
+
+        function wireCardTable(cardId) {
+            var tableId = 'stevner-card-' + cardId;
+            var spec = cardSpecs[cardId];
+            if (!spec) { return; }
+            StandplassDataTable.wireTable(rowsEl, tableId, spec, {
+                onSortChange: function (sort) {
+                    cardSort[cardId] = sort;
+                    // Surgical swap: replace only this card's table — a
+                    // full render() would also reset every other card's
+                    // collapsed/expanded state.
+                    var tableEl = rowsEl.querySelector('table[data-dt-id="' + tableId + '"]');
+                    if (tableEl) {
+                        tableEl.outerHTML = StandplassDataTable.renderTable(tableId, spec, cardTableState(cardId));
+                        // The swapped-in table has no listener yet —
+                        // the old one died with the replaced element.
+                        wireCardTable(cardId);
+                    }
+                    // The clicked sort button died with the swap; restore
+                    // focus to its replacement.
+                    var btn = rowsEl.querySelector('table[data-dt-id="' + tableId + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, cardTableState(cardId));
+        }
+
         function render() {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
                 rowsEl.innerHTML = overallStatsBar(visibleCards, lastUpdated, config.idPrefix)
                     + pagination.state.items.map(function (card) {
-                        return renderCard(card, activeTab === 'alle');
+                        var spec = competitionCardTableSpec(card);
+                        cardSpecs[card.id] = spec;
+                        return renderCard(card, activeTab === 'alle', spec, cardTableState(card.id));
                     }).join('');
+                // Old table listeners die with the innerHTML replacement;
+                // no destroy() bookkeeping needed (no picker, no tier
+                // listeners on card tables — both page-level, later tasks).
+                pagination.state.items.forEach(function (card) { wireCardTable(card.id); });
             }
-            rowsEl.classList.toggle('stevner-hide-club-col', activeClubs.length === 1);
             loadMoreBtn.textContent = 'Last flere (viser ' + pagination.state.items.length + ' av ' + visibleCards.length + ' stevner)';
             loadMoreBtn.hidden = pagination.state.done;
         }
@@ -1013,7 +1054,7 @@ var StandplassStevnerPage = (function () {
         flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
-        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,
+        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters,
         competitionCardTableSpec: competitionCardTableSpec, statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 

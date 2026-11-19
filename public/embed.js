@@ -154,7 +154,7 @@ var StandplassEmbed = (function () {
     // script-evaluation time, only later, inside function bodies (init())
     // that don't run until every one of these has already loaded.
     var DEPENDENCY_PATHS = [
-        '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js',
+        '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js', '/js/data-table.js',
         '/js/pagination.js', '/js/person-modal.js', '/js/person-modal-controller.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
         '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',
