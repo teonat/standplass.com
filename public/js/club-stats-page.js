@@ -1108,15 +1108,13 @@ var StandplassClubStats = (function () {
             });
 
             // "Rader" — how many rows each table card shows before it
-            // scrolls. Cosmetic view preference, persisted like the
-            // dark-mode toggle (localStorage, never a URL param — avoids
-            // the tracked-param/mode-collision bug class entirely).
-            // Shared helper: every contained-table page wires the same
-            // select, so the preference is one site-wide setting.
+            // scrolls. Cosmetic view preference, never a URL param and
+            // never persisted (owner ruling 2026-11-19) — the page
+            // always opens at its markup default. Shared helper: every
+            // contained-table page wires the same select shape.
             StandplassFilterWidgets.wireRowsSelect({
                 select: id('-rows'),
-                contentEl: contentEl,
-                storageKey: 'standplass_list_rows'
+                contentEl: contentEl
             });
 
             // Club search (only visible in toplist view)

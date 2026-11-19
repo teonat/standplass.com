@@ -190,14 +190,13 @@ var StandplassNasjonaltPage = (function () {
         var tableWrapEl = id('-table-wrap');
 
         // "Rader" — how many rows the contained scroll table shows
-        // before it scrolls. Shared site-wide preference (same
-        // storage key as klubbstatistikk); this page defaults to 50.
-        // The var is scoped to the table wrap — the page's only scroll
-        // region lives inside it.
+        // before it scrolls. No persistence (owner ruling 2026-11-19):
+        // the page always opens at its markup default (50). The var is
+        // scoped to the table wrap — the page's only scroll region
+        // lives inside it.
         StandplassFilterWidgets.wireRowsSelect({
             select: id('-rows'),
-            contentEl: tableWrapEl,
-            storageKey: 'standplass_list_rows'
+            contentEl: tableWrapEl
         });
 
         var params = new URLSearchParams(urlState.getSearch());

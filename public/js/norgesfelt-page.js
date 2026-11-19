@@ -226,23 +226,22 @@ var StandplassNorgesfeltPage = (function () {
         var cardsWrap = id('-cards-wrap');
 
         // "Rader" — one select per tab panel (the page's precedent: the
-        // individual/total choice is also per-panel), both bound to the
-        // shared site-wide preference and kept in sync. The var is set
-        // on the root — the common ancestor of both panels' scroll
-        // regions. wireRowsSelect's initial apply fires onChange too;
-        // the sibling-sync guard makes that a no-op (same value).
+        // individual/total choice is also per-panel), kept in sync via
+        // onChange. No persistence (owner ruling 2026-11-19): both
+        // panels open at the markup default (30). The var is set on the
+        // root — the common ancestor of both panels' scroll regions.
+        // wireRowsSelect's initial apply fires onChange too; the
+        // sibling-sync guard makes that a no-op (same value).
         var rowsSokSelect = id('-rows');
         var rowsToppSelect = id('-rows-topp');
         StandplassFilterWidgets.wireRowsSelect({
             select: rowsSokSelect,
             contentEl: id('-root'),
-            storageKey: 'standplass_list_rows',
             onChange: function (v) { if (rowsToppSelect.value !== v) { rowsToppSelect.value = v; } }
         });
         StandplassFilterWidgets.wireRowsSelect({
             select: rowsToppSelect,
             contentEl: id('-root'),
-            storageKey: 'standplass_list_rows',
             onChange: function (v) { if (rowsSokSelect.value !== v) { rowsSokSelect.value = v; } }
         });
 

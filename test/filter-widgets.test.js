@@ -34,4 +34,40 @@ assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('all', 2.1, 2), 'none
 assert.strictEqual(StandplassFilterWidgets.rowsToMaxHeight('15'), '33.5rem', 'rowRem/headRem default to 2.1/2');
 assert.strictEqual(typeof StandplassFilterWidgets.wireRowsSelect, 'function', 'wireRowsSelect exported');
 
+// wireRowsSelect: applies the markup default on init and the select's
+// value on change — and NEVER touches localStorage (owner ruling
+// 2026-11-19: no persistence for now; each page opens at its own
+// markup default, and a value left in storage by the pre-batch
+// klubbstatistikk behavior must be ignored). Fake-DOM stand-in, same
+// pattern as the wireClearAllFilters test above.
+var rowsCalls = [];
+var rowsSelect = {
+    value: '30',
+    options: [{ value: '15' }, { value: '30' }, { value: '50' }, { value: 'all' }],
+    changeListener: null,
+    addEventListener: function (evt, fn) { if (evt === 'change') { this.changeListener = fn; } }
+};
+var rowsStyle = {};
+var rowsContent = { style: { setProperty: function (k, v) { rowsStyle[k] = v; } } };
+var storageCalls = [];
+global.localStorage = {
+    getItem: function (k) { storageCalls.push('get:' + k); return '15'; },
+    setItem: function (k, v) { storageCalls.push('set:' + k + '=' + v); }
+};
+StandplassFilterWidgets.wireRowsSelect({
+    select: rowsSelect,
+    contentEl: rowsContent,
+    onChange: function (v) { rowsCalls.push(v); }
+});
+assert.deepStrictEqual(storageCalls, [], 'wireRowsSelect never reads or writes localStorage');
+assert.strictEqual(rowsStyle['--club-stats-rows-max'], '65.0rem',
+    'markup default (30) applied on init — stored 15 ignored');
+assert.deepStrictEqual(rowsCalls, ['30'], 'onChange fired on initial apply');
+rowsSelect.value = 'all';
+rowsSelect.changeListener();
+assert.strictEqual(rowsStyle['--club-stats-rows-max'], 'none', 'change applies the new value');
+assert.deepStrictEqual(rowsCalls, ['30', 'all'], 'onChange fired on change');
+assert.deepStrictEqual(storageCalls, [], 'still no storage writes after a change');
+delete global.localStorage;
+
 console.log('filter-widgets.test.js: all assertions passed');
