@@ -413,12 +413,9 @@ var StandplassStevnerPage = (function () {
         var loadMoreBtn = id('-load-more');
 
         // ── Card table state (shared base) ────────────────────────────
-        // Width tier computed ONCE per init: the cards' responsive
-        // defaults (Klubb/Ranking hidden on narrow screens) need a
-        // starting tier, and re-computing per render would only pick up
-        // viewport changes after the next filter change. (A live
-        // matchMedia listener that re-renders on crossing 700px is a
-        // later task in this batch.)
+        // Width tier computed ONCE per init for the starting render; the
+        // page-level listener below keeps it current afterwards by
+        // re-rendering the card tables when the 700px line is crossed.
         var currentWidthTier = window.matchMedia('(max-width: 700px)').matches ? 700 : null;
         // Per-card sort, keyed by competition id. Session-only by owner
         // ruling — view preferences are never persisted on standplass.
@@ -465,6 +462,28 @@ var StandplassStevnerPage = (function () {
             }, cardTableState(cardId));
         }
 
+        // Re-render every rendered card's bare table in place — surgical
+        // per card, so collapsed/expanded state and sort choices survive
+        // (a full render() would flatten every card and reset collapse).
+        // Driven by the page-level tier listener (and the shared column
+        // picker later in this batch).
+        function rerenderCardTables() {
+            pagination.state.items.forEach(function (card) {
+                var cardEl = rowsEl.querySelector('.ranking-card[data-comp-id="' + card.id + '"]');
+                if (!cardEl) { return; }
+                var tableId = 'stevner-card-' + card.id;
+                var tableEl = cardEl.querySelector('table[data-dt-id="' + tableId + '"]');
+                if (!tableEl) { return; }
+                tableEl.outerHTML = StandplassDataTable.renderTable(tableId, cardSpecs[card.id], cardTableState(card.id));
+                wireCardTable(card.id);
+                // The fresh table lost the collapsed state's hidden flag
+                // (the collapse handler only flips it on click) — re-apply.
+                if (cardEl.classList.contains('ranking-card--collapsed')) {
+                    cardEl.querySelector('table').hidden = true;
+                }
+            });
+        }
+
         function render() {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
@@ -476,12 +495,29 @@ var StandplassStevnerPage = (function () {
                         return renderCard(card, activeTab === 'alle', spec, cardTableState(card.id));
                     }).join('');
                 // Old table listeners die with the innerHTML replacement;
-                // no destroy() bookkeeping needed (no picker, no tier
-                // listeners on card tables — both page-level, later tasks).
+                // no destroy() bookkeeping needed (neither the picker nor
+                // the tier listener lives on the card tables — both are
+                // page-level).
                 pagination.state.items.forEach(function (card) { wireCardTable(card.id); });
             }
             loadMoreBtn.textContent = 'Last flere (viser ' + pagination.state.items.length + ' av ' + visibleCards.length + ' stevner)';
             loadMoreBtn.hidden = pagination.state.done;
+        }
+
+        // ONE page-level tier listener: crossing the 700px line updates
+        // currentWidthTier and surgically re-renders the card tables
+        // (collapse-preserving). Fires on change only — the initial tier
+        // was computed at init. No per-card listeners, nothing to
+        // destroy: each swap's old table listener dies with its element.
+        var tierMql = window.matchMedia('(max-width: 700px)');
+        var onTierChange = function () {
+            currentWidthTier = tierMql.matches ? 700 : null;
+            rerenderCardTables();
+        };
+        if (typeof tierMql.addEventListener === 'function') {
+            tierMql.addEventListener('change', onTierChange);
+        } else if (typeof tierMql.addListener === 'function') {
+            tierMql.addListener(onTierChange);
         }
 
         function setStatus(msg, isError) {
