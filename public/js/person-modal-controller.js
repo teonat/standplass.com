@@ -44,6 +44,8 @@ var StandplassPersonModalController = (function () {
         var personOpenSeq = 0;
         var modalMetric = cfg.initialMetric || 'rankingScore';
         var modalEntries = [];
+        var chartHandle = null; // set by drawChart; row clicks use it to
+                                // activate the chart's dot for that entry
         var syncCurrentPersonModalUrl = function () {};
 
         // Same "use it if the host page already rendered one, otherwise
@@ -96,7 +98,11 @@ var StandplassPersonModalController = (function () {
 
         function drawChart() {
             var chartEl = id('-person-chart');
-            if (chartEl) { StandplassPersonModal.renderChart(chartEl, modalEntries, modalMetric); }
+            if (chartEl) {
+                chartHandle = StandplassPersonModal.renderChart(chartEl, modalEntries, modalMetric, {
+                    onDotSelect: onChartDotSelected
+                });
+            }
         }
 
         function fetchPersonYear(personId, year) {
@@ -306,34 +312,35 @@ var StandplassPersonModalController = (function () {
             drawChart();
         });
 
-        // Row↔dot linking (both directions, delegated on the persistent
-        // modal element so it survives every refresh). Dots remain the
-        // keyboard entry point: rows are tabindex="-1", focused
-        // programmatically only when a dot is clicked.
+        // Row↔dot linking. Chart-side activation (click/tap/keyboard on the
+        // chart) lives in person-modal.js's chart wiring and reports back
+        // through onDotSelect; this side owns the reverse direction (row
+        // click → chart) plus the row highlight itself. Both delegated on
+        // the persistent modal element so they survive every refresh. Dots
+        // remain the keyboard entry point: rows are tabindex="-1", focused
+        // programmatically only when a dot is activated from the chart.
         function clearRowHighlight() {
             Array.prototype.forEach.call(modalEl.querySelectorAll('.person-row-highlight'), function (el) {
                 el.classList.remove('person-row-highlight');
             });
         }
-        modalEl.addEventListener('click', function (e) {
-            var dot = e.target.closest('.person-chart-dot');
-            if (dot && dot.getAttribute('data-idx') != null) {
-                clearRowHighlight();
-                var row = modalEl.querySelector('tr[data-idx="' + dot.getAttribute('data-idx') + '"]');
-                if (row) {
-                    row.classList.add('person-row-highlight');
-                    row.scrollIntoView({ block: 'nearest' });
-                    row.focus();
-                }
-                return;
+        function onChartDotSelected(dotEl) {
+            clearRowHighlight();
+            if (!dotEl) { return; }
+            var row = modalEl.querySelector('tr[data-idx="' + dotEl.getAttribute('data-idx') + '"]');
+            if (row) {
+                row.classList.add('person-row-highlight');
+                row.scrollIntoView({ block: 'nearest' });
+                row.focus();
             }
+        }
+        modalEl.addEventListener('click', function (e) {
             var row = e.target.closest('tr[data-idx]');
             if (!row) { return; }
-            Array.prototype.forEach.call(modalEl.querySelectorAll('.person-chart-dot--linked'), function (el) {
-                el.classList.remove('person-chart-dot--linked');
-            });
-            var linkDot = modalEl.querySelector('.person-chart-dot[data-idx="' + row.getAttribute('data-idx') + '"]');
-            if (linkDot) { linkDot.classList.add('person-chart-dot--linked'); }
+            // Rows whose entry has no dot on the current metric's chart
+            // resolve to nothing inside the chart — activateDot then clears
+            // the active state instead of silently leaving a stale one.
+            if (chartHandle) { chartHandle.activateDot(row.getAttribute('data-idx')); }
         });
 
         function open(triggerEl, opts) {

@@ -25,7 +25,7 @@ assert.deepStrictEqual(rows.map(function (r) { return r.date; }), ['2025-12-30',
 var container = { innerHTML: '' };
 PM.renderChart(container, rows, 'rankingScore');
 assert.strictEqual(container.innerHTML.match(/points="([^"]*)"/)[1].split(' ').length, 2, 'same-day competitions must share one line point');
-assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 3, 'all dated results still get a dot');
+assert.strictEqual((container.innerHTML.match(/class="person-chart-dot"/g) || []).length, 3, 'all dated results still get a dot');
 
 var comps = [
     {

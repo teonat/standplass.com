@@ -196,13 +196,68 @@ var StandplassPersonModal = (function () {
             + '</div>';
     }
 
-    function wireChartTooltip(svgContainer, pts, metric) {
+    var CHART_TITLES = { rankingScore: 'Ranking', score: 'Poengsum', position: 'Plassering' };
+    var CHART_EMPTY_MSG = {
+        rankingScore: 'Ingen ranking tilgjengelig (kun for klasseførende stevner i klasse)',
+        score: 'Ingen poengdata tilgjengelig',
+        position: 'Ingen plasseringsdata tilgjengelig'
+    };
+
+    // ViewBox dimensions and the pointer-resolution radius, in viewBox units.
+    // 16 units ≈ a 25px target on a 390px phone and ~48px on a typical
+    // desktop — the dots themselves are r=2 (≈3px on mobile), far too small
+    // to hit with a finger. Resolution is nearest-dot, not topmost-element,
+    // so overlapping neighborhoods never steal a tap from a closer dot.
+    var CHART_W = 400, CHART_H = 120, DOT_HIT_RADIUS = 16;
+
+    // points: [{x, y}]; returns the index of the nearest point within
+    // maxDist (exclusive), or -1. An exact tie resolves to the earlier
+    // point.
+    function findNearestPoint(points, x, y, maxDist) {
+        var best = -1, bestD = maxDist * maxDist;
+        for (var i = 0; i < points.length; i++) {
+            var dx = points[i].x - x, dy = points[i].y - y;
+            var d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
+    // Chart interactions: tooltip + one unified active-dot state. Pointer
+    // events resolve nearest-dot (findNearestPoint) instead of hit-testing
+    // the r=2 dot elements themselves — that is what makes dots usable
+    // with a finger (see DOT_HIT_RADIUS). Activation drives the selection
+    // ring, the pinned tooltip, and (via opts.onDotSelect) the caller's
+    // row highlight together — they can no longer disagree, which the
+    // older separate pinned-tooltip / linked-dot states allowed.
+    function wireChartInteractions(svgContainer, pts, metric, opts) {
+        var svgEl = svgContainer.querySelector('svg');
         var tooltip = svgContainer.querySelector('.chart-tooltip');
-        var pinned = null;
+        var dots = Array.prototype.map.call(
+            svgContainer.querySelectorAll('.person-chart-dot'),
+            function (el) {
+                return {
+                    el: el,
+                    idx: el.getAttribute('data-idx'),
+                    x: parseFloat(el.getAttribute('cx')),
+                    y: parseFloat(el.getAttribute('cy')),
+                    ring: svgContainer.querySelector('.person-chart-dot-ring[data-idx="' + el.getAttribute('data-idx') + '"]')
+                };
+            }
+        );
+        var activeIdx = null;
+
+        function activeDot() {
+            if (activeIdx == null) { return null; }
+            for (var i = 0; i < dots.length; i++) {
+                if (dots[i].idx === activeIdx) { return dots[i]; }
+            }
+            return null;
+        }
         function siblingsOf(dot) {
             return pts.filter(function (e) { return e.date === dot.dataset.date && fmtMetric(e[metric], metric) === dot.dataset.val; });
         }
-        function show(dot) {
+        function showTip(dot) {
             var entry = { date: dot.dataset.date, discipline: dot.dataset.disc, class: dot.dataset.class };
             entry[metric] = Number(dot.dataset.val);
             tooltip.innerHTML = buildTooltipContent(entry, siblingsOf(dot), metric);
@@ -219,26 +274,113 @@ var StandplassPersonModal = (function () {
             tooltip.style.left = left + 'px';
             tooltip.style.top = (rect.top - wrapRect.top - tooltip.offsetHeight - 6) + 'px';
         }
-        function hide() { if (!pinned) { tooltip.hidden = true; } }
-        svgContainer.addEventListener('mouseover', function (e) { var d = e.target.closest('.person-chart-dot'); if (d) { show(d); } });
-        svgContainer.addEventListener('mouseout', hide);
-        svgContainer.addEventListener('focusin', function (e) { var d = e.target.closest('.person-chart-dot'); if (d) { show(d); } });
-        svgContainer.addEventListener('focusout', hide);
-        svgContainer.addEventListener('click', function (e) {
-            var d = e.target.closest('.person-chart-dot');
-            if (d) { pinned = (pinned === d) ? null : d; if (pinned) { show(d); } else { hide(); } }
-            else if (pinned) { pinned = null; hide(); }
+        function hideTip() { tooltip.hidden = true; }
+        function clearActiveClasses() {
+            dots.forEach(function (d) {
+                if (d.ring) { d.ring.classList.remove('person-chart-dot-ring--active'); }
+                d.el.classList.remove('person-chart-dot--active');
+            });
+        }
+        function activate(d) {
+            clearActiveClasses();
+            activeIdx = d.idx;
+            if (d.ring) { d.ring.classList.add('person-chart-dot-ring--active'); }
+            d.el.classList.add('person-chart-dot--active');
+            showTip(d.el);
+        }
+        function deactivate() {
+            clearActiveClasses();
+            activeIdx = null;
+            hideTip();
+        }
+        function notify(dotEl) {
+            if (opts.onDotSelect) { opts.onDotSelect(dotEl); }
+        }
+        function clientToViewBox(clientX, clientY) {
+            var r = svgEl.getBoundingClientRect();
+            if (!r.width || !r.height) { return null; }
+            return { x: (clientX - r.left) / r.width * CHART_W, y: (clientY - r.top) / r.height * CHART_H };
+        }
+        function resolve(e) {
+            var p = clientToViewBox(e.clientX, e.clientY);
+            return p ? findNearestPoint(dots, p.x, p.y, DOT_HIT_RADIUS) : -1;
+        }
+        function findByEl(el) {
+            for (var i = 0; i < dots.length; i++) {
+                if (dots[i].el === el) { return dots[i]; }
+            }
+            return null;
+        }
+
+        // Listeners live on the svg element (recreated on every render),
+        // never on the persistent container — a metric toggle or filter
+        // change re-renders the chart, and container-level listeners from
+        // the previous wiring would accumulate and act on detached DOM.
+        svgEl.addEventListener('mousemove', function (e) {
+            var i = resolve(e);
+            if (i >= 0) { showTip(dots[i].el); }
         });
+        svgEl.addEventListener('mouseleave', function () {
+            var d = activeDot();
+            if (d) { showTip(d.el); } else { hideTip(); }
+        });
+        svgEl.addEventListener('focusin', function (e) {
+            if (e.target.classList && e.target.classList.contains('person-chart-dot')) { showTip(e.target); }
+        });
+        svgEl.addEventListener('focusout', function () {
+            var d = activeDot();
+            if (d) { showTip(d.el); } else { hideTip(); }
+        });
+        svgEl.addEventListener('click', function (e) {
+            var i = resolve(e);
+            if (i < 0 || dots[i].idx === activeIdx) {
+                var wasActive = activeIdx != null;
+                deactivate();
+                if (wasActive) { notify(null); }
+                return;
+            }
+            activate(dots[i]);
+            notify(dots[i].el);
+        });
+        // Keyboard activation: dots are tabindex="0" and show the tooltip
+        // on focus, but before this they had no way to *select* — the row
+        // link was click-only.
+        svgEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            var el = e.target.closest && e.target.closest('.person-chart-dot');
+            if (!el) { return; }
+            e.preventDefault();
+            var d = findByEl(el);
+            if (!d) { return; }
+            if (activeIdx === d.idx) { deactivate(); notify(null); }
+            else { activate(d); notify(d.el); }
+        });
+
+        return {
+            // External entry point for table-row clicks: activates the dot
+            // for an entry (ring + tooltip), scrolls the chart into view —
+            // the row clicker is usually scrolled past the chart — and
+            // notifies the caller exactly like a chart-side activation, so
+            // the clicked row gets the same highlight and any previously
+            // highlighted row is cleared. An unknown index (entry not on
+            // this metric's chart) clears the active state.
+            activateDot: function (dataIdx) {
+                var d = null;
+                for (var i = 0; i < dots.length; i++) {
+                    if (dots[i].idx === String(dataIdx)) { d = dots[i]; break; }
+                }
+                if (!d) { deactivate(); notify(null); return; }
+                activate(d);
+                svgEl.scrollIntoView({ block: 'nearest' });
+                notify(d.el);
+            },
+            clearActive: function () { deactivate(); }
+        };
     }
 
-    var CHART_TITLES = { rankingScore: 'Ranking', score: 'Poengsum', position: 'Plassering' };
-    var CHART_EMPTY_MSG = {
-        rankingScore: 'Ingen ranking tilgjengelig (kun for klasseførende stevner i klasse)',
-        score: 'Ingen poengdata tilgjengelig',
-        position: 'Ingen plasseringsdata tilgjengelig'
-    };
-
-    function renderChart(svgContainer, entries, metric) {
+    function renderChart(svgContainer, entries, metric, opts) {
+        opts = opts || {};
+        var noopHandle = { activateDot: function () {}, clearActive: function () {} };
         var pts = chartPoints(entries, metric).slice().sort(function (a, b) {
             return a.date < b.date ? -1 : 1;
         });
@@ -246,7 +388,7 @@ var StandplassPersonModal = (function () {
         if (pts.length < 2) {
             svgContainer.innerHTML = '<div class="person-chart-wrap"><p style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.5rem;">'
                 + (CHART_EMPTY_MSG[metric] || 'Ikke nok data for graf.') + '</p></div>';
-            return;
+            return noopHandle;
         }
 
         // Line goes through the best result per date; all dots are still shown.
@@ -261,7 +403,7 @@ var StandplassPersonModal = (function () {
         });
         var linePts = Object.keys(byDate).sort().map(function (d) { return byDate[d]; });
 
-        var W = 400, H = 120, PL = 40, PR = 8, PT = 8, PB = 24;
+        var W = CHART_W, H = CHART_H, PL = 40, PR = 8, PT = 8, PB = 24;
         var vals = pts.map(function (e) { return Number(e[metric]); });
         var minS = Math.min.apply(null, vals);
         var maxS = Math.max.apply(null, vals);
@@ -336,11 +478,20 @@ var StandplassPersonModal = (function () {
             var y = PT + norm(Number(e[metric])) * (H - PT - PB);
             var color = dotColor(e, metric);
             var key = e.date + '|' + fmtMetric(e[metric], metric);
+            var idx = entryIdx.get(e);
+            // Decorative same-day marker: classed so CSS can drop it out
+            // of pointer events entirely (it sits over the plot and would
+            // otherwise swallow taps that the resolution layer below
+            // should own).
             var ring = overlapCounts[key] > 1
-                ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="none" stroke="' + color + '"/>' : '';
-            return ring + '<circle class="person-chart-dot" tabindex="0" data-date="' + esc(e.date) + '" data-val="' + esc(fmtMetric(e[metric], metric))
+                ? '<circle class="person-chart-overlap-ring" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="none" stroke="' + color + '"/>' : '';
+            // Selection ring: the visible active indicator, paired to its
+            // dot by data-idx. Hidden (opacity 0) until activated.
+            var selRing = '<circle class="person-chart-dot-ring" data-idx="' + idx + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5.5"/>';
+            return ring + selRing
+                + '<circle class="person-chart-dot" tabindex="0" data-date="' + esc(e.date) + '" data-val="' + esc(fmtMetric(e[metric], metric))
                 + '" data-disc="' + esc(e.discipline || '') + '" data-class="' + esc(e.class || '')
-                + '" data-idx="' + entryIdx.get(e) + '"'
+                + '" data-idx="' + idx + '"'
                 + ' aria-label="' + esc(fmtMetric(e[metric], metric) + ' – ' + shortDate(e.date)) + '"'
                 + ' cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2" fill="' + color + '"/>';
         }).join('');
@@ -363,8 +514,9 @@ var StandplassPersonModal = (function () {
         // {innerHTML} stand-ins with no real DOM behind them (see
         // test/person-modal.test.js) — real callers always pass an element.
         if (typeof svgContainer.querySelector === 'function') {
-            wireChartTooltip(svgContainer, pts, metric);
+            return wireChartInteractions(svgContainer, pts, metric, opts);
         }
+        return { activateDot: function () {}, clearActive: function () {} };
     }
 
     return {
@@ -376,6 +528,7 @@ var StandplassPersonModal = (function () {
         dotColor: dotColor,
         computeOverlapCounts: computeOverlapCounts,
         buildTooltipContent: buildTooltipContent,
+        findNearestPoint: findNearestPoint,
         renderChart: renderChart,
         mergeYearEntries: mergeYearEntries,
         getFilteredEntries: getFilteredEntries,
