@@ -1584,6 +1584,12 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
    the toolbar and renders off-screen). */
 .dt-picker-anchor { position: relative; }
 
+/* A picker button hosted in a controls row (e.g. the top-3 mode row)
+   sits at the row's right end, and its panel opens leftward from the
+   anchor so it stays inside the card. */
+.top3-mode .dt-picker-btn { margin-left: auto; }
+.dt-picker-anchor .checkbox-dropdown-panel { left: auto; }
+
 /* Same visual treatment as .checkbox-dropdown-btn (values copied, not
    restyled) minus the filter-bar width:100%. */
 .dt-picker-btn {
