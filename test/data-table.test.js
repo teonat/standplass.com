@@ -240,4 +240,20 @@ assert.ok(wHtml.indexOf('<div class="ranking-card-table-wrap club-stats-list-scr
     && wHtml.slice(-6) === '</div>',
     'wrapClass wraps toolbar + table');
 
+// --- wireTable: guard against non-DOM roots (Node stand-in) ---
+var wired = StandplassDataTable.wireTable({}, 'guard-test', { columns: [], rows: [] }, {});
+assert.strictEqual(typeof wired.destroy, 'function', 'wireTable returns { destroy }');
+wired.destroy();
+
+// with handlers and state present it still no-ops safely
+var wired2 = StandplassDataTable.wireTable(
+    {},
+    'guard-test',
+    { columns: [{ key: 'a', label: 'A' }], rows: [{ a: 1 }], picker: { buttonLabel: 'Kolonner' } },
+    { onSortChange: function () {}, onColumnsChange: function () {}, onWidthTierChange: function () {}, onRowClick: function () {} },
+    { hidden: {}, runtimeHidden: [], widthTier: null }
+);
+assert.strictEqual(typeof wired2.destroy, 'function', 'wired table with full handlers returns { destroy }');
+wired2.destroy();
+
 console.log('data-table.test.js: all assertions passed');
