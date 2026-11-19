@@ -214,6 +214,77 @@ var StandplassDataTable = (function () {
             : toolbar + tableHtml;
     }
 
+    // ── Column picker wiring ─────────────────────────────────────────
+    // The picker-dropdown half of wireTable, callable WITHOUT a table:
+    // a page can host ONE picker (renderPickerButton markup in its own
+    // controls row) and wire it against a column spec + shared state.
+    // scopeRoot is the element to search for the button + anchor —
+    // wireTable passes the toolbar renderTable emitted (when it hosts
+    // the picker) or its own root (page-hosted buttons); standalone
+    // callers pass their page root. Returns { destroy } or null when no
+    // button/anchor is present.
+    function wirePicker(scopeRoot, opts, handlers, state) {
+        opts = opts || {};
+        handlers = handlers || {};
+        state = state || {};
+        if (typeof scopeRoot.querySelector !== 'function') {
+            return null;
+        }
+        var columns = opts.columns || [];
+        var pickerBtn = scopeRoot.querySelector('.dt-picker-btn');
+        var anchor = scopeRoot.querySelector('.dt-picker-anchor');
+        if (!pickerBtn || !anchor) { return null; }
+        anchor.innerHTML = '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'
+            + '<ul class="checkbox-dropdown-list"></ul></div>';
+        // A checkbox reflects EFFECTIVE visibility — the user's explicit
+        // choice, else the tier/default defaults (a narrow-width-hidden
+        // column shows unchecked on a phone so it can be re-enabled).
+        // runtimeHidden columns are not listed at all: the page hid them
+        // because they are useless under the current view, not as a
+        // default the user might override.
+        function effectivelyHidden(col) {
+            var user = state.hidden != null && state.hidden[col.key] != null
+                ? state.hidden[col.key]
+                : null;
+            if (user != null) { return user; }
+            return !!(hiddenByWidth(col, state.widthTier) || col.defaultHidden);
+        }
+        var runtime = state.runtimeHidden || [];
+        var listed = columns.filter(function (col) { return runtime.indexOf(col.key) === -1; });
+        var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
+            btn: pickerBtn,
+            panel: anchor.querySelector('.checkbox-dropdown-panel'),
+            list: anchor.querySelector('.checkbox-dropdown-list'),
+            clearAllBtn: anchor.querySelector('.checkbox-dropdown-clear-all'),
+            labelNone: 'Ingen kolonner',
+            getItems: function () {
+                return listed.map(function (col) {
+                    return { id: col.key, name: col.label };
+                });
+            },
+            getSelected: function () {
+                return listed.filter(function (col) { return !effectivelyHidden(col); })
+                    .map(function (col) { return col.key; });
+            },
+            onToggle: function (colKey, name, checked) {
+                if (!handlers.onColumnsChange) { return; }
+                var next = {};
+                var src = state.hidden || {};
+                Object.keys(src).forEach(function (k) { next[k] = src[k]; });
+                next[colKey] = !checked;
+                handlers.onColumnsChange(next);
+            },
+            onClearAll: function () {
+                if (handlers.onColumnsChange) { handlers.onColumnsChange({}); }
+            }
+        });
+        dropdown.rebuild();
+        // The picker is a settings control, not a filter readout:
+        // keep the button's own label ("Kolonner") instead of the
+        // dropdown's selection-count text.
+        pickerBtn.textContent = (opts.picker && opts.picker.buttonLabel) || 'Kolonner';
+        return { destroy: function () { dropdown.destroy(); } };
+    }
     // ── Wiring ────────────────────────────────────────────────────────
     // Attaches to elements the base rendered inside the caller-supplied
     // root: one delegated click listener on the table (sort buttons +
@@ -274,63 +345,16 @@ var StandplassDataTable = (function () {
         }
 
         // Column picker: the toolbar renderTable emitted immediately
-        // before the table owns the "Kolonner" button and the anchor.
-        // Wire the dropdown onto that rendered button and build only the
-        // panel scaffold inside the anchor (mirroring the established
-        // mountFilterDropdown pattern; the checkbox-dropdown-* classes
-        // reuse the existing styles). The anchor is the positioning
-        // context for the absolutely-positioned panel.
+        // before the table owns the "Kolonner" button and the anchor
+        // (scopeRoot = that toolbar, so multiple tables each find their
+        // own button); page-hosted buttons are found via the root.
+        // Delegates to wirePicker — behavior-neutral for existing
+        // consumers.
         if (opts.picker && table) {
             var toolbar = table.previousElementSibling;
             var fromToolbar = toolbar && toolbar.classList && toolbar.classList.contains('dt-toolbar');
-            var pickerBtn = fromToolbar
-                ? toolbar.querySelector('.dt-picker-btn')
-                : root.querySelector('.dt-picker-btn');
-            var anchor = fromToolbar
-                ? toolbar.querySelector('.dt-picker-anchor')
-                : root.querySelector('.dt-picker-anchor');
-            if (pickerBtn && anchor) {
-                anchor.innerHTML = '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'
-                    + '<ul class="checkbox-dropdown-list"></ul></div>';
-                function userHidden(col) {
-                    return state.hidden != null && state.hidden[col.key] != null
-                        ? state.hidden[col.key]
-                        : col.defaultHidden;
-                }
-                var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
-                    btn: pickerBtn,
-                    panel: anchor.querySelector('.checkbox-dropdown-panel'),
-                    list: anchor.querySelector('.checkbox-dropdown-list'),
-                    clearAllBtn: anchor.querySelector('.checkbox-dropdown-clear-all'),
-                    labelNone: 'Ingen kolonner',
-                    getItems: function () {
-                        return columns.map(function (col) {
-                            return { id: col.key, name: col.label };
-                        });
-                    },
-                    getSelected: function () {
-                        return columns.filter(function (col) { return !userHidden(col); })
-                            .map(function (col) { return col.key; });
-                    },
-                    onToggle: function (colKey, name, checked) {
-                        if (!handlers.onColumnsChange) { return; }
-                        var next = {};
-                        var src = state.hidden || {};
-                        Object.keys(src).forEach(function (k) { next[k] = src[k]; });
-                        next[colKey] = !checked;
-                        handlers.onColumnsChange(next);
-                    },
-                    onClearAll: function () {
-                        if (handlers.onColumnsChange) { handlers.onColumnsChange({}); }
-                    }
-                });
-                dropdown.rebuild();
-                // The picker is a settings control, not a filter readout:
-                // keep the toolbar's own label ("Kolonner") instead of the
-                // dropdown's selection-count text.
-                pickerBtn.textContent = (opts.picker && opts.picker.buttonLabel) || 'Kolonner';
-                cleanups.push(function () { dropdown.destroy(); });
-            }
+            var pickerWire = wirePicker(fromToolbar ? toolbar : root, opts, handlers, state);
+            if (pickerWire) { cleanups.push(pickerWire.destroy); }
         }
 
         // Width tiers: one matchMedia per distinct hideBelow breakpoint,
@@ -395,6 +419,7 @@ var StandplassDataTable = (function () {
         sortRowsNullsLast: sortRowsNullsLast,
         renderTable: renderTable,
         renderPickerButton: renderPickerButton,
+        wirePicker: wirePicker,
         wireTable: wireTable
     };
 })();

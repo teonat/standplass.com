@@ -152,6 +152,11 @@ var secHtml = StandplassDataTable.renderTable('sec-test',
 assert.ok(secHtml.indexOf('Ærlig') < secHtml.indexOf('Åpen') && secHtml.indexOf('Åpen') < secHtml.indexOf('Grovfelt'),
     'renderTable: øvelse sort with secondaryKey renders tie-broken order');
 
+// wirePicker: the picker-dropdown half of wireTable, callable without a
+// table (page-level pickers) — export pin; the wiring itself is DOM/
+// manual-QA per project convention.
+assert.strictEqual(typeof StandplassDataTable.wirePicker, 'function', 'wirePicker exported');
+
 // --- renderTable: golden markup ---
 
 function escText(s) {
