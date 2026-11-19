@@ -401,6 +401,39 @@ var StandplassClubStats = (function () {
         };
     }
 
+    // The drilldown chart's "Vis data som tabell" details table. Points
+    // are the active metric's year-value series ({year, value}); a year
+    // lacking a point in a series renders '–' and sorts last. Age
+    // metrics format via formatAgeValue, exactly as the hand-rolled
+    // table did.
+    function chartTableSpec(activeMetric, feltPoints, banePoints) {
+        feltPoints = feltPoints || [];
+        banePoints = banePoints || [];
+        var isAge = activeMetric === 'avgAge' || activeMetric === 'medianAge';
+        var label = isAge
+            ? (activeMetric === 'avgAge' ? 'snittalder' : 'medianalder')
+            : (activeMetric === 'starts' ? 'starter' : 'skyttere');
+        var yearSet = {};
+        feltPoints.concat(banePoints).forEach(function (p) { yearSet[p.year] = true; });
+        var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
+        function byYear(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
+        function ageOrRaw(v) { return isAge ? formatAgeValue(v) : v; }
+        return {
+            columns: [
+                { key: 'year', label: 'År', sortable: true, defaultDir: 'asc' },
+                { key: 'felt', label: 'Felt ' + label, align: 'right', sortable: true, defaultDir: 'desc',
+                    cell: function (row) { return row.felt != null ? ageOrRaw(row.felt) : '–'; } },
+                { key: 'bane', label: 'Bane ' + label, align: 'right', sortable: true, defaultDir: 'desc',
+                    cell: function (row) { return row.bane != null ? ageOrRaw(row.bane) : '–'; } }
+            ],
+            rows: years.map(function (yr) {
+                var f = byYear(feltPoints, yr), b = byYear(banePoints, yr);
+                return { year: yr, felt: f ? f.value : null, bane: b ? b.value : null };
+            }),
+            ariaLabel: 'Aktivitet per år'
+        };
+    }
+
     // Pure HTML builder for the Klassefordeling card. The disclaimer's
     // øvelse list is generated from ALWAYS_OPEN_DISCIPLINES so text and
     // behavior cannot drift apart. The table renders through the shared
@@ -987,6 +1020,11 @@ var StandplassClubStats = (function () {
         // top3State.
         var drilldownSort = {};
         var drilldownSpecs = {};
+        // Chart details table ("Vis data som tabell"): sort state + the
+        // spec the section last rendered with. Survives the metric
+        // toggle's section re-renders; reset only with the club (below).
+        var chartSort = null;
+        var chartSpec = null;
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -1285,47 +1323,30 @@ var StandplassClubStats = (function () {
                     { title: 'Unike skyttere per år: felt og bane' });
             }
 
-            // Details table follows the active metric.
-            var head, body;
+            // Details table follows the active metric (shared base; the
+            // spec is registered for wiring — sort state survives the
+            // metric toggle's section re-render).
+            var feltPoints, banePoints;
             if (activeMetric === 'avgAge' || activeMetric === 'medianAge') {
-                var data = getAgeSeriesData(resolved);
-                var ageArr = activeMetric === 'avgAge' ? { felt: data.felt.avg, bane: data.bane.avg } : { felt: data.felt.median, bane: data.bane.median };
-                function byYearAge(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
-                var yearSetA = {};
-                ageArr.felt.concat(ageArr.bane).forEach(function (p) { yearSetA[p.year] = true; });
-                var yearsA = Object.keys(yearSetA).map(Number).sort(function (a, b) { return a - b; });
-                var ageColLabel = activeMetric === 'avgAge' ? 'snittalder' : 'medianalder';
-                head = '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt ' + ageColLabel + '</th><th scope="col" class="ranking-score">Bane ' + ageColLabel + '</th></tr></thead>';
-                body = yearsA.map(function (yr) {
-                    var fa = byYearAge(ageArr.felt, yr), ba = byYearAge(ageArr.bane, yr);
-                    return '<tr><td>' + esc(String(yr)) + '</td>'
-                        + '<td class="ranking-score">' + (fa ? formatAgeValue(fa.value) : '–') + '</td>'
-                        + '<td class="ranking-score">' + (ba ? formatAgeValue(ba.value) : '–') + '</td></tr>';
-                }).join('');
+                var ageData = getAgeSeriesData(resolved);
+                feltPoints = activeMetric === 'avgAge' ? ageData.felt.avg : ageData.felt.median;
+                banePoints = activeMetric === 'avgAge' ? ageData.bane.avg : ageData.bane.median;
+            } else if (activeMetric === 'starts') {
+                feltPoints = feltStarts;
+                banePoints = baneStarts;
             } else {
-                var yearSet = {};
-                feltShooters.concat(baneShooters).concat(feltStarts).concat(baneStarts)
-                    .forEach(function (p) { yearSet[p.year] = true; });
-                var years = Object.keys(yearSet).map(Number).sort(function (a, b) { return a - b; });
-                function byYear(arr, yr) { return arr.filter(function (p) { return p.year === yr; })[0]; }
-                head = activeMetric === 'starts'
-                    ? '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt starter</th><th scope="col" class="ranking-score">Bane starter</th></tr></thead>'
-                    : '<thead><tr><th scope="col">År</th><th scope="col" class="ranking-score">Felt skyttere</th><th scope="col" class="ranking-score">Bane skyttere</th></tr></thead>';
-                body = years.map(function (yr) {
-                    var a = byYear(activeMetric === 'starts' ? feltStarts : feltShooters, yr);
-                    var b = byYear(activeMetric === 'starts' ? baneStarts : baneShooters, yr);
-                    return '<tr><td>' + esc(String(yr)) + '</td>'
-                        + '<td class="ranking-score">' + (a ? a.value : '–') + '</td>'
-                        + '<td class="ranking-score">' + (b ? b.value : '–') + '</td></tr>';
-                }).join('');
+                feltPoints = feltShooters;
+                banePoints = baneShooters;
             }
+            chartSpec = chartTableSpec(activeMetric, feltPoints, banePoints);
 
             return '<section class="ranking-card club-stats-section" data-club-chart-section>'
                 + '<div class="ranking-card-header"><h2 class="ranking-card-title">Aktivitet over tid</h2></div>'
                 + '<div class="club-stats-chart-toggle">' + renderMetricToggleHtml(activeMetric) + '</div>'
                 + chart
                 + '<details><summary>Vis data som tabell</summary><div class="club-stats-list-scroll">'
-                + '<table class="ranking-table">' + head + '<tbody>' + body + '</tbody></table></div></details></section>';
+                + StandplassDataTable.renderTable('chart-data', chartSpec, chartTableState())
+                + '</div></details></section>';
         }
 
         function renderToplists() {
@@ -1567,6 +1588,7 @@ var StandplassClubStats = (function () {
             if (resolved !== top3Club) {
                 top3State = { mode: 'top3', hidden: {} };
                 drilldownSort = {};
+                chartSort = null;
             }
             top3Club = resolved;
             var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
@@ -1588,6 +1610,7 @@ var StandplassClubStats = (function () {
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
             wireTop3();
             wireDrilldownTables();
+            wireChartTable();
         }
 
         // ── Drilldown table wiring ─────────────────────────────────────
@@ -1624,6 +1647,29 @@ var StandplassClubStats = (function () {
                 if (!contentEl.querySelector('table[data-dt-id="' + id + '"]')) { return; }
                 wireDrilldownTable(id);
             });
+        }
+
+        function chartTableState() {
+            return { sort: chartSort, hidden: {}, runtimeHidden: [], widthTier: null };
+        }
+
+        function wireChartTable() {
+            if (!chartSpec) { return; }
+            if (!contentEl.querySelector('table[data-dt-id="chart-data"]')) { return; }
+            StandplassDataTable.wireTable(contentEl, 'chart-data', chartSpec, {
+                onSortChange: function (sort) {
+                    chartSort = sort;
+                    // Surgical: replace only the table — the <details>
+                    // open state and the chart above are untouched.
+                    var tableEl = contentEl.querySelector('table[data-dt-id="chart-data"]');
+                    if (tableEl) {
+                        tableEl.outerHTML = StandplassDataTable.renderTable('chart-data', chartSpec, chartTableState());
+                        wireChartTable();
+                    }
+                    var btn = contentEl.querySelector('table[data-dt-id="chart-data"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, chartTableState());
         }
 
         // ── Main render ────────────────────────────────────────────────
@@ -1668,6 +1714,7 @@ var StandplassClubStats = (function () {
                 section.outerHTML = resolvedClub
                     ? renderDrilldownChartSection(resolvedClub)
                     : renderOverviewChartSection();
+                wireChartTable();
                 var refocus = contentEl.querySelector('.club-metric-toggle[aria-pressed="true"]');
                 if (refocus) { refocus.focus(); }
             }
@@ -1795,6 +1842,7 @@ var StandplassClubStats = (function () {
         disciplineTableSpec: disciplineTableSpec,
         organizedCompsTableSpec: organizedCompsTableSpec,
         classDistTableSpec: classDistTableSpec,
+        chartTableSpec: chartTableSpec,
         renderClassDistributionHtml: renderClassDistributionHtml,
         computeTopThreeRanking: computeTopThreeRanking,
         renderTopThreeHtml: renderTopThreeHtml,

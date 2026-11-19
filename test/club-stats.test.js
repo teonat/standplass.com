@@ -843,6 +843,34 @@ var cdAsc = ddSorted(cdSpec, 'class', 'asc');
 assert.ok(cdAsc.indexOf('Ærlig') < cdAsc.indexOf('Åpen'),
     'klassefordeling: Klasse sorts Norwegian-collated (Æ before Å)');
 
+// ── Chart details table spec (batch 1) ──────────────────────────────────
+var ctSpecStarts = CS.chartTableSpec('starts',
+    [{ year: 2025, value: 40 }, { year: 2026, value: 45 }],
+    [{ year: 2026, value: 12 }]);
+assert.strictEqual(ctSpecStarts.ariaLabel, 'Aktivitet per år', 'chart table: aria-label');
+var ctHtml = StandplassDataTable.renderTable('chart-data', ctSpecStarts, ddState);
+assert.ok(ctHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="year">År<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="felt">Felt starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="bane">Bane starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'chart table: starts labels + sortable columns');
+assert.ok(ctHtml.indexOf('<tr data-dt-row="0"><td>2025</td><td class="ranking-score">40</td><td class="ranking-score">–</td></tr>') !== -1
+    && ctHtml.indexOf('<tr data-dt-row="1"><td>2026</td><td class="ranking-score">45</td><td class="ranking-score">12</td></tr>') !== -1,
+    'chart table: year rows with – for missing series points');
+var ctDesc = ddSorted(ctSpecStarts, 'year', 'desc');
+assert.ok(ctDesc.indexOf('<td>2026</td>') < ctDesc.indexOf('<td>2025</td>'),
+    'chart table: År desc reverses year order');
+var ctNulls = ddSorted(ctSpecStarts, 'bane', 'desc');
+assert.ok(ctNulls.indexOf('<td>2026</td>') < ctNulls.indexOf('<td>2025</td>'),
+    'chart table: nulls sort last on a value column');
+var ctSpecAge = CS.chartTableSpec('avgAge', [{ year: 2026, value: 47.5 }], []);
+var ctAgeHtml = StandplassDataTable.renderTable('chart-data', ctSpecAge, ddState);
+assert.ok(ctAgeHtml.indexOf('Felt snittalder') >= 0 && ctAgeHtml.indexOf('Bane snittalder') >= 0,
+    'chart table: avgAge branch labels');
+assert.ok(ctAgeHtml.indexOf('<td class="ranking-score">47.5</td>') >= 0,
+    'chart table: age values formatted via formatAgeValue');
+
 // ── Age series computation ──────────────────────────────────────────────
 
 // isLuftDiscipline: the only luft disciplines in the data are the 10m
