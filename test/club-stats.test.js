@@ -707,37 +707,141 @@ assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><
 // ── scroll-confined table cards (toplists + per-club lists) ──────────
 // Every klubbstatistikk table renders all rows (no paging, no "Vis
 // alle") inside .club-stats-list-scroll, whose max-height comes from
-// the user's "Rader" setting.
+// the user's "Rader" setting. tableHtml is the only table source since
+// batch 1 — the old headHtml/renderRow path is deleted.
 var expRows = [];
 for (var ei = 0; ei < 14; ei++) { expRows.push({ club: 'Klubb ' + ei, value: 100 - ei }); }
-function expRenderRow(row, i) {
-    return '<tr><td class="ranking-rank">' + (i + 1) + '</td><td>' + row.club + '</td><td class="ranking-score">' + row.value + '</td></tr>';
-}
-var expHead = '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">starter</th></tr></thead>';
+var expColumns = [
+    { key: 'rank', label: '#', align: 'center' },
+    { key: 'club', label: 'Klubb' },
+    { key: 'value', label: 'starter', align: 'right' }
+];
+var expSpec = {
+    columns: expColumns,
+    rows: expRows.map(function (r, i) { return { rank: i + 1, club: r.club, value: r.value }; }),
+    ariaLabel: 'Test toplist 2026'
+};
 var expCard = CS.buildTableCard({
-    id: 'test-list', title: 'Test toplist', ariaLabel: 'Test toplist 2026',
-    headHtml: expHead, rows: expRows, renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'test-list', title: 'Test toplist', rows: expSpec.rows,
+    tableHtml: StandplassDataTable.renderTable('test-list', expSpec, { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expCard.indexOf('Klubb 13') >= 0, 'table card: all rows rendered');
 assert.ok(expCard.indexOf('Vis alle') < 0 && expCard.indexOf('data-expand-list') < 0, 'table card: no expand toggle');
-assert.ok(expCard.indexOf('id="test-list-table"') >= 0, 'table card: table id present');
+assert.ok(expCard.indexOf('data-dt-id="test-list"') >= 0, 'table card: table carries data-dt-id');
 var expWrapIdx = expCard.indexOf('club-stats-list-scroll');
 var expTableIdx = expCard.indexOf('<table');
 assert.ok(expWrapIdx >= 0 && expWrapIdx < expTableIdx, 'table card: table wrapped in scroll region');
 var expShort = CS.buildTableCard({
-    id: 'short-list', title: 'Short', ariaLabel: 'Short', headHtml: expHead,
-    rows: expRows.slice(0, 4), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'short-list', title: 'Short', rows: expSpec.rows.slice(0, 4),
+    tableHtml: StandplassDataTable.renderTable('short-list',
+        { columns: expColumns, rows: expSpec.rows.slice(0, 4), ariaLabel: 'Short' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expShort.indexOf('Klubb 3') >= 0, 'table card: all short rows rendered');
 assert.strictEqual(CS.buildTableCard({
-    id: 'empty-list', title: 'Empty', ariaLabel: 'Empty', headHtml: expHead,
-    rows: [], renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'empty-list', title: 'Empty', rows: [],
+    tableHtml: StandplassDataTable.renderTable('empty-list',
+        { columns: expColumns, rows: [], ariaLabel: 'Empty' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 }), '', 'table card: empty rows -> no card');
 var expEvil = CS.buildTableCard({
-    id: 'evil-list', title: '<img src=x>', ariaLabel: 'XSS <script>', headHtml: expHead,
-    rows: expRows.slice(0, 2), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'evil-list', title: '<img src=x>', rows: expSpec.rows.slice(0, 2),
+    tableHtml: StandplassDataTable.renderTable('evil-list',
+        { columns: expColumns, rows: expSpec.rows.slice(0, 2), ariaLabel: 'XSS <script>' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'table card: title/ariaLabel escaped');
+
+// ── Drilldown tables through the shared base (batch 1) ─────────────────
+// Pure spec builders feeding renderTable: mostActiveTableSpec,
+// disciplineTableSpec, organizedCompsTableSpec, classDistTableSpec
+// (each takes clubName last, for the aria-label). Goldens pin today's
+// markup plus sort buttons on the opted-in columns.
+var ddState = { hidden: {}, runtimeHidden: [], widthTier: null };
+function ddSorted(spec, key, dir) {
+    return StandplassDataTable.renderTable('dd-sort', spec,
+        { sort: { key: key, dir: dir }, hidden: {}, runtimeHidden: [], widthTier: null });
+}
+
+// Mest aktive skyttere
+var maSpec = CS.mostActiveTableSpec([
+    { name: 'Alice', starts: 9 },
+    { name: 'Bob', starts: 4 }
+], 'Klubb X');
+assert.strictEqual(maSpec.ariaLabel, 'Mest aktive skyttere for Klubb X', 'mest aktive: aria-label');
+var maHtml = StandplassDataTable.renderTable('mest-aktive', maSpec, ddState);
+assert.ok(maHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'mest aktive: sortable Navn/Starter headers');
+assert.ok(maHtml.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td><td class="ranking-score">9</td></tr>') !== -1,
+    'mest aktive: row markup matches today');
+var maAsc = ddSorted(maSpec, 'starts', 'asc');
+assert.ok(maAsc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') !== -1
+    && maAsc.indexOf('<tr data-dt-row="1">') < maAsc.indexOf('<tr data-dt-row="0">'),
+    'mest aktive: rank travels under a Starter sort');
+
+// Øvelsesfordeling
+var discData = {
+    'Finfelt': { shooters: { a: 1, b: 1, c: 1 }, starts: 7 },
+    'Grovfelt': { shooters: { d: 1 }, starts: 3 }
+};
+var discSpec = CS.disciplineTableSpec(['Finfelt', 'Grovfelt'], discData, 'Klubb X');
+assert.strictEqual(discSpec.ariaLabel, 'Øvelsesfordeling for Klubb X', 'øvelsesfordeling: aria-label');
+var discHtml = StandplassDataTable.renderTable('ovelsesfordeling', discSpec, ddState);
+assert.ok(discHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'øvelsesfordeling: all three columns sortable');
+assert.ok(discHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td class="ranking-score">3</td><td class="ranking-score">7</td></tr>') !== -1,
+    'øvelsesfordeling: bare-name rows flattened with counts');
+var discAsc = ddSorted(discSpec, 'shooters', 'asc');
+assert.ok(discAsc.indexOf('<tr data-dt-row="1"><td>Grovfelt</td>') !== -1
+    && discAsc.indexOf('<tr data-dt-row="1">') < discAsc.indexOf('<tr data-dt-row="0">'),
+    'øvelsesfordeling: shooters asc reorders');
+
+// Arrangerte stevner
+var orgSpec = CS.organizedCompsTableSpec([
+    { title: 'Uten dato', startDate: null, facilityName: null },
+    { title: 'Høststevnet', startDate: '2026-10-03T10:00:00Z', facilityName: 'Bane A' },
+    { title: 'Vårfeltet', startDate: '2026-03-01T08:00:00Z', facilityName: null }
+], 'Klubb X');
+assert.strictEqual(orgSpec.ariaLabel, 'Arrangerte stevner for Klubb X', 'arrangerte: aria-label');
+var orgHtml = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec, ddState);
+assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td>Høststevnet</td><td>2026-10-03</td><td>Bane A</td></tr>') !== -1,
+    'arrangerte: ISO date sliced to YYYY-MM-DD');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td></tr>') !== -1,
+    'arrangerte: missing values render –');
+var orgAsc = ddSorted(orgSpec, 'startDate', 'asc');
+assert.ok(orgAsc.indexOf('Vårfeltet') < orgAsc.indexOf('Høststevnet') && orgAsc.indexOf('Høststevnet') < orgAsc.indexOf('Uten dato'),
+    'arrangerte: Dato asc sorts chronologically, nulls last');
+
+// Klassefordeling
+var cdSpec = CS.classDistTableSpec([
+    { discipline: 'Finfelt', class: 'Åpen', shooters: 2, starts: 5 },
+    { discipline: 'Finfelt', class: 'Ærlig', shooters: 3, starts: 7 }
+], 'Klubb X');
+assert.strictEqual(cdSpec.ariaLabel, 'Klassefordeling for Klubb X', 'klassefordeling: aria-label');
+var cdHtml = StandplassDataTable.renderTable('klassefordeling', cdSpec, ddState);
+assert.ok(cdHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="class">Klasse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'klassefordeling: all four columns sortable');
+assert.ok(cdHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td>Åpen</td><td class="ranking-score">2</td><td class="ranking-score">5</td></tr>') !== -1,
+    'klassefordeling: row markup matches today');
+var cdAsc = ddSorted(cdSpec, 'class', 'asc');
+assert.ok(cdAsc.indexOf('Ærlig') < cdAsc.indexOf('Åpen'),
+    'klassefordeling: Klasse sorts Norwegian-collated (Æ before Å)');
 
 // ── Age series computation ──────────────────────────────────────────────
 

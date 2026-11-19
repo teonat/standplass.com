@@ -339,20 +339,79 @@ var StandplassClubStats = (function () {
         return out;
     }
 
+    // ── Drilldown table specs (shared base) ──────────────────────────
+    // Pure {columns, rows, ariaLabel} builders for the drilldown's four
+    // non-top-3 tables. Rows are flattened so every sortable column is
+    // row[key]-backed (cell fns are invisible to sorting); aria-labels
+    // match the cards' existing wording, escaped once by renderTable.
+
+    function mostActiveTableSpec(topShooters, clubName) {
+        return {
+            columns: [
+                { key: 'rank', label: '#', align: 'center' },
+                { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
+                { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
+            ],
+            rows: (topShooters || []).map(function (s, i) {
+                return { rank: i + 1, name: s.name, starts: s.starts };
+            }),
+            ariaLabel: 'Mest aktive skyttere for ' + clubName
+        };
+    }
+
+    function disciplineTableSpec(discRows, discData, clubName) {
+        return {
+            columns: [
+                { key: 'discipline', label: 'Øvelse', sortable: true, defaultDir: 'asc' },
+                { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
+                { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
+            ],
+            rows: (discRows || []).map(function (d) {
+                return { discipline: d, shooters: Object.keys(discData[d].shooters).length, starts: discData[d].starts };
+            }),
+            ariaLabel: 'Øvelsesfordeling for ' + clubName
+        };
+    }
+
+    function organizedCompsTableSpec(organizedComps, clubName) {
+        return {
+            columns: [
+                { key: 'title', label: 'Stevne', sortable: true, defaultDir: 'asc',
+                    cell: function (row) { return row.title || '–'; } },
+                { key: 'startDate', label: 'Dato', sortable: true, defaultDir: 'asc',
+                    cell: function (row) { return row.startDate ? String(row.startDate).slice(0, 10) : '–'; } },
+                { key: 'facilityName', label: 'Anlegg', sortable: true, defaultDir: 'asc',
+                    cell: function (row) { return row.facilityName || '–'; } }
+            ],
+            rows: organizedComps || [],
+            ariaLabel: 'Arrangerte stevner for ' + clubName
+        };
+    }
+
+    function classDistTableSpec(dist, clubName) {
+        return {
+            columns: [
+                { key: 'discipline', label: 'Øvelse', sortable: true, defaultDir: 'asc' },
+                { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
+                { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
+                { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
+            ],
+            rows: dist || [],
+            ariaLabel: 'Klassefordeling for ' + clubName
+        };
+    }
+
     // Pure HTML builder for the Klassefordeling card. The disclaimer's
     // øvelse list is generated from ALWAYS_OPEN_DISCIPLINES so text and
-    // behavior cannot drift apart.
-    function renderClassDistributionHtml(dist, clubName) {
+    // behavior cannot drift apart. The table renders through the shared
+    // base (classDistTableSpec); `state` is the page's sort state for it
+    // (optional — omitted in tests, page order stands).
+    function renderClassDistributionHtml(dist, clubName, state) {
         if (!dist || !dist.length) { return ''; }
-        var rowsHtml = dist.map(function (dc) {
-            return '<tr><td>' + esc(dc.discipline) + '</td><td>' + esc(dc.class) + '</td>'
-                + '<td class="ranking-score">' + dc.shooters + '</td>'
-                + '<td class="ranking-score">' + dc.starts + '</td></tr>';
-        }).join('');
         return '<section class="ranking-card club-stats-section"><div class="ranking-card-header"><h2 class="ranking-card-title">Klassefordeling</h2></div>'
             + '<div class="club-stats-list-scroll">'
-            + '<table class="ranking-table" aria-label="Klassefordeling for ' + esc(clubName) + '"><thead><tr><th scope="col">Øvelse</th><th scope="col">Klasse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead><tbody>'
-            + rowsHtml + '</tbody></table></div>'
+            + StandplassDataTable.renderTable('klassefordeling', classDistTableSpec(dist, clubName), state || {})
+            + '</div>'
             + '<details class="club-stats-note"><summary>Om klassene</summary>'
             + '<p>Klassene A–D gjelder per kalenderår, med opprykk og nedrykk kun ved årsskiftet '
             + '(jf. NSF Fellesreglementet pkt 2.3.1.4). I ikke-klasseførende stevner, og i øvelsene '
@@ -541,15 +600,10 @@ var StandplassClubStats = (function () {
         return '<section class="ranking-card ' + esc(opts.cardClass || 'club-stats-section') + '">'
             + '<div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(opts.title) + '</h2></div>'
             + '<div class="club-stats-list-scroll">'
-            // tableHtml: a fully-built <table> (data-table base) used in
-            // place of the headHtml/renderRow assembly — the scroll wrap
-            // stays exactly once either way.
-            + (opts.tableHtml != null
-                ? opts.tableHtml
-                : '<table class="ranking-table" id="' + esc(opts.id) + '-table" aria-label="' + esc(opts.ariaLabel) + '">'
-                    + opts.headHtml
-                    + '<tbody>' + rows.map(function (row, i) { return opts.renderRow(row, i); }).join('') + '</tbody>'
-                    + '</table>')
+            // tableHtml: the fully-built <table> (data-table base) — the
+            // only table source since batch 1 (the old headHtml/renderRow
+            // assembly is deleted); the scroll wrap stays exactly once.
+            + opts.tableHtml
             + '</div></section>';
     }
 
@@ -926,6 +980,13 @@ var StandplassClubStats = (function () {
         var toplistSort = {};
         var toplistHidden = {};
         var toplistSpecs = {};
+        // Drilldown table interactivity (session-only): sort per table id
+        // plus the spec each table last rendered with (rebuilt every
+        // renderDrilldown, consumed by wiring). Reset when the club
+        // changes, kept across year/program re-renders — same policy as
+        // top3State.
+        var drilldownSort = {};
+        var drilldownSpecs = {};
 
         var filtersEl = id('-filters');
         var contentEl = id('-content');
@@ -1476,51 +1537,47 @@ var StandplassClubStats = (function () {
                 + '</div>'
                 : '<p class="ranking-status-msg">Ingen data for ' + esc(resolved) + ' i ' + activeYear + '.</p>';
 
+            drilldownSpecs['mest-aktive'] = mostActiveTableSpec(topShooters, resolved);
             var topShootersHtml = topShooters.length
                 ? buildTableCard({
-                    id: 'mest-aktive', title: 'Mest aktive skyttere',
-                    ariaLabel: 'Mest aktive skyttere for ' + esc(resolved),
-                    headHtml: '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th><th scope="col" class="ranking-score">Starter</th></tr></thead>',
-                    rows: topShooters,
-                    renderRow: function (s, i) {
-                        return '<tr><td class="ranking-rank">' + (i + 1) + '</td><td>' + esc(s.name) + '</td><td class="ranking-score">' + s.starts + '</td></tr>';
-                    }
+                    id: 'mest-aktive', title: 'Mest aktive skyttere', rows: topShooters,
+                    tableHtml: StandplassDataTable.renderTable('mest-aktive',
+                        drilldownSpecs['mest-aktive'], drilldownState('mest-aktive'))
                 })
                 : '';
 
+            drilldownSpecs['ovelsesfordeling'] = disciplineTableSpec(discRows, discData, resolved);
             var discHtml = discRows.length
                 ? buildTableCard({
-                    id: 'ovelsesfordeling', title: 'Øvelsesfordeling',
-                    ariaLabel: 'Øvelsesfordeling for ' + esc(resolved),
-                    headHtml: '<thead><tr><th scope="col">Øvelse</th><th scope="col" class="ranking-score">Skyttere</th><th scope="col" class="ranking-score">Starter</th></tr></thead>',
-                    rows: discRows,
-                    renderRow: function (d) {
-                        return '<tr><td>' + esc(d) + '</td><td class="ranking-score">' + Object.keys(discData[d].shooters).length + '</td><td class="ranking-score">' + discData[d].starts + '</td></tr>';
-                    }
+                    id: 'ovelsesfordeling', title: 'Øvelsesfordeling', rows: discRows,
+                    tableHtml: StandplassDataTable.renderTable('ovelsesfordeling',
+                        drilldownSpecs['ovelsesfordeling'], drilldownState('ovelsesfordeling'))
                 })
                 : '';
 
-            var classHtml = renderClassDistributionHtml(computeClassDistribution(rows, resolved), resolved);
+            var classDist = computeClassDistribution(rows, resolved);
+            drilldownSpecs['klassefordeling'] = classDistTableSpec(classDist, resolved);
+            var classHtml = renderClassDistributionHtml(classDist, resolved, drilldownState('klassefordeling'));
 
             top3Rows = rows;
             // Reset the placement-mode/øvelser toggles ONLY when the club
             // changes — a year/program re-render for the same club must keep
             // the user's toggles. top3Club starts '' so the first entry still
             // resets.
-            if (resolved !== top3Club) { top3State = { mode: 'top3', hidden: {} }; }
+            if (resolved !== top3Club) {
+                top3State = { mode: 'top3', hidden: {} };
+                drilldownSort = {};
+            }
             top3Club = resolved;
             var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
             var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
 
+            drilldownSpecs['arrangerte-stevner'] = organizedCompsTableSpec(organizedComps, resolved);
             var orgHtml = organizedComps.length
                 ? buildTableCard({
-                    id: 'arrangerte-stevner', title: 'Arrangerte stevner',
-                    ariaLabel: 'Arrangerte stevner for ' + esc(resolved),
-                    headHtml: '<thead><tr><th scope="col">Stevne</th><th scope="col">Dato</th><th scope="col">Anlegg</th></tr></thead>',
-                    rows: organizedComps,
-                    renderRow: function (c) {
-                        return '<tr><td>' + esc(c.title || '–') + '</td><td>' + esc(c.startDate ? String(c.startDate).slice(0, 10) : '–') + '</td><td>' + esc(c.facilityName || '–') + '</td></tr>';
-                    }
+                    id: 'arrangerte-stevner', title: 'Arrangerte stevner', rows: organizedComps,
+                    tableHtml: StandplassDataTable.renderTable('arrangerte-stevner',
+                        drilldownSpecs['arrangerte-stevner'], drilldownState('arrangerte-stevner'))
                 })
                 : '';
 
@@ -1530,6 +1587,43 @@ var StandplassClubStats = (function () {
 
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
             wireTop3();
+            wireDrilldownTables();
+        }
+
+        // ── Drilldown table wiring ─────────────────────────────────────
+
+        function drilldownState(id) {
+            return { sort: drilldownSort[id] || null, hidden: {}, runtimeHidden: [], widthTier: null };
+        }
+
+        function rerenderDrilldownTable(id) {
+            // Surgical: replace only the table element with a BARE table
+            // (no wrapClass) — re-wrapping would nest scroll regions
+            // (rung-1 lesson). The old table's listeners die with it.
+            var tableEl = contentEl.querySelector('table[data-dt-id="' + id + '"]');
+            if (!tableEl || !drilldownSpecs[id]) { return; }
+            tableEl.outerHTML = StandplassDataTable.renderTable(id, drilldownSpecs[id], drilldownState(id));
+            wireDrilldownTable(id);
+        }
+
+        function wireDrilldownTable(id) {
+            StandplassDataTable.wireTable(contentEl, id, drilldownSpecs[id], {
+                onSortChange: function (sort) {
+                    drilldownSort[id] = sort;
+                    rerenderDrilldownTable(id);
+                    // Same focus-restoration convention as the toplists:
+                    // the clicked button was destroyed with the re-render.
+                    var btn = contentEl.querySelector('table[data-dt-id="' + id + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, drilldownState(id));
+        }
+
+        function wireDrilldownTables() {
+            Object.keys(drilldownSpecs).forEach(function (id) {
+                if (!contentEl.querySelector('table[data-dt-id="' + id + '"]')) { return; }
+                wireDrilldownTable(id);
+            });
         }
 
         // ── Main render ────────────────────────────────────────────────
@@ -1697,6 +1791,10 @@ var StandplassClubStats = (function () {
         ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
+        mostActiveTableSpec: mostActiveTableSpec,
+        disciplineTableSpec: disciplineTableSpec,
+        organizedCompsTableSpec: organizedCompsTableSpec,
+        classDistTableSpec: classDistTableSpec,
         renderClassDistributionHtml: renderClassDistributionHtml,
         computeTopThreeRanking: computeTopThreeRanking,
         renderTopThreeHtml: renderTopThreeHtml,
