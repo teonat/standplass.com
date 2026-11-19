@@ -175,7 +175,7 @@ var StandplassKlubbPage = (function () {
                 var spec = leaderboardCardSpec(entries, disc.name);
                 if (!spec) {
                     cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div>'
-                        + '<p class="ranking-status-msg">Ingen resultater for ' + selectedYear + '</p></div>';
+                        + '<p class="ranking-empty">Ingen resultater for ' + selectedYear + '</p></div>';
                     return;
                 }
                 cardSpecs[disc.id] = spec;

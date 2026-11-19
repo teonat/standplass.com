@@ -399,7 +399,7 @@ var StandplassNorgesfeltPage = (function () {
             var spec = toplisteCardSpec(filtered, activeClubs.length !== 1, activeSubType);
             if (!spec) {
                 cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(discName) + '</h2></div>'
-                    + '<p class="ranking-status-msg">Ingen resultater</p></div>';
+                    + '<p class="ranking-empty">Ingen resultater</p></div>';
                 return;
             }
             toplisteSpecs[discName] = spec;
