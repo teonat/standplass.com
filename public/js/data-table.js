@@ -32,9 +32,109 @@ var StandplassDataTable = (function () {
         return StandplassTable.sortRows(withValue, key, dir).concat(nulls);
     }
 
+    // ── Markup builder ────────────────────────────────────────────────
+    // Pure string rendering: (columns, rows, state) -> html. No wiring,
+    // no DOM. cell(row, i) receives the row's RENDERED position (what a
+    // positional "#" column needs under sorting); data-dt-row and
+    // rowAttrs(row, i) carry the row's index in opts.rows (what wiring
+    // needs to map a click back to the data).
+
+    function alignClass(col) {
+        if (col.align === 'right') { return 'ranking-score'; }
+        if (col.align === 'center') { return 'ranking-rank'; }
+        return '';
+    }
+
+    function colClass(col) {
+        var a = alignClass(col);
+        var c = col.cellClass || '';
+        return a ? (c ? a + ' ' + c : a) : c;
+    }
+
+    function cellValue(col, row, renderedIndex) {
+        if (col.cell) { return col.cell(row, renderedIndex); }
+        if (col.format) { return col.format(row[col.key]); }
+        return row[col.key];
+    }
+
+    function dataIndexOf(rows, row) {
+        for (var k = 0; k < rows.length; k++) { if (rows[k] === row) { return k; } }
+        return -1;
+    }
+
+    function renderTable(id, opts, state) {
+        opts = opts || {};
+        state = state || {};
+        var columns = opts.columns || [];
+        var rows = opts.rows || [];
+        var vis = visibleColumns(columns, state);
+        var sort = state.sort || null;
+        // defaultSort only marks the initial aria-sort; rows stay in page
+        // order until the page's state.sort says otherwise.
+        var ariaSort = sort || opts.defaultSort || null;
+
+        var headHtml = vis.map(function (col) {
+            var cls = colClass(col);
+            var attrs = ' scope="col"' + (cls ? ' class="' + esc(cls) + '"' : '');
+            if (ariaSort && ariaSort.key === col.key) {
+                attrs += ' aria-sort="' + (ariaSort.dir === 'desc' ? 'descending' : 'ascending') + '"';
+            }
+            var inner = col.sortable
+                ? '<button type="button" class="dt-sort-btn" data-dt-sort="' + esc(col.key) + '">'
+                    + esc(col.label) + '<span class="dt-sort-arrow" aria-hidden="true"></span></button>'
+                : esc(col.label);
+            return '<th' + attrs + '>' + inner + '</th>';
+        }).join('');
+
+        function rowHtml(row, renderedIndex) {
+            var cells = vis.map(function (col) {
+                var value = cellValue(col, row, renderedIndex);
+                var cls = colClass(col);
+                if (col.asRowHeader) {
+                    return '<th scope="row"' + (cls ? ' class="' + esc(cls) + '"' : '') + '>'
+                        + (col.raw ? value : esc(value)) + '</th>';
+                }
+                return '<td' + (cls ? ' class="' + esc(cls) + '"' : '') + '>'
+                    + (col.raw ? value : esc(value)) + '</td>';
+            }).join('');
+            var extra = opts.rowAttrs ? (opts.rowAttrs(row, dataIndexOf(rows, row)) || '') : '';
+            return '<tr data-dt-row="' + dataIndexOf(rows, row) + '"' + (extra ? ' ' + extra : '') + '>' + cells + '</tr>';
+        }
+
+        var bodyHtml;
+        if (opts.groupRows) {
+            // Sort applies within groups; group order stays fixed.
+            bodyHtml = opts.groupRows(rows).map(function (group) {
+                var gRows = sort ? sortRowsNullsLast(group.rows, sort.key, sort.dir) : group.rows;
+                return '<tr class="dt-group-row"><th scope="colgroup" colspan="' + vis.length + '">' + esc(group.label) + '</th></tr>'
+                    + gRows.map(function (r, gi) { return rowHtml(r, gi); }).join('');
+            }).join('');
+        } else {
+            var ordered = sort ? sortRowsNullsLast(rows, sort.key, sort.dir) : rows;
+            bodyHtml = ordered.map(function (r, i) { return rowHtml(r, i); }).join('');
+        }
+
+        var tableHtml = '<table class="' + esc(opts.tableClass || 'ranking-table') + '"'
+            + ' data-dt-id="' + esc(id) + '" aria-label="' + esc(opts.ariaLabel || '') + '">'
+            + '<thead><tr>' + headHtml + '</tr></thead>'
+            + '<tbody>' + bodyHtml + '</tbody>'
+            + '</table>';
+
+        var toolbar = opts.picker
+            ? '<div class="dt-toolbar"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">'
+                + esc((opts.picker && opts.picker.buttonLabel) || 'Kolonner')
+                + '</button><div class="dt-picker-anchor"></div></div>'
+            : '';
+
+        return opts.wrapClass
+            ? '<div class="' + esc(opts.wrapClass) + '">' + toolbar + tableHtml + '</div>'
+            : toolbar + tableHtml;
+    }
+
     return {
         visibleColumns: visibleColumns,
-        sortRowsNullsLast: sortRowsNullsLast
+        sortRowsNullsLast: sortRowsNullsLast,
+        renderTable: renderTable
     };
 })();
 
