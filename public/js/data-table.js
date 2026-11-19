@@ -244,8 +244,29 @@ var StandplassDataTable = (function () {
         var pickerBtn = scopeRoot.querySelector('.dt-picker-btn, [data-dt-picker]');
         var anchor = scopeRoot.querySelector('.dt-picker-anchor');
         if (!pickerBtn || !anchor) { return null; }
-        anchor.innerHTML = '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'
-            + '<ul class="checkbox-dropdown-list"></ul></div>';
+        // Build the panel scaffold with DOM insertion, NEVER an innerHTML
+        // assignment: a page may host its BUTTON inside the anchor (the
+        // stevner Kolonner button wraps in it, so the dropdown aligns
+        // with the button) — an innerHTML wipe would destroy the button a
+        // few milliseconds after render. Re-wiring replaces the previous
+        // wiring's scaffold first, leaving any other children alone.
+        var oldPanel = anchor.querySelector('.checkbox-dropdown-panel');
+        if (oldPanel && oldPanel.parentNode === anchor) {
+            anchor.removeChild(oldPanel);
+        }
+        var panel = document.createElement('div');
+        panel.className = 'checkbox-dropdown-panel';
+        panel.setAttribute('hidden', '');
+        panel.setAttribute('role', 'group');
+        var clearAllBtn = document.createElement('button');
+        clearAllBtn.type = 'button';
+        clearAllBtn.className = 'checkbox-dropdown-clear-all';
+        clearAllBtn.textContent = 'Nullstill';
+        var list = document.createElement('ul');
+        list.className = 'checkbox-dropdown-list';
+        panel.appendChild(clearAllBtn);
+        panel.appendChild(list);
+        anchor.appendChild(panel);
         // A checkbox reflects EFFECTIVE visibility — the user's explicit
         // choice, else the tier/default defaults (a narrow-width-hidden
         // column shows unchecked on a phone so it can be re-enabled).
@@ -263,9 +284,9 @@ var StandplassDataTable = (function () {
         var listed = columns.filter(function (col) { return runtime.indexOf(col.key) === -1; });
         var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
             btn: pickerBtn,
-            panel: anchor.querySelector('.checkbox-dropdown-panel'),
-            list: anchor.querySelector('.checkbox-dropdown-list'),
-            clearAllBtn: anchor.querySelector('.checkbox-dropdown-clear-all'),
+            panel: panel,
+            list: list,
+            clearAllBtn: clearAllBtn,
             labelNone: 'Ingen kolonner',
             getItems: function () {
                 return listed.map(function (col) {

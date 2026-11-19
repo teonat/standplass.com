@@ -176,25 +176,40 @@ function wpEl() {
         },
         hasAttribute: function () { return true; },
         setAttribute: function () {},
-        removeAttribute: function () {}
+        removeAttribute: function () {},
+        appendChild: function (el) { (this.kids = this.kids || []).push(el); }
     };
 }
 var wpBtn = wpEl();
 wpBtn.getRootNode = function () { return wpRootNode; };
 wpBtn.parentElement = { contains: function () { return false; } };
 var wpRootNode = wpEl();
-var wpPanel = wpEl();
-var wpListEl = wpEl();
-var wpClearAll = wpEl();
+// The anchor models the real hazard: a page may host its BUTTON inside
+// the anchor (the stevner Kolonner button wraps in it so the panel
+// aligns with the button) — so an innerHTML assignment on the anchor
+// DESTROYS the button. wirePicker must build its panel scaffold with
+// DOM insertion, never an innerHTML wipe.
+var wpAnchorWrites = 0;
+var wpAnchorKids = [];
 var wpAnchor = {
-    innerHTML: '',
+    get innerHTML() { return ''; },
+    set innerHTML(v) { wpAnchorWrites++; wpAnchorKids = []; },
+    appendChild: function (el) { el.parentNode = this; wpAnchorKids.push(el); },
+    removeChild: function (el) {
+        var i = wpAnchorKids.indexOf(el);
+        if (i !== -1) { wpAnchorKids.splice(i, 1); }
+        el.parentNode = null;
+    },
     querySelector: function (sel) {
-        if (sel.indexOf('panel') !== -1) { return wpPanel; }
-        if (sel.indexOf('list') !== -1) { return wpListEl; }
-        if (sel.indexOf('clear-all') !== -1) { return wpClearAll; }
+        if (sel.indexOf('checkbox-dropdown-panel') === -1) { return null; }
+        for (var i = 0; i < wpAnchorKids.length; i++) {
+            if (wpAnchorKids[i].className === 'checkbox-dropdown-panel') { return wpAnchorKids[i]; }
+        }
         return null;
     }
 };
+// wirePicker's scaffold builder runs document.createElement.
+global.document = { createElement: function () { return wpEl(); } };
 // Returns the button ONLY for a selector that mentions data-dt-picker —
 // pins that the discovery query covers attribute-only buttons.
 var wpScope = {
@@ -211,9 +226,22 @@ assert.ok(wpHandle, 'wirePicker wires a button discovered by [data-dt-picker]');
 assert.strictEqual(wpBtn.listeners.click ? wpBtn.listeners.click.length : 0, 1,
     'the attribute-discovered button got its click listener');
 assert.strictEqual(wpBtn.textContent, 'Kolonner', 'the picker label is forced onto the button');
+assert.strictEqual(wpAnchorWrites, 0,
+    'wirePicker never assigns the anchor innerHTML — a wrapped button would be destroyed');
+assert.ok(wpAnchorKids.length > 0 && wpAnchorKids[0].className === 'checkbox-dropdown-panel',
+    'the panel scaffold is built inside the anchor by DOM insertion');
 wpHandle.destroy();
 assert.strictEqual(wpBtn.listeners.click ? wpBtn.listeners.click.length : 0, 0,
     'the handle destroys the wiring');
+// Re-wiring (the stevner picker does destroy-before-rewire per render):
+// the previous scaffold is replaced, not stacked.
+var wpHandle2 = StandplassDataTable.wirePicker(wpScope,
+    { columns: [{ key: 'a', label: 'A' }], picker: { buttonLabel: 'Kolonner' } }, {},
+    { hidden: {}, runtimeHidden: [], widthTier: null });
+var wpPanels = wpAnchorKids.filter(function (k) { return k.className === 'checkbox-dropdown-panel'; });
+assert.strictEqual(wpPanels.length, 1, 're-wiring replaces the old scaffold instead of stacking a second');
+wpHandle2.destroy();
+delete global.document;
 
 // --- renderTable: golden markup ---
 
