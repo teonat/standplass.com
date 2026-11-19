@@ -291,10 +291,12 @@ var StandplassStevnerPage = (function () {
         // style). The anchor WRAPS the button — the dropdown panel is
         // absolutely positioned against the anchor's box (its right
         // edge to the anchor's right edge), so wrapping is what keeps
-        // the panel aligned with the button. data-dt-picker, not the
-        // dt-picker-btn class, is the wiring hook: this button wears
-        // the Fold-alle look.
-        var pickerHtml = ' <div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
+        // the panel aligned with the button. data-dt-picker is the
+        // wiring hook, and the style comes from .stevner-picker-btn —
+        // deliberately NOT .stevner-collapse-all-btn: the bulk-collapse
+        // handler matches that class, and sharing it made one click
+        // both open the picker and fold every card.
+        var pickerHtml = ' <div class="dt-picker-anchor"><button type="button" class="stevner-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
         // The FULL bar renders at ANY card count ≥ 1 (owner QA round 3):
         // summary line, updated stamp, Kolonner and "Fold alle" — even a
         // single competition result keeps them all. Zero cards never

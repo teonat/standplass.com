@@ -272,16 +272,21 @@ assert.strictEqual(SP.columns, undefined, 'the legacy columns export is deleted'
 // anchor box) aligns with the button instead of the page edge.
 var statsBar = SP.overallStatsBar(cards, '2026-11-19T10:00:00', 'test');
 assert.ok(statsBar.indexOf('stevner-stats-right') !== -1, 'stats bar renders its right group');
-assert.ok(statsBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
-    'Kolonner: anchor-wrapped, Fold-alle-styled, data-dt-picker hook');
+// The Kolonner button wears its OWN class (stevner-picker-btn), not
+// stevner-collapse-all-btn: the bulk-collapse handler on rowsEl matches
+// clicks BY CLASS, so a picker button sharing the class would toggle
+// every card AND hijack the clicked button's label on every open. The
+// Fold-alle LOOK is shared via grouped CSS selectors instead.
+assert.ok(statsBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
+    'Kolonner: anchor-wrapped, own class, data-dt-picker hook');
 assert.ok(statsBar.indexOf('data-dt-picker') < statsBar.indexOf('stevner-collapse-all-btn" id="test-collapse-all"'),
     'Kolonner sits to the LEFT of Fold alle');
 // The FULL bar renders at ANY card count ≥ 1 (owner QA round 3):
 // summary line, updated stamp, Kolonner and "Fold alle" — a single
 // competition result keeps them all.
 var singleBar = SP.overallStatsBar([cards[0]], '2026-11-19T10:00:00', 'test');
-assert.ok(singleBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
-    'single card: the Kolonner button renders');
+assert.ok(singleBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
+    'single card: the Kolonner button renders (own class — the exact-substring golden pins the class separation from Fold alle)');
 assert.ok(singleBar.indexOf('1 stevne') !== -1, 'single card: the summary line stays ("1 stevne")');
 assert.ok(singleBar.indexOf('id="test-collapse-all"') !== -1, 'single card: Fold alle stays');
 assert.strictEqual(SP.overallStatsBar([], '2026-11-19T10:00:00', 'test'), '',

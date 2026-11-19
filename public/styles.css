@@ -563,7 +563,13 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     color: var(--text-muted);
     margin-bottom: 1rem;
 }
-.stevner-collapse-all-btn {
+/* The Fold-alle button style, shared with the Kolonner picker button
+   (owner: same look) via GROUPED SELECTORS, not a shared class — the
+   bulk-collapse handler on rowsEl matches clicks by
+   .stevner-collapse-all-btn, and a picker button wearing that class
+   would toggle every card and hijack the label on every open. */
+.stevner-collapse-all-btn,
+.stevner-picker-btn {
     background: none;
     border: 1px solid var(--border);
     border-radius: 4px;
