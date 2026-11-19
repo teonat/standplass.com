@@ -315,13 +315,18 @@ var StandplassStevnerPage = (function () {
             }
         });
         var unike = countUniqueShooters(allRows);
+        // The stamp is information, not an action: it ends the summary
+        // line instead of sitting with the buttons, so a wrapped narrow
+        // layout reads "summary + stamp" / "buttons" instead of dropping
+        // the stamp into the button row (owner QA round 6).
+        var stamp = esc(formatUpdated(lastUpdated));
         return '<div class="stevner-overall-stats"><span>'
             + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
             + totals.skyttere + ' deltakelse' + (totals.skyttere !== 1 ? 'r' : '') + ' · '
             + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
-            + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
-            + '<div class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
-            + pickerHtml
+            + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '')
+            + (stamp ? ' · ' + stamp : '') + '</span>'
+            + '<div class="stevner-stats-right">' + pickerHtml
             + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></div></div>';
     }
 

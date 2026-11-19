@@ -281,6 +281,15 @@ assert.ok(statsBar.indexOf('<div class="dt-picker-anchor"><button type="button" 
     'Kolonner: anchor-wrapped, own class, data-dt-picker hook');
 assert.ok(statsBar.indexOf('data-dt-picker') < statsBar.indexOf('stevner-collapse-all-btn" id="test-collapse-all"'),
     'Kolonner sits to the LEFT of Fold alle');
+// The updated stamp is INFORMATION — it belongs at the end of the
+// summary line, not lumped in with the action buttons (owner QA round
+// 6: at phone width the wrapped right group dropped the stamp
+// awkwardly under the summary). The right group is actions only.
+var barRightIdx = statsBar.indexOf('stevner-stats-right');
+assert.ok(statsBar.indexOf('Oppdatert') !== -1 && statsBar.indexOf('Oppdatert') < barRightIdx,
+    'the updated stamp sits in the left (info) span');
+assert.ok(statsBar.slice(barRightIdx).indexOf('Oppdatert') === -1,
+    'the right group is actions only — no stamp');
 // The FULL bar renders at ANY card count ≥ 1 (owner QA round 3):
 // summary line, updated stamp, Kolonner and "Fold alle" — a single
 // competition result keeps them all.
