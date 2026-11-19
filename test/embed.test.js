@@ -1,5 +1,10 @@
 'use strict';
 var assert = require('node:assert');
+// Global-shim convention from the page tests (dependency script order):
+// table-renderer.js before data-table.js — the cross-check below calls
+// the real renderPickerButton to keep the "byte-mirror" honest.
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var StandplassEmbed = require('../public/embed.js');
 
 assert.deepStrictEqual(Object.keys(StandplassEmbed.VIEWS).sort(), ['bane', 'felt', 'terminliste']);
@@ -26,6 +31,11 @@ var pickerGolden = '<div class="stevner-table-controls">'
     + '</div>';
 assert.ok(markup.indexOf(pickerGolden) !== -1,
     'buildMarkup emits the static shared-picker markup (byte-mirror of renderPickerButton)');
+// The mirror, enforced: the base's own renderPickerButton output must
+// appear verbatim in buildMarkup — if the base's markup ever changes,
+// this fails instead of letting the hardcoded golden above drift.
+assert.ok(markup.indexOf(StandplassDataTable.renderPickerButton()) !== -1,
+    'static picker markup stays a byte-mirror of the real renderPickerButton output');
 
 var baneMarkup = StandplassEmbed.buildMarkup('bane', 'bane');
 assert.ok(baneMarkup.indexOf('<h1 class="section-title">Baneskyting</h1>') !== -1);
