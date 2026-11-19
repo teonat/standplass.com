@@ -157,7 +157,9 @@ assert.ok(npOrg.indexOf('<tr data-dt-row="2"><td class="ranking-rank">3</td>') !
     && npOrg.indexOf('data-person-id="p2"') > npOrg.indexOf('data-person-id="p1"'),
     'nasjonal ranking: rank travels under a Klubb sort, null org last');
 var npPoeng = npSorted(npSpec, 'totalScore', 'desc');
-assert.ok(npPoeng.indexOf('<td class="ranking-score">90</td>') < npPoeng.indexOf('data-person-id="p2"'),
+var np90 = npPoeng.indexOf('<td class="ranking-score">90.00</td>');
+assert.ok(np90 !== -1, 'nasjonal ranking: sorted Poeng renders toFixed(2) (needle must exist or the order check is vacuous)');
+assert.ok(np90 < npPoeng.indexOf('data-person-id="p2"'),
     'nasjonal ranking: null Poeng sorts last');
 // Full row count — no PAGE_SIZE slicing.
 var npMany = [];

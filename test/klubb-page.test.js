@@ -63,7 +63,9 @@ assert.ok(lbName.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td>') 
     && lbName.indexOf('<tr data-dt-row="1">') < lbName.indexOf('<tr data-dt-row="0">'),
     'leaderboard: rank travels under a Navn sort');
 var lbPoeng = lbSorted('totalScore', 'desc');
-assert.ok(lbPoeng.indexOf('<td>90</td>') < lbPoeng.indexOf('data-person-id="p2"'),
+var lb90 = lbPoeng.indexOf('<td class="ranking-score">90.00</td>');
+assert.ok(lb90 !== -1, 'leaderboard: sorted Poeng renders toFixed(2) (needle must exist or the order check is vacuous)');
+assert.ok(lb90 < lbPoeng.indexOf('data-person-id="p2"'),
     'leaderboard: null Poeng sorts last');
 
 console.log('klubb-page.test.js: all assertions passed');
