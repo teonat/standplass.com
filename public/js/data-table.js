@@ -198,7 +198,12 @@ var StandplassDataTable = (function () {
         }
 
         var tableHtml = '<table class="' + esc(opts.tableClass || 'ranking-table') + '"'
-            + ' data-dt-id="' + esc(id) + '" aria-label="' + esc(opts.ariaLabel || '') + '">'
+            + ' data-dt-id="' + esc(id) + '"'
+            // Only emit aria-label when there is one: an empty label is an
+            // unnamed table exactly like no attribute, but byte-dirt on
+            // every consumer with nothing to name.
+            + (opts.ariaLabel ? ' aria-label="' + esc(opts.ariaLabel) + '"' : '')
+            + '>'
             + '<thead><tr>' + headHtml + '</tr></thead>'
             + '<tbody>' + bodyHtml + '</tbody>'
             + '</table>';

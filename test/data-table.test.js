@@ -408,4 +408,14 @@ var wired2 = StandplassDataTable.wireTable(
 assert.strictEqual(typeof wired2.destroy, 'function', 'wired table with full handlers returns { destroy }');
 wired2.destroy();
 
+// No ariaLabel passed → NO aria-label attribute: an empty aria-label is
+// an unnamed table exactly like no attribute, but it is byte-dirt on
+// every consumer with nothing to name (all stevner card tables, the
+// club-stats toplists). Consumers with a real label keep it.
+var noLabelHtml = StandplassDataTable.renderTable('nl-test', { columns: tlCols, rows: tlRows }, emptyState);
+assert.ok(noLabelHtml.indexOf('<table class="ranking-table" data-dt-id="nl-test">') === 0,
+    'no ariaLabel opt → no aria-label attribute');
+assert.ok(noLabelHtml.indexOf('aria-label') === -1,
+    'the table element carries no aria-label anywhere');
+
 console.log('data-table.test.js: all assertions passed');
