@@ -391,7 +391,11 @@ var StandplassClubStats = (function () {
     function classDistTableSpec(dist, clubName) {
         return {
             columns: [
-                { key: 'discipline', label: 'Øvelse', sortable: true, defaultDir: 'asc' },
+                // Øvelse ties resolve by Klasse (secondary sort key):
+                // sorting by øvelse shows each øvelse's classes
+                // alphabetically instead of carrying the default
+                // starts-desc order into the tie groups.
+                { key: 'discipline', label: 'Øvelse', sortable: true, defaultDir: 'asc', secondaryKey: 'class' },
                 { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
                 { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }

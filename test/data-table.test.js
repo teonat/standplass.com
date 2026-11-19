@@ -94,6 +94,47 @@ assert.deepStrictEqual(
     ['Åsen', 'Ørland', 'Ælverum', 'Bodø'],
     'desc: mirrors the Norwegian order');
 
+// --- secondary sort key (tie-break column) ---
+// A column may declare secondaryKey (+ secondaryDir, default 'asc'):
+// equal primary values order by the secondary — Klassefordeling's
+// Øvelse sort keeps each øvelse's classes alphabetical while the
+// default page order (starts desc) stays untouched. Both passes are
+// stable and nulls-last: primary nulls sink to the very end, secondary
+// nulls last within their tie group.
+var secRows = [
+    { o: 'Finfelt', k: 'Åpen' },
+    { o: 'Grovfelt', k: 'A' },
+    { o: 'Finfelt', k: 'Ærlig' },
+    { o: 'Finfelt', k: null }
+];
+function secOf(sorted) { return sorted.map(function (r) { return r.o + '/' + r.k; }); }
+assert.deepStrictEqual(
+    secOf(StandplassDataTable.sortRowsNullsLast(secRows, 'o', 'asc', 'k')),
+    ['Finfelt/Ærlig', 'Finfelt/Åpen', 'Finfelt/null', 'Grovfelt/A'],
+    'secondaryKey: primary ties order by the secondary (Norwegian collation), secondary nulls last');
+assert.deepStrictEqual(
+    secOf(StandplassDataTable.sortRowsNullsLast(secRows, 'o', 'asc', 'k', 'desc')),
+    ['Finfelt/Åpen', 'Finfelt/Ærlig', 'Finfelt/null', 'Grovfelt/A'],
+    'secondaryDir desc reverses only the tie-break');
+assert.deepStrictEqual(
+    secOf(StandplassDataTable.sortRowsNullsLast(secRows, 'o', 'desc', 'k')),
+    ['Grovfelt/A', 'Finfelt/Ærlig', 'Finfelt/Åpen', 'Finfelt/null'],
+    'primary desc still groups; ties stay secondary-asc; primary nulls last');
+assert.deepStrictEqual(
+    secOf(StandplassDataTable.sortRowsNullsLast(secRows, 'o', 'asc')),
+    ['Finfelt/Åpen', 'Finfelt/Ærlig', 'Finfelt/null', 'Grovfelt/A'],
+    'no secondaryKey: today\'s behavior — ties keep input order (Åpen before Ærlig)');
+
+// Through renderTable: the column spec carries the secondary key.
+var secHtml = StandplassDataTable.renderTable('sec-test',
+    { columns: [
+        { key: 'o', label: 'Ø', sortable: true, defaultDir: 'asc', secondaryKey: 'k' },
+        { key: 'k', label: 'K', sortable: true, defaultDir: 'asc' }
+    ], rows: secRows, ariaLabel: 'sec' },
+    { sort: { key: 'o', dir: 'asc' }, hidden: {}, runtimeHidden: [], widthTier: null });
+assert.ok(secHtml.indexOf('Ærlig') < secHtml.indexOf('Åpen') && secHtml.indexOf('Åpen') < secHtml.indexOf('Grovfelt'),
+    'renderTable: øvelse sort with secondaryKey renders tie-broken order');
+
 // --- renderTable: golden markup ---
 
 function escText(s) {

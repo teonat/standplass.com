@@ -842,6 +842,12 @@ assert.ok(cdHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td>Åpen</td><td 
 var cdAsc = ddSorted(cdSpec, 'class', 'asc');
 assert.ok(cdAsc.indexOf('Ærlig') < cdAsc.indexOf('Åpen'),
     'klassefordeling: Klasse sorts Norwegian-collated (Æ before Å)');
+// Øvelse ties resolve by Klasse (the column's secondary sort key):
+// within Finfelt, Ærlig sorts before Åpen — the default starts-desc
+// page order would otherwise carry into the tie group.
+var cdDisc = ddSorted(cdSpec, 'discipline', 'asc');
+assert.ok(cdDisc.indexOf('Ærlig') < cdDisc.indexOf('Åpen'),
+    'klassefordeling: Øvelse sort keeps each øvelse\'s classes alphabetical');
 
 // ── Chart details table spec (batch 1) ──────────────────────────────────
 var ctSpecStarts = CS.chartTableSpec('starts',

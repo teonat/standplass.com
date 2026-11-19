@@ -23,11 +23,21 @@ var StandplassDataTable = (function () {
         });
     }
 
-    function sortRowsNullsLast(rows, key, dir) {
+    function sortRowsNullsLast(rows, key, dir, secondaryKey, secondaryDir) {
+        // Secondary key (tie-break): a stable pre-pass sorts by the
+        // secondary first, the primary second — equal primary values
+        // then order by the secondary (e.g. Klassefordeling's Øvelse
+        // sort keeps each øvelse's classes alphabetical while the
+        // default starts-desc page order stays untouched). Both passes
+        // are stable and nulls-last: primary nulls sink to the very
+        // end, secondary nulls last within their tie group.
+        var input = secondaryKey
+            ? sortRowsNullsLast(rows, secondaryKey, secondaryDir || 'asc')
+            : rows;
         var withValue = [];
         var nulls = [];
-        for (var i = 0; i < rows.length; i++) {
-            if (rows[i][key] == null) { nulls.push(rows[i]); } else { withValue.push(rows[i]); }
+        for (var i = 0; i < input.length; i++) {
+            if (input[i][key] == null) { nulls.push(input[i]); } else { withValue.push(input[i]); }
         }
         // All-numeric columns sort through StandplassTable.sortRows (the
         // proven primitive). Columns with any string value — club and
@@ -107,6 +117,19 @@ var StandplassDataTable = (function () {
         // defaultSort only marks the initial aria-sort; rows stay in page
         // order until the page's state.sort says otherwise.
         var ariaSort = sort || opts.defaultSort || null;
+        // The sorted column's secondaryKey/secondaryDir (tie-break), if
+        // it declares one — resolved once here, consumed by both sort
+        // paths below.
+        var sortSecondary = null;
+        var sortSecondaryDir = null;
+        if (sort) {
+            for (var scc = 0; scc < columns.length; scc++) {
+                if (columns[scc].key === sort.key) {
+                    sortSecondary = columns[scc].secondaryKey || null;
+                    sortSecondaryDir = columns[scc].secondaryDir || null;
+                }
+            }
+        }
 
         // Alternating column shading: every other VISIBLE column carrying
         // the same zebraClass gets that class, computed here at render
@@ -160,12 +183,12 @@ var StandplassDataTable = (function () {
         if (opts.groupRows) {
             // Sort applies within groups; group order stays fixed.
             bodyHtml = opts.groupRows(rows).map(function (group) {
-                var gRows = sort ? sortRowsNullsLast(group.rows, sort.key, sort.dir) : group.rows;
+                var gRows = sort ? sortRowsNullsLast(group.rows, sort.key, sort.dir, sortSecondary, sortSecondaryDir) : group.rows;
                 return '<tr class="dt-group-row"><th scope="colgroup" colspan="' + vis.length + '">' + esc(group.label) + '</th></tr>'
                     + gRows.map(function (r, gi) { return rowHtml(r, gi); }).join('');
             }).join('');
         } else {
-            var ordered = sort ? sortRowsNullsLast(rows, sort.key, sort.dir) : rows;
+            var ordered = sort ? sortRowsNullsLast(rows, sort.key, sort.dir, sortSecondary, sortSecondaryDir) : rows;
             bodyHtml = ordered.map(function (r, i) { return rowHtml(r, i); }).join('');
         }
 
