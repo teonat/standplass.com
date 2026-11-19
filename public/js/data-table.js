@@ -14,12 +14,17 @@ var StandplassDataTable = (function () {
     function visibleColumns(columns, state) {
         return columns.filter(function (col) {
             if ((state.runtimeHidden || []).indexOf(col.key) !== -1) { return false; }
-            if (hiddenByWidth(col, state.widthTier)) { return false; }
-            // nullish coalescing in ES5: absent (null/undefined) falls back to the default
-            var hidden = state.hidden != null && state.hidden[col.key] != null
+            // An explicit user choice wins over BOTH the width tier and
+            // defaultHidden — users can choose columns at any width
+            // (re-enabling a narrow-width-hidden column, hiding an
+            // all-widths one). Only when the user hasn't chosen do the
+            // tier and defaultHidden act as defaults.
+            var user = state.hidden != null && state.hidden[col.key] != null
                 ? state.hidden[col.key]
-                : col.defaultHidden;
-            return !hidden;
+                : null;
+            if (user != null) { return !user; }
+            if (hiddenByWidth(col, state.widthTier)) { return false; }
+            return !col.defaultHidden;
         });
     }
 

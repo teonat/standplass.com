@@ -37,11 +37,28 @@ assert.deepStrictEqual(
     ['rank'],
     'runtimeHidden wins over hidden[key] === false');
 
-// hideBelow: 700 column excluded at widthTier: 700 even when explicitly shown
+// hideBelow: 700 with NO user choice: the tier acts as a default -> hidden
+assert.deepStrictEqual(
+    keysOf(StandplassDataTable.visibleColumns(cols, { hidden: {}, runtimeHidden: [], widthTier: 700 })),
+    ['rank', 'club'],
+    'hideBelow column hidden at tier 700 with no user choice');
+
+// explicit user SHOW overrides the width tier (owner decision 8: users can
+// choose columns at any width — re-enabling a phone-hidden column)
 assert.deepStrictEqual(
     keysOf(StandplassDataTable.visibleColumns(cols, { hidden: { value: false }, runtimeHidden: [], widthTier: 700 })),
+    ['rank', 'club', 'value'],
+    'hidden[key] === false overrides the width tier');
+
+// ...and the tier still hides with no user choice at wider tiers (covered
+// above: tier 900 keeps value visible)
+
+// runtimeHidden stays authoritative: it beats an explicit user SHOW even
+// at the tier that would hide the column anyway
+assert.deepStrictEqual(
+    keysOf(StandplassDataTable.visibleColumns(cols, { hidden: { value: false }, runtimeHidden: ['value'], widthTier: 700 })),
     ['rank', 'club'],
-    'hideBelow: 700 column excluded at widthTier 700');
+    'runtimeHidden wins over an explicit show at tier 700');
 
 // ...but visible at widthTier: 900 (and at null, covered above)
 assert.deepStrictEqual(
