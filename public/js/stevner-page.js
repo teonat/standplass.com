@@ -295,18 +295,12 @@ var StandplassStevnerPage = (function () {
         // dt-picker-btn class, is the wiring hook: this button wears
         // the Fold-alle look.
         var pickerHtml = ' <div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
-        // A single card gets the bar's RIGHT group only (updated stamp +
-        // Kolonner): the stats text would duplicate the card's own line
-        // and "Fold alle" is a bulk action — but columns are choosable at
-        // any result count. Zero cards never reaches this from render()
-        // (the empty state owns that path); guarded anyway for the
-        // export.
-        if (cards.length < 2) {
-            if (cards.length === 0) { return ''; }
-            return '<div class="stevner-overall-stats">'
-                + '<div class="stevner-stats-right">' + esc(formatUpdated(lastUpdated)) + pickerHtml
-                + '</div></div>';
-        }
+        // The FULL bar renders at ANY card count ≥ 1 (owner QA round 3):
+        // summary line, updated stamp, Kolonner and "Fold alle" — even a
+        // single competition result keeps them all. Zero cards never
+        // reaches this from render() (the empty state owns that path);
+        // guarded anyway for the export.
+        if (!cards.length) { return ''; }
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
