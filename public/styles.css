@@ -1024,6 +1024,9 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    (resultatliste-felt.html:120, 194, 201, 210). */
 .ranking-filters { margin-top: 1rem; }
 .program-toggle { margin-top: 0.5rem; }
+/* The shared "Kolonner" picker row (felt/bane) — same spacing as the
+   toggle rows it follows. */
+.stevner-table-controls { margin-top: 0.5rem; }
 #felt-root > .ranking-table,
 #bane-root > .ranking-table { margin-top: 1.5rem; }
 

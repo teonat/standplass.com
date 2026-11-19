@@ -235,23 +235,28 @@ var StandplassStevnerPage = (function () {
     // an empty group array would render an EMPTY body, never do that).
     // The card's groups already carry the group mode (built by
     // buildCompetitionCards); the spec takes the card as-is.
+    // The card tables' column definitions — identical for every card, so
+    // they live here once: competitionCardTableSpec hands every card
+    // this array, and the page-level shared picker lists the same
+    // columns (choices apply to every card at once).
+    var CARD_COLUMNS = [
+        { key: 'position', label: '#', sortable: true, defaultDir: 'asc', format: num },
+        { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+            cell: function (row) { return row.nameHtml; } },
+        { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },
+        { key: 'discipline', label: 'Øvelse' },
+        { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
+        { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
+        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc', hideBelow: 700,
+            cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
+    ];
+
     function competitionCardTableSpec(card) {
         var flat = [];
         (card.groups || []).forEach(function (g) {
             (g.rows || []).forEach(function (r) { flat.push(r); });
         });
-        var cols = [
-            { key: 'position', label: '#', sortable: true, defaultDir: 'asc', format: num },
-            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
-                cell: function (row) { return row.nameHtml; } },
-            { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },
-            { key: 'discipline', label: 'Øvelse' },
-            { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
-            { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
-            { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc', hideBelow: 700,
-                cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
-        ];
-        var spec = { columns: cols, rows: flat };
+        var spec = { columns: CARD_COLUMNS, rows: flat };
         if ((card.groups || []).length > 1) {
             spec.groupRows = function () { return card.groups; };
         }
@@ -423,11 +428,19 @@ var StandplassStevnerPage = (function () {
         // Rendered spec per competition id: render() rebuilds these
         // (cards regroup when filters change); wireCardTable consumes.
         var cardSpecs = {};
+        // Shared column choices, applied to every card table at once
+        // (session-only, same ruling). ONE map, and the wired picker
+        // captured it by reference — onColumnsChange therefore syncs it
+        // IN PLACE: replacing the object would leave the picker reading
+        // a stale map on its next open (the panel rebuilds its checkbox
+        // list from getSelected, which reads the captured state).
+        var pickerHidden = {};
+        var pickerWire = null;
 
         function cardTableState(cardId) {
             return {
                 sort: cardSort[cardId] || null,
-                hidden: {},
+                hidden: pickerHidden,
                 // Exactly one club filtered: every row would show the
                 // same club, so the column is pure noise. Hidden at
                 // runtime (excluded from any picker) — reversible by
@@ -484,6 +497,29 @@ var StandplassStevnerPage = (function () {
             });
         }
 
+        function wireSharedPicker() {
+            // destroy-before-rewire (top3Wire precedent): the dropdown's
+            // outside-click listener outlives its DOM, and the wiring
+            // must pick up the CURRENT runtimeHidden list (single-club
+            // filter) and width tier. root is document for direct-mount
+            // and the shadow root for embeds — the button comes from the
+            // one buildMarkup, so it is inside root either way. Pages
+            // without the button (klubb, nasjonalt) get null and no
+            // picker.
+            if (pickerWire) { pickerWire.destroy(); pickerWire = null; }
+            pickerWire = StandplassDataTable.wirePicker(root, { columns: CARD_COLUMNS }, {
+                onColumnsChange: function (hidden) {
+                    Object.keys(pickerHidden).forEach(function (k) { delete pickerHidden[k]; });
+                    Object.keys(hidden).forEach(function (k) { pickerHidden[k] = hidden[k]; });
+                    rerenderCardTables();
+                }
+            }, {
+                hidden: pickerHidden,
+                runtimeHidden: activeClubs.length === 1 ? ['club'] : [],
+                widthTier: currentWidthTier
+            });
+        }
+
         function render() {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
@@ -502,6 +538,10 @@ var StandplassStevnerPage = (function () {
             }
             loadMoreBtn.textContent = 'Last flere (viser ' + pagination.state.items.length + ' av ' + visibleCards.length + ' stevner)';
             loadMoreBtn.hidden = pagination.state.done;
+            // Also on the empty-filter path: the picker is page chrome,
+            // independent of rendered cards — choices made while empty
+            // must hold when cards appear.
+            wireSharedPicker();
         }
 
         // ONE page-level tier listener: crossing the 700px line updates
@@ -513,6 +553,10 @@ var StandplassStevnerPage = (function () {
         var onTierChange = function () {
             currentWidthTier = tierMql.matches ? 700 : null;
             rerenderCardTables();
+            // The picker's checkbox defaults are tier-dependent (a
+            // tier-hidden column shows unchecked so it can be re-enabled)
+            // — its captured state must carry the new tier.
+            wireSharedPicker();
         };
         if (typeof tierMql.addEventListener === 'function') {
             tierMql.addEventListener('change', onTierChange);
