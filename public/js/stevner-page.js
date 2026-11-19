@@ -229,12 +229,15 @@ var StandplassStevnerPage = (function () {
     // it is the group key in every mode, so it never varies within a
     // group; a sort button there would be a guaranteed no-op. Cells are
     // deliberately UNCLASSED (no align/rank/score styling — owner ruling:
-    // the tables look exactly like today). rows are the flattened
-    // card.groups so single-group cards — which omit the groupRows opt —
-    // keep the comparator order through the base's flat path (returning
-    // an empty group array would render an EMPTY body, never do that).
-    // The card's groups already carry the group mode (built by
-    // buildCompetitionCards); the spec takes the card as-is.
+    // the tables look exactly like today). The group row renders on
+    // EVERY card, single-group included (owner QA round 7: the label is
+    // where the discipline lives at phone width, where the Øvelse column
+    // is tier-hidden — single-group cards never showed it pre-migration
+    // either, same length > 1 condition there); the guard below is only
+    // against a genuinely empty groups array, which would render an
+    // empty body through the group path. The card's groups already
+    // carry the group mode (built by buildCompetitionCards); the spec
+    // takes the card as-is.
     // The card tables' column definitions — identical for every card, so
     // they live here once: competitionCardTableSpec hands every card
     // this array, and the page-level shared picker lists the same
@@ -261,7 +264,7 @@ var StandplassStevnerPage = (function () {
             (g.rows || []).forEach(function (r) { flat.push(r); });
         });
         var spec = { columns: CARD_COLUMNS, rows: flat };
-        if ((card.groups || []).length > 1) {
+        if ((card.groups || []).length) {
             spec.groupRows = function () { return card.groups; };
         }
         return spec;

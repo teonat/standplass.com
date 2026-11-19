@@ -160,9 +160,11 @@ assert.deepStrictEqual(SP.resolveSlugElements(null, names), { clubs: [], hasUnma
 // ── competitionCardTableSpec (batch 2: shared table base) ───────────────
 // The per-competition card tables render through the base: six sortable
 // columns (Øvelse stays plain — it is the group key), group rows via
-// dt-group-row ONLY on multi-group cards, cells completely unclassed
-// (no rank/score styling — owner ruling), and rows flattened from
-// card.groups so single-group cards keep the comparator order.
+// dt-group-row on EVERY card (single-group included — owner QA round 7:
+// the label is where the discipline lives at phone width, where the
+// Øvelse column is hidden by default; single-group cards never showed
+// it pre-migration either), cells completely unclassed (no rank/score
+// styling — owner ruling), and rows flattened from card.groups.
 var NF_STATE = { hidden: {}, runtimeHidden: [], widthTier: null };
 function nfRender(spec, state) {
     return StandplassDataTable.renderTable('stevner-card-test', spec, state || NF_STATE);
@@ -193,13 +195,15 @@ assert.ok(klasseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" cols
 assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td>2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td>90.00</td></tr>') !== -1,
     'card table: person button byte-exact, num/toFixed(2) cells, no cell classes (comparator order: Fellesfelt < Grovfelt puts Ola at index 1)');
 
-// Single-group card (c2): NO groupRows opt, flat path, rows present.
+// Single-group card (c2): carries the group row TOO — the label row is
+// the discipline's home when the Øvelse column is tier-hidden.
 var singleSpec = SP.competitionCardTableSpec(cards[1]);
-assert.ok(!singleSpec.groupRows, 'single-group card omits groupRows (an empty array renders an empty body)');
+assert.ok(singleSpec.groupRows, 'single-group card carries the groupRows opt');
 var singleHtml = nfRender(singleSpec);
-assert.ok(singleHtml.indexOf('dt-group-row') === -1, 'single-group card has no group row');
+assert.ok(singleHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – B</th></tr>') !== -1,
+    'single-group card renders its group label row');
 assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td>1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td>92.00</td></tr>') !== -1,
-    'single-group card: flat rows render with comparator order');
+    'single-group card: rows keep comparator order beneath the label');
 
 // Single-group card in poeng mode keeps the comparator (poeng desc) order.
 var poengComps = [{
@@ -214,11 +218,12 @@ var poengComps = [{
 var poengCards = SP.buildCompetitionCards(poengComps, Object.assign({}, baseFilters, { groupMode: 'poeng' }));
 assert.strictEqual(poengCards[0].groups.length, 1, 'poeng mode: one discipline-only group');
 var poengSpec = SP.competitionCardTableSpec(poengCards[0]);
-assert.ok(!poengSpec.groupRows, 'single-group card in poeng mode also omits groupRows');
+assert.ok(poengSpec.groupRows, 'single-group card in poeng mode carries groupRows');
 var poengHtml = nfRender(poengSpec);
-assert.ok(poengHtml.indexOf('dt-group-row') === -1, 'poeng single-group: no group row');
+assert.ok(poengHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt</th></tr>') !== -1,
+    'poeng single-group: group label row renders');
 assert.ok(poengHtml.indexOf('<td>30</td>') < poengHtml.indexOf('<td>28</td>') && poengHtml.indexOf('<td>28</td>') < poengHtml.indexOf('<td>25</td>'),
-    'single-group card keeps comparator order (poeng desc) through the flat path');
+    'single-group card keeps comparator order (poeng desc) beneath the label');
 
 // Sorts apply WITHIN groups; group order and group rows stay fixed.
 // ovelse mode: groups are [Fellesfelt: Per], [Grovfelt: Kari, Ola]
