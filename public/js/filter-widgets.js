@@ -153,9 +153,11 @@ var StandplassFilterWidgets = (function () {
     // Wires up a checkbox dropdown (click-outside, Escape, rebuild).
     // cfg: { btn, panel, list, clearAllBtn, getItems(), getSelected(), labelNone,
     //        onToggle(id, name, checked), onClearAll(), searchable? }
-    // Returns: { rebuild(), destroy() } -- destroy() removes the root-node
-    // outside-click listener, which outlives this dropdown's elements; a
-    // caller that remounts must call it or that listener leaks per mount.
+    // Returns: { rebuild(), destroy() } -- destroy() removes every
+    // listener this wiring registered (btn click, panel Escape keydown,
+    // clear-all click, and the root-node outside-click listener, which
+    // outlives this dropdown's elements); a caller that remounts must
+    // call it or those listeners leak per mount.
     function makeCheckboxDropdown(cfg) {
         var searchQuery   = '';
         var searchInputEl = null;
@@ -287,7 +289,7 @@ var StandplassFilterWidgets = (function () {
             });
         }
 
-        cfg.btn.addEventListener('click', function () {
+        function onBtnClick() {
             if (cfg.btn.disabled) return;
             if (cfg.panel.hasAttribute('hidden')) {
                 openPanel();
@@ -295,18 +297,21 @@ var StandplassFilterWidgets = (function () {
                 closePanel();
                 cfg.btn.focus();
             }
-        });
+        }
+        cfg.btn.addEventListener('click', onBtnClick);
 
-        cfg.clearAllBtn.addEventListener('click', function () {
+        function onClearAllClick() {
             cfg.onClearAll();
-        });
+        }
+        cfg.clearAllBtn.addEventListener('click', onClearAllClick);
 
-        cfg.panel.addEventListener('keydown', function (e) {
+        function onPanelKeydown(e) {
             if (e.key === 'Escape') {
                 closePanel();
                 cfg.btn.focus();
             }
-        });
+        }
+        cfg.panel.addEventListener('keydown', onPanelKeydown);
 
         var wrapper = cfg.btn.parentElement;
         // getRootNode(), not document: click is composed, so a document-level
@@ -324,8 +329,17 @@ var StandplassFilterWidgets = (function () {
         }
         rootNode.addEventListener('click', onOutsideClick);
 
+        // Removes EVERY listener registered above. destroy() is the
+        // re-wire primitive: batch-2's shared stevner picker destroys and
+        // re-wires a dropdown onto a long-lived STATIC button on every
+        // render — anything left registered here would accumulate (and
+        // retain this dropdown's now-detached panel subtree via the
+        // listener closures) for the life of the page.
         function destroy() {
             rootNode.removeEventListener('click', onOutsideClick);
+            cfg.btn.removeEventListener('click', onBtnClick);
+            cfg.panel.removeEventListener('keydown', onPanelKeydown);
+            cfg.clearAllBtn.removeEventListener('click', onClearAllClick);
         }
 
         return { rebuild: rebuild, destroy: destroy };

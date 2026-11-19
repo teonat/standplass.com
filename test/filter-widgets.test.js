@@ -70,4 +70,65 @@ assert.deepStrictEqual(rowsCalls, ['30', 'all'], 'onChange fired on change');
 assert.deepStrictEqual(storageCalls, [], 'still no storage writes after a change');
 delete global.localStorage;
 
+// makeCheckboxDropdown's destroy contract: it removes EVERY listener it
+// registered, not just the root outside-click. Batch-2's shared stevner
+// picker re-wires a dropdown onto a long-lived STATIC button on every
+// render (destroy-before-rewire) — a destroy that leaves the button's
+// click listener behind accumulates one listener (plus one retained
+// detached panel subtree, captured by the listener's closure) per
+// re-wire, for the life of the page.
+function countListeners(el, evt) {
+    return el.listeners[evt] ? el.listeners[evt].length : 0;
+}
+function fakeDropdownEl() {
+    return {
+        listeners: {},
+        addEventListener: function (evt, fn) {
+            (this.listeners[evt] = this.listeners[evt] || []).push(fn);
+        },
+        removeEventListener: function (evt, fn) {
+            var arr = this.listeners[evt] || [];
+            var i = arr.indexOf(fn);
+            if (i !== -1) { arr.splice(i, 1); }
+        },
+        // Panel reports hidden so rebuild() skips buildList — this test
+        // pins listener bookkeeping, not list building.
+        hasAttribute: function () { return true; },
+        setAttribute: function () {},
+        removeAttribute: function () {}
+    };
+}
+var ddRoot = fakeDropdownEl();
+var ddBtn = fakeDropdownEl();
+ddBtn.getRootNode = function () { return ddRoot; };
+ddBtn.parentElement = { contains: function () { return false; } };
+var ddPanel = fakeDropdownEl();
+var ddList = fakeDropdownEl();
+var ddClearAll = fakeDropdownEl();
+function makeTestDropdown() {
+    return StandplassFilterWidgets.makeCheckboxDropdown({
+        btn: ddBtn, panel: ddPanel, list: ddList, clearAllBtn: ddClearAll,
+        labelNone: 'Ingen',
+        getItems: function () { return [{ id: 'a', name: 'A' }]; },
+        getSelected: function () { return ['a']; },
+        onToggle: function () {},
+        onClearAll: function () {}
+    });
+}
+var dd1 = makeTestDropdown();
+dd1.rebuild();
+assert.strictEqual(countListeners(ddBtn, 'click'), 1, 'one button listener after wiring');
+assert.strictEqual(countListeners(ddRoot, 'click'), 1, 'one root outside-click listener after wiring');
+assert.strictEqual(countListeners(ddPanel, 'keydown'), 1, 'one panel keydown listener after wiring');
+assert.strictEqual(countListeners(ddClearAll, 'click'), 1, 'one clear-all listener after wiring');
+dd1.destroy();
+assert.strictEqual(countListeners(ddBtn, 'click'), 0, 'destroy removes the button click listener');
+assert.strictEqual(countListeners(ddRoot, 'click'), 0, 'destroy removes the root outside-click listener');
+assert.strictEqual(countListeners(ddPanel, 'keydown'), 0, 'destroy removes the panel keydown listener');
+assert.strictEqual(countListeners(ddClearAll, 'click'), 0, 'destroy removes the clear-all listener');
+// The re-wire cycle the stevner picker does per render: net zero growth.
+var dd2 = makeTestDropdown();
+assert.strictEqual(countListeners(ddBtn, 'click'), 1, 're-wiring after destroy adds exactly one listener again');
+dd2.destroy();
+
 console.log('filter-widgets.test.js: all assertions passed');
