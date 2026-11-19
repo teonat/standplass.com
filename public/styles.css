@@ -1693,7 +1693,7 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 }
 
 /* Top-3 card placement-mode / øvelser-visibility toggle group */
-.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0; }
+.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0.5rem; }
 .top3-mode-btn {
   background: none; border: 1px solid var(--border); border-radius: var(--radius);
   color: var(--text-muted); font: inherit; font-size: 0.8125rem;
