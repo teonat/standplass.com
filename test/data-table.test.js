@@ -80,6 +80,20 @@ assert.deepStrictEqual(
     ['A', 'B', 'C', 'D', 'E', 'F'],
     'input array must not be mutated');
 
+// Norwegian collation for string columns: Æ < Ø < Å, like the site's own
+// name sorts (localeCompare 'no'). Raw code-point order would put Å
+// (U+00C5) before Æ (U+00C6) and Ø (U+00D8).
+var noRows = [{ n: 'Åsen' }, { n: 'Ælverum' }, { n: 'Ørland' }, { n: 'Bodø' }];
+function nOf(sorted) { return sorted.map(function (r) { return r.n; }); }
+assert.deepStrictEqual(
+    nOf(StandplassDataTable.sortRowsNullsLast(noRows, 'n', 'asc')),
+    ['Bodø', 'Ælverum', 'Ørland', 'Åsen'],
+    'asc: Norwegian collation Æ < Ø < Å, not code-point order');
+assert.deepStrictEqual(
+    nOf(StandplassDataTable.sortRowsNullsLast(noRows, 'n', 'desc')),
+    ['Åsen', 'Ørland', 'Ælverum', 'Bodø'],
+    'desc: mirrors the Norwegian order');
+
 // --- renderTable: golden markup ---
 
 function escText(s) {

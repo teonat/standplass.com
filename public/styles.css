@@ -1579,6 +1579,11 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   margin-bottom: 0.5rem;
 }
 
+/* Positioning context for the picker's dropdown panel (the panel is
+   position: absolute; without this it anchors to the page instead of
+   the toolbar and renders off-screen). */
+.dt-picker-anchor { position: relative; }
+
 /* Same visual treatment as .checkbox-dropdown-btn (values copied, not
    restyled) minus the filter-bar width:100%. */
 .dt-picker-btn {

@@ -1593,24 +1593,30 @@ var StandplassClubStats = (function () {
         }
 
         function wireTop3() {
+            // Destroy the previous wire FIRST: a re-render that produces
+            // no top-3 table (empty ranking, year with no data) must
+            // still release the old dropdown's outside-click listener —
+            // it outlives its DOM.
+            if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             if (!top3Spec) { return; }
             if (!contentEl.querySelector('table[data-dt-id="top3"]')) { return; }
-            if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             top3Wire = StandplassDataTable.wireTable(contentEl, 'top3', top3Spec, top3Handlers(), top3State);
         }
 
         function rerenderTop3Table() {
             // Surgical re-render: replace only the table element, keeping
-            // the toolbar — and its open picker panel — alive. The old
-            // table's listeners die with it; the new table re-wires
-            // without touching the picker.
+            // the toolbar — and its open picker panel — and the existing
+            // scroll wrap alive. The replacement must be a BARE table
+            // (no wrapClass, no picker): re-wrapping would nest a second
+            // scroll region inside the first. The old table's listeners
+            // die with it; the new table re-wires without touching the
+            // picker.
             var tableEl = contentEl.querySelector('table[data-dt-id="top3"]');
             if (!tableEl || !top3Spec) { return; }
             tableEl.outerHTML = StandplassDataTable.renderTable('top3', {
                 columns: top3Spec.columns,
                 rows: top3Spec.rows,
                 ariaLabel: top3Spec.ariaLabel,
-                wrapClass: top3Spec.wrapClass,
                 defaultSort: top3Spec.defaultSort
             }, top3State);
             StandplassDataTable.wireTable(contentEl, 'top3', {

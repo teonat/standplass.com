@@ -29,7 +29,26 @@ var StandplassDataTable = (function () {
         for (var i = 0; i < rows.length; i++) {
             if (rows[i][key] == null) { nulls.push(rows[i]); } else { withValue.push(rows[i]); }
         }
-        return StandplassTable.sortRows(withValue, key, dir).concat(nulls);
+        // All-numeric columns sort through StandplassTable.sortRows (the
+        // proven primitive). Columns with any string value — club and
+        // shooter names — compare with Norwegian collation (Æ < Ø < Å),
+        // matching the site's own name-sort conventions; raw code-point
+        // comparison would put Å before Æ and Ø.
+        var sign = dir === 'desc' ? -1 : 1;
+        var allNumbers = withValue.every(function (r) { return typeof r[key] === 'number'; });
+        var sorted = allNumbers
+            ? StandplassTable.sortRows(withValue, key, dir)
+            : withValue.slice().sort(function (a, b) {
+                var av = a[key];
+                var bv = b[key];
+                if (typeof av === 'number' && typeof bv === 'number') {
+                    if (av === bv) { return 0; }
+                    return av > bv ? sign : -sign;
+                }
+                var cmp = String(av).localeCompare(String(bv), 'no');
+                return cmp !== 0 ? (cmp > 0 ? sign : -sign) : 0;
+            });
+        return sorted.concat(nulls);
     }
 
     // ── Markup builder ────────────────────────────────────────────────
@@ -191,17 +210,23 @@ var StandplassDataTable = (function () {
         }
 
         // Column picker: the toolbar renderTable emitted immediately
-        // before the table owns the scaffold; build it there, mirroring
-        // the established mountFilterDropdown pattern (the dropdown's
-        // checkbox-dropdown-* classes reuse the existing styles).
+        // before the table owns the "Kolonner" button and the anchor.
+        // Wire the dropdown onto that rendered button and build only the
+        // panel scaffold inside the anchor (mirroring the established
+        // mountFilterDropdown pattern; the checkbox-dropdown-* classes
+        // reuse the existing styles). The anchor is the positioning
+        // context for the absolutely-positioned panel.
         if (opts.picker && table) {
             var toolbar = table.previousElementSibling;
-            var anchor = toolbar && toolbar.classList && toolbar.classList.contains('dt-toolbar')
+            var fromToolbar = toolbar && toolbar.classList && toolbar.classList.contains('dt-toolbar');
+            var pickerBtn = fromToolbar
+                ? toolbar.querySelector('.dt-picker-btn')
+                : root.querySelector('.dt-picker-btn');
+            var anchor = fromToolbar
                 ? toolbar.querySelector('.dt-picker-anchor')
                 : root.querySelector('.dt-picker-anchor');
-            if (anchor) {
-                anchor.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
-                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'
+            if (pickerBtn && anchor) {
+                anchor.innerHTML = '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'
                     + '<ul class="checkbox-dropdown-list"></ul></div>';
                 function userHidden(col) {
                     return state.hidden != null && state.hidden[col.key] != null
@@ -209,7 +234,7 @@ var StandplassDataTable = (function () {
                         : col.defaultHidden;
                 }
                 var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
-                    btn: anchor.querySelector('.checkbox-dropdown-btn'),
+                    btn: pickerBtn,
                     panel: anchor.querySelector('.checkbox-dropdown-panel'),
                     list: anchor.querySelector('.checkbox-dropdown-list'),
                     clearAllBtn: anchor.querySelector('.checkbox-dropdown-clear-all'),
@@ -236,6 +261,10 @@ var StandplassDataTable = (function () {
                     }
                 });
                 dropdown.rebuild();
+                // The picker is a settings control, not a filter readout:
+                // keep the toolbar's own label ("Kolonner") instead of the
+                // dropdown's selection-count text.
+                pickerBtn.textContent = (opts.picker && opts.picker.buttonLabel) || 'Kolonner';
                 cleanups.push(function () { dropdown.destroy(); });
             }
         }
