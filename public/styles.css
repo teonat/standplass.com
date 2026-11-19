@@ -573,12 +573,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 }
 /* The stats bar's right group: updated stamp, the shared "Kolonner"
    picker (anchor-wrapped, Fold-alle-styled) and "Fold alle" on one
-   row. */
+   row. margin-left:auto keeps the group right-aligned in the
+   single-card bar too, where it is the bar's ONLY child. */
 .stevner-stats-right {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.5rem;
+    margin-left: auto;
 }
 .dt-group-row th {
     font-size: 0.75rem;

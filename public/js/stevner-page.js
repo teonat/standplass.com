@@ -287,7 +287,26 @@ var StandplassStevnerPage = (function () {
     // shooters — person-stevne pairs, not people; Y is the deduplicated
     // count. Rows without personId count in Z (startere) only.
     function overallStatsBar(cards, lastUpdated, idPrefix) {
-        if (cards.length < 2) { return ''; }
+        // Shared column picker (owner QA: next to "Fold alle", same
+        // style). The anchor WRAPS the button — the dropdown panel is
+        // absolutely positioned against the anchor's box (its right
+        // edge to the anchor's right edge), so wrapping is what keeps
+        // the panel aligned with the button. data-dt-picker, not the
+        // dt-picker-btn class, is the wiring hook: this button wears
+        // the Fold-alle look.
+        var pickerHtml = ' <div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
+        // A single card gets the bar's RIGHT group only (updated stamp +
+        // Kolonner): the stats text would duplicate the card's own line
+        // and "Fold alle" is a bulk action — but columns are choosable at
+        // any result count. Zero cards never reaches this from render()
+        // (the empty state owns that path); guarded anyway for the
+        // export.
+        if (cards.length < 2) {
+            if (cards.length === 0) { return ''; }
+            return '<div class="stevner-overall-stats">'
+                + '<div class="stevner-stats-right">' + esc(formatUpdated(lastUpdated)) + pickerHtml
+                + '</div></div>';
+        }
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
@@ -306,14 +325,7 @@ var StandplassStevnerPage = (function () {
             + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
             + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
             + '<div class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
-            // Shared column picker (owner QA: next to "Fold alle", same
-            // style). The anchor WRAPS the button — the dropdown panel is
-            // absolutely positioned against the anchor's box (its right
-            // edge to the anchor's right edge), so wrapping is what keeps
-            // the panel aligned with the button. data-dt-picker, not the
-            // dt-picker-btn class, is the wiring hook: this button wears
-            // the Fold-alle look.
-            + ' <div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>'
+            + pickerHtml
             + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></div></div>';
     }
 

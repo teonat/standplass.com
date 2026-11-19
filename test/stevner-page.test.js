@@ -276,7 +276,18 @@ assert.ok(statsBar.indexOf('<div class="dt-picker-anchor"><button type="button" 
     'Kolonner: anchor-wrapped, Fold-alle-styled, data-dt-picker hook');
 assert.ok(statsBar.indexOf('data-dt-picker') < statsBar.indexOf('stevner-collapse-all-btn" id="test-collapse-all"'),
     'Kolonner sits to the LEFT of Fold alle');
-assert.strictEqual(SP.overallStatsBar([cards[0]], '2026-11-19T10:00:00', 'test'), '',
-    'single-card results render no stats bar (and thus no picker)');
+// Single-card results still get the bar's RIGHT group (updated stamp +
+// Kolonner) — columns are choosable at any result count (owner QA round
+// 2) — but not the stats text (duplicates the card's own line) nor
+// "Fold alle" (bulk action; the card has its own collapse button).
+var singleBar = SP.overallStatsBar([cards[0]], '2026-11-19T10:00:00', 'test');
+assert.ok(singleBar.indexOf('<div class="dt-picker-anchor"><button type="button" class="stevner-collapse-all-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') !== -1,
+    'single card: the Kolonner button still renders');
+assert.ok(singleBar.indexOf('stevner-stats-right') !== -1, 'single card: the right group renders');
+assert.ok(singleBar.indexOf('deltakelse') === -1, 'single card: no stats text');
+assert.ok(singleBar.indexOf('Fold alle') === -1 && singleBar.indexOf('id="test-collapse-all"') === -1,
+    'single card: no Fold alle button (the Kolonner button shares its class, so pin the id)');
+assert.strictEqual(SP.overallStatsBar([], '2026-11-19T10:00:00', 'test'), '',
+    'zero cards: no bar at all (the empty state owns that render)');
 
 console.log('stevner-page.test.js: all assertions passed');
