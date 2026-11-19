@@ -17,6 +17,33 @@ var StandplassKlubbPage = (function () {
     function yearFrom(y) { return (y - 1) + '-12-31T23:00:00.000Z'; }
     function yearTo(y) { return y + '-12-31T22:59:59.999Z'; }
 
+    // Leaderboard card table spec (shared base). Rows flatten position
+    // into a data-anchored rank (position wins, page order falls back) so
+    // # travels with its row under sorting; the person button is a raw
+    // cell so the page's delegated person-modal wiring — on the grid
+    // wrap, above the re-rendered tables — keeps working unchanged.
+    function leaderboardCardSpec(entries, discName) {
+        entries = entries || [];
+        if (!entries.length) { return null; }
+        return {
+            columns: [
+                { key: 'rank', label: '#', align: 'center' },
+                { key: 'fullName', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                            + '" data-person-name="' + esc(row.fullName) + '" data-discipline="' + esc(discName) + '">'
+                            + esc(row.fullName) + '</button>';
+                    } },
+                { key: 'totalScore', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc',
+                    cell: function (row) { return row.totalScore != null ? Number(row.totalScore).toFixed(2) : '–'; } }
+            ],
+            rows: entries.map(function (e, i) {
+                return { rank: e.position || (i + 1), personId: e.personId, fullName: e.fullName, totalScore: e.totalScore };
+            }),
+            ariaLabel: discName
+        };
+    }
+
     // Pure -- no fetch, easy to test the query-string shape directly
     // against the API's documented gotchas.
     //
@@ -113,7 +140,6 @@ var StandplassKlubbPage = (function () {
             var rankingCache = {}; // { "discId|year|num": { time, promise } }
             var RANKING_TTL_MS = 5 * 60 * 1000;
             var activeAborts = [];
-            var cardState = {}; // { discId: { disc, entries, expanded } }
 
             function setUrlParam(key, value) {
                 var qs = new URLSearchParams(urlState.getSearch());
@@ -145,24 +171,49 @@ var StandplassKlubbPage = (function () {
                 return promise;
             }
 
-            function renderCard(cell, disc, entries, expanded) {
-                var TOP_N = 10;
-                var visible = expanded ? entries : entries.slice(0, TOP_N);
-                var rows = !entries.length
-                    ? '<tr><td colspan="3" class="ranking-empty">Ingen resultater for ' + selectedYear + '</td></tr>'
-                    : visible.map(function (e, i) {
-                        return '<tr><td class="ranking-rank">' + (e.position || (i + 1)) + '</td>'
-                            + '<td><button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(e.personId)
-                            + '" data-person-name="' + esc(e.fullName) + '" data-discipline="' + esc(disc.name) + '">' + esc(e.fullName) + '</button></td>'
-                            + '<td class="ranking-score">' + esc(e.totalScore != null ? Number(e.totalScore).toFixed(2) : '–') + '</td></tr>';
-                    }).join('');
-                var toggleHtml = entries.length > TOP_N
-                    ? '<button type="button" class="ranking-toggle" data-disc-id="' + esc(disc.id) + '">'
-                        + (expanded ? 'Vis topp ' + TOP_N : 'Vis alle (' + entries.length + ')') + '</button>'
-                    : '';
+            function renderCard(cell, disc, entries) {
+                var spec = leaderboardCardSpec(entries, disc.name);
+                if (!spec) {
+                    cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div>'
+                        + '<p class="ranking-status-msg">Ingen resultater for ' + selectedYear + '</p></div>';
+                    return;
+                }
+                cardSpecs[disc.id] = spec;
                 cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div>'
-                    + '<table class="ranking-table"><thead><tr><th>#</th><th>Navn</th><th>Poeng</th></tr></thead><tbody>' + rows + '</tbody></table>'
-                    + toggleHtml + '</div>';
+                    + '<div class="club-stats-list-scroll">'
+                    + StandplassDataTable.renderTable('klubb-card-' + disc.id, spec, cardTableState(disc.id))
+                    + '</div></div>';
+                wireCardTable(cell, disc.id);
+            }
+
+            // Per-card sort state + spec (rebuilt per render, consumed
+            // by wiring). Sort survives year/program re-renders — the
+            // same session-state policy as klubbstatistikk's toplists.
+            var cardSort = {};
+            var cardSpecs = {};
+
+            function cardTableState(discId) {
+                return { sort: cardSort[discId] || null, hidden: {}, runtimeHidden: [], widthTier: null };
+            }
+
+            function wireCardTable(cell, discId) {
+                if (!cardSpecs[discId]) { return; }
+                if (!cell.querySelector('table[data-dt-id="klubb-card-' + discId + '"]')) { return; }
+                StandplassDataTable.wireTable(cell, 'klubb-card-' + discId, cardSpecs[discId], {
+                    onSortChange: function (sort) {
+                        cardSort[discId] = sort;
+                        // Surgical: replace only THIS card's table (bare
+                        // table — re-wrapping nests scroll regions, and
+                        // sibling cards stay untouched).
+                        var tableEl = cell.querySelector('table[data-dt-id="klubb-card-' + discId + '"]');
+                        if (tableEl) {
+                            tableEl.outerHTML = StandplassDataTable.renderTable('klubb-card-' + discId, cardSpecs[discId], cardTableState(discId));
+                            wireCardTable(cell, discId);
+                        }
+                        var btn = cell.querySelector('table[data-dt-id="klubb-card-' + discId + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                        if (btn) { btn.focus(); }
+                    }
+                }, cardTableState(discId));
             }
 
             function loadAll() {
@@ -172,7 +223,6 @@ var StandplassKlubbPage = (function () {
                     ? StandplassKlubbDisciplineGroups.resolveFelt(StandplassCompModal.getDisciplineGroups())
                     : StandplassKlubbDisciplineGroups.resolveBane(StandplassCompModal.getDisciplineGroups());
                 gridWrapEl.innerHTML = '';
-                cardState = {};
                 if (discs.length === 0) {
                     gridWrapEl.innerHTML = '<p class="ranking-error ranking-status-msg">Kunne ikke laste øvelsesliste.</p>';
                     return;
@@ -184,25 +234,13 @@ var StandplassKlubbPage = (function () {
                     cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div><p class="ranking-loading">Laster…</p></div>';
                     gridWrapEl.appendChild(cell);
                     fetchRanking(disc).then(function (entries) {
-                        cardState[disc.id] = { disc: disc, entries: entries, expanded: false };
-                        renderCard(cell, disc, entries, false);
+                        renderCard(cell, disc, entries);
                     }, function (err) {
                         if (err.name === 'AbortError') { return; }
                         cell.innerHTML = '<div class="ranking-card"><div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(disc.name) + '</h2></div><p class="ranking-error">Kunne ikke hente data</p></div>';
                     });
                 });
             }
-
-            gridWrapEl.addEventListener('click', function (e) {
-                var btn = e.target.closest('.ranking-toggle');
-                if (!btn) { return; }
-                var discId = btn.getAttribute('data-disc-id');
-                var cell = btn.closest('.ranking-cell');
-                var state = cardState[discId];
-                if (!state) { return; }
-                state.expanded = !state.expanded;
-                if (state.disc) { renderCard(cell, state.disc, state.entries, state.expanded); }
-            });
 
             var yearSelect = id('-year-select');
             for (var y = CURRENT_YEAR; y >= CURRENT_YEAR - 5; y--) {
@@ -286,7 +324,7 @@ var StandplassKlubbPage = (function () {
         });
     }
 
-    return { init: init, buildRankingUrl: buildRankingUrl, filterRankingEntries: filterRankingEntries };
+    return { init: init, buildRankingUrl: buildRankingUrl, filterRankingEntries: filterRankingEntries, leaderboardCardSpec: leaderboardCardSpec };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

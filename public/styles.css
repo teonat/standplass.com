@@ -439,6 +439,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    wrapping when the card itself is the constraint, not the viewport. */
 .ranking-card-table-wrap { overflow-x: auto; }
 .ranking-card-table-wrap .ranking-table { min-width: 400px; }
+
+/* /klubb's leaderboard cards: contained scroll tables (the
+   klubbstatistikk format) with a fixed ~10-row cap — the page is a
+   quick overview by design, so it gets no "Rader" select; all rows
+   stay real DOM (scroll/Ctrl+F reaches them). 10 rows × ~2.1rem + thead. */
+#klubb-grid-wrap { --club-stats-rows-max: 23rem; }
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
