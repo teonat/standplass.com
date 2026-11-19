@@ -3,103 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Resultater — Din Skytterklubb (embed-sjekk)</title>
+<title>Embed-sjekk — oversikt</title>
 <!--
-  embed-check/index.html — the permanent local 3rd-party consumer page
-  for <standplass-results> QA ("just embed-check", port 8890).
+  embed-check/index.html — the hub of the permanent local 3rd-party
+  consumer rig for <standplass-results> QA ("just embed-check",
+  port 8890). One page per embed case; they link to each other through
+  the nav at the top of every page.
 
-  What makes this page a real embed test (the felt/bane pages on :8800
-  only exercise the direct-mount adapter):
-  - it is a DIFFERENT origin, so embed.js, its /js/* dependencies and
-    the /data/* fetches all go cross-origin (CORS) to the embed's own
-    origin, resolved from where embed.js itself was loaded;
-  - it has none of standplass's styles — the element must bring
+  What makes these pages a real embed test (the felt/bane pages on
+  :8800 only exercise the direct-mount adapter):
+  - they are a DIFFERENT origin, so embed.js, its /js/* dependencies
+    and the /data/* fetches all go cross-origin (CORS) to the embed's
+    own origin, resolved from where embed.js itself was loaded;
+  - they have none of standplass's styles — the element must bring
     everything it needs into its Shadow DOM (:host, not :root);
-  - the consumer's URL bar belongs to this page, not the embed:
+  - the consumer's URL bar belongs to the page, not the embed:
     without sync-url nothing may touch it.
 
-  QA checklist when using this page:
-  1. Both instances render and fetch data (network tab: scripts and
-     data all come from the embed origin, never :8890).
-  2. Shadow DOM styling holds against this page's serif host styling;
-     test light and dark (the embed follows prefers-color-scheme, or
-     force it with a mode="light" / mode="dark" attribute).
-  3. The felt instance (sync-url) may write filter state to the URL
-     bar; the bane instance must not. Escape closes modals without
-     leaking key handling to this page.
-  4. Console stays clean (the duplicate-namespace warning is expected
-     only with two synced instances of the same id-less view — see
-     the templates at the bottom).
+  QA checklist:
+  1. The case page's instance renders and fetches data (network tab:
+     scripts and data all come from the embed origin, never :8890).
+  2. Shadow DOM styling holds against the serif host styling; test
+     light and dark (the embed follows prefers-color-scheme, or force
+     it on mode.html).
+  3. On felt.html (sync-url) the embed may write filter state to the
+     URL bar; on bane.html it must not. Escape closes modals without
+     leaking key handling to the page.
+  4. Console stays clean — the one expected exception is on
+     duplikat-id.html, where the duplicate-namespace warning is the
+     point of the case.
   5. Resize to ~390px: the embed handles its own responsive layout.
 
-  Point the rig at another deployment with ?origin=... (default: the
-  local dev server on :8800, which must be running — "just start").
+  Point every case page at another deployment with ?origin=...
+  (default: the local dev server on :8800, which must be running —
+  "just start"). ?origin=https://standplass.com runs the whole rig
+  against production.
 -->
-<style>
-    /* Deliberately NOT standplass styling: this page plays a foreign
-       site (serif, warm paper background), so any styling the embed
-       needs has to arrive through its own Shadow DOM. */
-    body {
-        font-family: Georgia, 'Times New Roman', serif;
-        max-width: 90rem;
-        margin: 2rem auto;
-        padding: 0 1rem;
-        color: #222;
-        background: #f7f4ee;
-    }
-    h1 { font-size: 1.6rem; }
-    h2 { font-size: 1.1rem; margin-top: 2.5rem; }
-    .embed-note { font-size: 0.85rem; color: #666; }
-    .embed-error { color: #a00; font-weight: bold; }
-</style>
+<link rel="stylesheet" href="rig.css">
 </head>
 <body>
-<h1>Din Skytterklubb</h1>
+<h1>Embed-sjekk</h1>
 <p class="embed-note">
-    Simulert klubbside for embed-QA. Denne siden laster inn
-    <code>&lt;standplass-results&gt;</code> fra
-    <span id="embed-origin">(laster…)</span>.
-    Bruk <code>?origin=…</code> for å peke mot en annen utrulling
-    (f.eks. <code>?origin=https://standplass.com</code>).
+    Simulerte klubbssider for embed-QA av
+    <code>&lt;standplass-results&gt;</code>. Én side per tilfelle;
+    naviger mellom dem fra lenkene ovenpå hver side.
+    Bruk <code>?origin=…</code> på hvilken som helst av dem for å peke
+    mot en annen utrulling (f.eks.
+    <code>?origin=https://standplass.com</code>; standard er
+    <code>http://localhost:8800</code>, som krever
+    <code>just start</code>).
 </p>
-<p id="embed-status" class="embed-note"></p>
 
-<h2>Feltskyting (med URL-sync)</h2>
-<standplass-results view="felt" club="kss" sync-url></standplass-results>
-
-<h2>Baneskyting (uten URL-sync)</h2>
-<standplass-results view="bane"></standplass-results>
-
-<!-- Instance templates for other QA cases — uncomment as needed:
-<standplass-results view="felt" klubb="Klubbnavn her"></standplass-results>
-<standplass-results view="felt" compact></standplass-results>
-<standplass-results view="terminliste"></standplass-results>
-(two synced instances of the same view without distinct id="" attributes
- demonstrate the duplicate-namespace console warning)
-<standplass-results view="felt" sync-url></standplass-results>
-<standplass-results view="felt" sync-url></standplass-results>
--->
-
-<script>
-    // Loads embed.js from the target deployment. Kept tiny and inline:
-    // this page is a QA rig, not product code — no build step, no
-    // dependencies. embed.js reads document.currentScript during its
-    // own synchronous top-level execution, which is also set for
-    // dynamically inserted tags, so its SELF_ORIGIN still resolves to
-    // the origin this tag was fetched from.
-    (function () {
-        var origin = new URLSearchParams(location.search).get('origin') || 'http://localhost:8800';
-        document.getElementById('embed-origin').textContent = origin;
-        var status = document.getElementById('embed-status');
-        var s = document.createElement('script');
-        s.src = origin + '/embed.js';
-        s.onload = function () { status.textContent = 'embed.js lastet fra ' + origin; };
-        s.onerror = function () {
-            status.textContent = 'Kunne ikke laste ' + origin + '/embed.js — er riktig server oppe? (standard: "just start" på :8800)';
-            status.className = 'embed-error';
-        };
-        document.head.appendChild(s);
-    })();
-</script>
+<h2>Tilfeller</h2>
+<p class="embed-note">
+    <a href="felt.html">felt</a> — hovedtilfellet: feltskyting med
+    URL-sync og kss-tema.<br>
+    <a href="bane.html">bane</a> — kontrolltilfellet: baneskyting uten
+    sync-url og med standardtema; ingenting må røre URL-linjen.<br>
+    <a href="terminliste.html">terminliste</a> — den tredje visningen.<br>
+    <a href="klubb.html">klubb</a> — forhåndsfiltret klubb
+    (<code>klubb="…"</code>) med kss-temaet, slik en klubbside ville
+    bygget det inn.<br>
+    <a href="compact.html">compact</a> — terminliste i kompakt modus
+    (<code>compact</code> gjelder bare terminliste; felt/bane ignorerer
+    den).<br>
+    <a href="duplicate.html">duplikat-id</a> — to synkroniserte
+    forekomster av samme visning uten egne <code>id</code>-er: den
+    forventede duplikat-advarselen i konsollen er selve poenget.<br>
+    <a href="mode.html">mode</a> — eksplisitt
+    <code>mode="dark"</code>/<code>mode="light"</code> per forekomst,
+    uavhengig av sidens fargevalg.
+</p>
 </body>
 </html>

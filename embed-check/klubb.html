@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed-sjekk — forhåndsfiltret klubb</title>
+<!-- The club-site story: a pre-filtered club (klubb="…" is the
+     attribute equivalent of ?klubb= — the chip shows pre-selected,
+     and an unmatched value must never silently widen the list) with
+     the kss brand theme, the way Kongsvinger Sportsskyttere would
+     embed it on their own site. -->
+<link rel="stylesheet" href="rig.css">
+</head>
+<body>
+<nav class="rig-nav">
+    <a href="./">Alle tilfeller</a>
+    <a href="felt.html">felt</a>
+    <a href="bane.html">bane</a>
+    <a href="terminliste.html">terminliste</a>
+    <a href="klubb.html" aria-current="page">klubb</a>
+    <a href="compact.html">compact</a>
+    <a href="duplicate.html">duplikat-id</a>
+    <a href="mode.html">mode</a>
+</nav>
+<h1>Din Skytterklubb</h1>
+<p class="embed-note">
+    Simulert klubbside for embed-QA. Denne siden laster inn
+    <code>&lt;standplass-results&gt;</code> fra
+    <span id="embed-origin">(laster…)</span>.
+</p>
+<p id="embed-status" class="embed-note"></p>
+
+<h2>Feltskyting (forhåndsfiltret til én klubb)</h2>
+<standplass-results view="felt" club="kss" klubb="Kongsvinger Sportsskyttere"></standplass-results>
+
+<script src="rig.js"></script>
+</body>
+</html>
