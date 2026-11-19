@@ -86,6 +86,38 @@ var StandplassNasjonaltPage = (function () {
         return !!(clickableDiscIds && clickableDiscIds[disciplineId]);
     }
 
+    // Nasjonal ranking table spec (shared base). Rows flatten position
+    // into a data-anchored rank so # travels with its row under
+    // sorting. The Navn cell is raw: the exact person-button markup
+    // when the discipline (via the isNameClickable predicate) allows
+    // person-modal lookups — the table wrap's delegated listener
+    // depends on those classes/attributes — else plain text.
+    function rankingTableSpec(entries, isNameClickable) {
+        entries = entries || [];
+        return {
+            columns: [
+                { key: 'rank', label: '#', align: 'center' },
+                { key: 'fullName', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        if (isNameClickable(row) && row.fullName) {
+                            return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                                + '" data-person-name="' + esc(row.fullName) + '">' + esc(row.fullName) + '</button>';
+                        }
+                        return esc(row.fullName || '–');
+                    } },
+                { key: 'org', label: 'Klubb', sortable: true, defaultDir: 'asc',
+                    cell: function (row) { return esc(row.org || ''); } },
+                { key: 'totalScore', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc',
+                    cell: function (row) { return row.totalScore != null ? Number(row.totalScore).toFixed(2) : '–'; } }
+            ],
+            rows: entries.map(function (e, i) {
+                return { rank: e.position || (i + 1), personId: e.personId, fullName: e.fullName,
+                    org: e.personOrganizationName, totalScore: e.totalScore };
+            }),
+            ariaLabel: 'Rangeringsliste'
+        };
+    }
+
     function yearFrom(y) { return (y - 1) + '-12-31T23:00:00.000Z'; }
     function yearTo(y) { return y + '-12-31T22:59:59.999Z'; }
 
@@ -156,6 +188,17 @@ var StandplassNasjonaltPage = (function () {
         var yearSelect = id('-year-select');
         var statusEl = id('-status');
         var tableWrapEl = id('-table-wrap');
+
+        // "Rader" — how many rows the contained scroll table shows
+        // before it scrolls. Shared site-wide preference (same
+        // storage key as klubbstatistikk); this page defaults to 50.
+        // The var is scoped to the table wrap — the page's only scroll
+        // region lives inside it.
+        StandplassFilterWidgets.wireRowsSelect({
+            select: id('-rows'),
+            contentEl: tableWrapEl,
+            storageKey: 'standplass_list_rows'
+        });
 
         var params = new URLSearchParams(urlState.getSearch());
         var selectedDisciplineId = params.get('disc') || null;
@@ -358,9 +401,36 @@ var StandplassNasjonaltPage = (function () {
 
         var rankingEntries = [];
         var hasFetched = false;
-        var showAll = false;
         var currentAbort = null;
-        var PAGE_SIZE = 50;
+        // Sort state for the shared-base table (session-only). Survives
+        // refetch re-renders — changing a filter re-sorts nothing.
+        var rankingSort = null;
+        var rankingSpec = null;
+
+        function rankingTableState() {
+            return { sort: rankingSort, hidden: {}, runtimeHidden: [], widthTier: null };
+        }
+
+        function wireRankingTable() {
+            if (!rankingSpec) { return; }
+            if (!tableWrapEl.querySelector('table[data-dt-id="nasjonal-ranking"]')) { return; }
+            StandplassDataTable.wireTable(tableWrapEl, 'nasjonal-ranking', rankingSpec, {
+                onSortChange: function (sort) {
+                    rankingSort = sort;
+                    // Surgical: replace only the bare table — never the
+                    // wrap (the delegated person-modal listener lives on
+                    // tableWrapEl) and never re-wrap (nested scroll
+                    // regions). The old table's listeners die with it.
+                    var tableEl = tableWrapEl.querySelector('table[data-dt-id="nasjonal-ranking"]');
+                    if (tableEl) {
+                        tableEl.outerHTML = StandplassDataTable.renderTable('nasjonal-ranking', rankingSpec, rankingTableState());
+                        wireRankingTable();
+                    }
+                    var btn = tableWrapEl.querySelector('table[data-dt-id="nasjonal-ranking"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, rankingTableState());
+        }
 
         function renderTable() {
             if (!hasFetched) { return; }
@@ -369,26 +439,14 @@ var StandplassNasjonaltPage = (function () {
                 return;
             }
             var clickable = isClickable(selectedDisciplineId);
-            var visible = showAll ? rankingEntries : rankingEntries.slice(0, PAGE_SIZE);
-            var rows = visible.map(function (e, i) {
-                var nameCell = clickable && e.fullName
-                    ? '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(e.personId)
-                        + '" data-person-name="' + esc(e.fullName) + '">' + esc(e.fullName) + '</button>'
-                    : esc(e.fullName || '–');
-                return '<tr><td class="ranking-rank">' + esc(e.position || (i + 1)) + '</td>'
-                    + '<td>' + nameCell + '</td>'
-                    + '<td>' + esc(e.personOrganizationName || '') + '</td>'
-                    + '<td class="ranking-score">' + (e.totalScore != null ? Number(e.totalScore).toFixed(2) : '–') + '</td></tr>';
-            }).join('');
-            var toggleHtml = rankingEntries.length > PAGE_SIZE
-                ? '<button type="button" class="ranking-toggle" id="' + config.idPrefix + '-show-toggle">'
-                    + (showAll ? 'Vis færre' : 'Vis alle (' + rankingEntries.length + ')') + '</button>'
-                : '';
-            tableWrapEl.innerHTML = '<div class="ranking-full-table"><table class="ranking-table" aria-label="Rangeringsliste">'
-                + '<thead><tr><th scope="col">#</th><th scope="col">Navn</th><th scope="col">Klubb</th><th scope="col">Poeng</th></tr></thead>'
-                + '<tbody>' + rows + '</tbody></table></div>' + toggleHtml;
-            var toggleBtn = id('-show-toggle');
-            if (toggleBtn) { toggleBtn.addEventListener('click', function () { showAll = !showAll; renderTable(); }); }
+            rankingSpec = rankingTableSpec(rankingEntries, function () { return clickable; });
+            // club-stats-list-scroll is ADDED alongside ranking-full-table
+            // (the shared rule is untouched) — the contained scroll
+            // region caps height; every row stays real DOM (Ctrl+F).
+            tableWrapEl.innerHTML = '<div class="ranking-full-table club-stats-list-scroll">'
+                + StandplassDataTable.renderTable('nasjonal-ranking', rankingSpec, rankingTableState())
+                + '</div>';
+            wireRankingTable();
         }
 
         function fetchAndRender() {
@@ -404,7 +462,7 @@ var StandplassNasjonaltPage = (function () {
             currentAbort = new AbortController();
             statusEl.textContent = 'Laster…';
             tableWrapEl.innerHTML = '';
-            showAll = false; hasFetched = false;
+            hasFetched = false;
 
             var period = selectedMode === 'periode'
                 ? { periodStart: selectedFra + 'T00:00:00.000Z', periodEnd: selectedTil + 'T23:59:59.999Z' }
@@ -541,6 +599,7 @@ var StandplassNasjonaltPage = (function () {
         isValidIsoDate: isValidIsoDate,
         buildRankingUrl: buildRankingUrl,
         filterRankingEntries: filterRankingEntries,
+        rankingTableSpec: rankingTableSpec,
         buildDiscItems: buildDiscItems,
         init: init
     };

@@ -1,5 +1,9 @@
 var assert = require('assert');
 global.StandplassKlubbDisciplineGroups = require('../public/js/klubb-discipline-groups.js');
+// Page-test convention: globals in HTML script order — data-table.js
+// calls into StandplassTable for sort semantics.
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var NP = require('../public/js/nasjonalt-page.js');
 
 // Shape mirrors the live branchlist response across multiple branches.
@@ -105,5 +109,64 @@ assert.strictEqual(NP.isValidIsoDate(''), false);
 assert.strictEqual(NP.isValidIsoDate(null), false);
 assert.strictEqual(NP.yearFrom(2026), '2025-12-31T23:00:00.000Z', 'season boundary: Dec 31 23:00 UTC of the PRIOR year');
 assert.strictEqual(NP.yearTo(2026), '2026-12-31T22:59:59.999Z', 'season boundary: Dec 31 22:59:59 UTC of the season year');
+
+// ── rankingTableSpec (batch 1: shared table base) ──────────────────────
+// The whole table renders through the base now: no PAGE_SIZE slicing
+// (a contained scroll region caps the height instead), rank is
+// data-anchored so # travels under sorting, and the Navn cell keeps
+// today's exact person-button markup — the table wrap's delegated
+// person-modal listener depends on those classes/attributes.
+var NP_STATE = { hidden: {}, runtimeHidden: [], widthTier: null };
+function npSorted(spec, key, dir) {
+    return StandplassDataTable.renderTable('nasjonal-ranking', spec,
+        { sort: { key: key, dir: dir }, hidden: {}, runtimeHidden: [], widthTier: null });
+}
+var npEntries = [
+    { position: 1, personId: 'p1', fullName: 'Anne', personOrganizationName: 'Oslo PK', totalScore: 98.5 },
+    { position: 2, personId: 'p2', fullName: 'Øyvind', personOrganizationName: null, totalScore: null },
+    { position: null, personId: 'p3', fullName: 'Bjarne', personOrganizationName: 'Bergen SK', totalScore: 90 }
+];
+var npSpec = NP.rankingTableSpec(npEntries, function () { return true; });
+var npHtml = StandplassDataTable.renderTable('nasjonal-ranking', npSpec, NP_STATE);
+assert.ok(npHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="fullName">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="org">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'nasjonal ranking: Navn/Klubb/Poeng sortable headers');
+assert.ok(npHtml.indexOf('<td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Anne">Anne</button></td>') !== -1,
+    'nasjonal ranking: clickable Navn is today\'s exact person button');
+assert.ok(npHtml.indexOf('<tr data-dt-row="2"><td class="ranking-rank">3</td>') !== -1,
+    'nasjonal ranking: rank anchored (position wins, page-order fallback)');
+assert.ok(npHtml.indexOf('<td class="ranking-score">98.50</td>') !== -1
+    && npHtml.indexOf('<td class="ranking-score">–</td>') !== -1,
+    'nasjonal ranking: Poeng toFixed(2), null renders –');
+// Plain (non-clickable) Navn cell shape.
+var npPlain = NP.rankingTableSpec(npEntries, function () { return false; });
+var npPlainHtml = StandplassDataTable.renderTable('nasjonal-ranking', npPlain, NP_STATE);
+assert.ok(npPlainHtml.indexOf('<td>Anne</td>') !== -1
+    && npPlainHtml.indexOf('stevner-person-btn') === -1,
+    'nasjonal ranking: non-clickable Navn is plain escaped text');
+var npNameless = NP.rankingTableSpec([{ personId: 'p9', fullName: null, personOrganizationName: 'X PK', totalScore: 5 }], function () { return true; });
+assert.ok(StandplassDataTable.renderTable('nasjonal-ranking', npNameless, NP_STATE).indexOf('<td>–</td>') !== -1,
+    'nasjonal ranking: missing fullName renders –');
+// Rank travels under a Klubb sort; nulls sort last (org and Poeng).
+var npOrg = npSorted(npSpec, 'org', 'asc');
+assert.ok(npOrg.indexOf('<tr data-dt-row="2"><td class="ranking-rank">3</td>') !== -1
+    && npOrg.indexOf('<tr data-dt-row="2">') < npOrg.indexOf('<tr data-dt-row="0">')
+    && npOrg.indexOf('data-person-id="p2"') > npOrg.indexOf('data-person-id="p1"'),
+    'nasjonal ranking: rank travels under a Klubb sort, null org last');
+var npPoeng = npSorted(npSpec, 'totalScore', 'desc');
+assert.ok(npPoeng.indexOf('<td class="ranking-score">90</td>') < npPoeng.indexOf('data-person-id="p2"'),
+    'nasjonal ranking: null Poeng sorts last');
+// Full row count — no PAGE_SIZE slicing.
+var npMany = [];
+for (var ni = 0; ni < 60; ni++) { npMany.push({ position: ni + 1, personId: 'p' + ni, fullName: 'N' + ni, personOrganizationName: 'K' + (ni % 7), totalScore: 100 - ni }); }
+var npManySpec = NP.rankingTableSpec(npMany, function () { return false; });
+var npManyHtml = StandplassDataTable.renderTable('nasjonal-ranking', npManySpec, NP_STATE);
+assert.strictEqual((npManyHtml.match(/<tr data-dt-row="/g) || []).length, 60,
+    'nasjonal ranking: all 60 rows rendered — the scroll region caps height, not the row count');
+assert.ok(npManyHtml.indexOf('Vis alle') === -1 && npManyHtml.indexOf('ranking-toggle') === -1,
+    'nasjonal ranking: no show-all toggle remains');
 
 console.log('nasjonalt-page.test.js: all assertions passed');
