@@ -246,9 +246,14 @@ assert.ok(posAsc.indexOf('data-person-name="Kari"') < posAsc.indexOf('data-perso
 
 // Responsive defaults and runtime hiding through the state.
 var tier700 = nfRender(ovelseSpec, { hidden: {}, runtimeHidden: [], widthTier: 700 });
-assert.ok(tier700.indexOf('data-dt-sort="club"') === -1 && tier700.indexOf('data-dt-sort="rankingScore"') === -1
+// Owner ruling (post-QA, 2026-11-19): at phone width the default hidden
+// pair is Klubb + ØvelSE — Ranking stays visible. Øvelse is the redundant
+// column on multi-group cards (the group row names the discipline) and is
+// re-enablable through the picker like any default.
+assert.ok(tier700.indexOf('data-dt-sort="club"') === -1 && tier700.indexOf('<th scope="col">Øvelse</th>') === -1
+    && tier700.indexOf('data-dt-sort="rankingScore"') !== -1
     && tier700.indexOf('data-dt-sort="score"') !== -1,
-    'widthTier 700 hides Klubb and Ranking by default (no user choice)');
+    'widthTier 700 hides Klubb and Øvelse by default; Ranking stays');
 assert.ok(tier700.indexOf('<th scope="colgroup" colspan="5">') !== -1,
     'group-row colspan tracks the visible column count');
 var runtimeClub = nfRender(ovelseSpec, { hidden: {}, runtimeHidden: ['club'], widthTier: null });
@@ -257,7 +262,8 @@ assert.ok(runtimeClub.indexOf('data-dt-sort="club"') === -1 && runtimeClub.index
 var specCols = ovelseSpec.columns;
 function colBy(key) { for (var i = 0; i < specCols.length; i++) { if (specCols[i].key === key) { return specCols[i]; } } }
 assert.strictEqual(colBy('club').hideBelow, 700, 'Klubb declares hideBelow 700');
-assert.strictEqual(colBy('rankingScore').hideBelow, 700, 'Ranking declares hideBelow 700');
+assert.strictEqual(colBy('discipline').hideBelow, 700, 'Øvelse declares hideBelow 700 (post-QA ruling: hidden at phone width, not Ranking)');
+assert.strictEqual(colBy('rankingScore').hideBelow, undefined, 'Ranking has no hideBelow (owner: stays visible at phone width)');
 assert.strictEqual(colBy('position').hideBelow, undefined, '# has no hideBelow');
 assert.ok(!colBy('discipline').sortable, 'Øvelse is not sortable (group key)');
 

@@ -244,10 +244,14 @@ var StandplassStevnerPage = (function () {
         { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
             cell: function (row) { return row.nameHtml; } },
         { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },
-        { key: 'discipline', label: 'Øvelse' },
+        // Øvelse, not Ranking, is the phone-width default sacrifice (owner
+        // ruling, post-QA): on multi-group cards the group row already
+        // names the discipline, so the column is the redundant one — and
+        // it stays re-enablable through the picker like any default.
+        { key: 'discipline', label: 'Øvelse', hideBelow: 700 },
         { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
         { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
-        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc', hideBelow: 700,
+        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc',
             cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
     ];
 
