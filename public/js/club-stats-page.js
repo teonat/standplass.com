@@ -414,16 +414,26 @@ var StandplassClubStats = (function () {
     // Pure HTML builder for the shooter top-3 card. Wide tables MUST sit in
     // .ranking-card-table-wrap (overflow-x: auto) — .ranking-card itself is
     // overflow: hidden and would silently clip columns.
+    // opts: { mode, hidden: {colKey: bool}, sort: {key, dir} } — the page
+    // persists this object across re-renders (the mode-toggle
+    // state→render→wire loop). The column picker ("Kolonner") replaces the
+    // old "Vis øvelser" toggle: øvelse columns are defaultHidden and shown
+    // via false entries in the hidden map.
+    // Side effect: sets top3Spec (columns/rows/aria-label/defaultSort) for
+    // the page's wiring — the spec is data-derived (comboOrder), so it is
+    // rebuilt on every render and consumed right after.
+    var top3Spec = null;
+
     function renderTopThreeHtml(ranking, clubName, year, opts) {
         opts = opts || {};
         var mode = opts.mode || 'top3';
-        var showOvelser = !!opts.showOvelser;
         var empty = !ranking || !ranking.length;
         // Initial render only: no ranking in the default view means the card
         // has never shown anything — omit it entirely. In every other empty
-        // state the shell MUST stay so the mode buttons and øvelser toggle
-        // remain reachable in-card.
-        if (empty && mode === 'top3' && !showOvelser) { return ''; }
+        // state the shell MUST stay so the mode buttons remain reachable
+        // in-card; a made column choice counts as interaction too.
+        var hasColumnChoices = opts.hidden != null && Object.keys(opts.hidden).length > 0;
+        if (empty && mode === 'top3' && !hasColumnChoices) { return ''; }
         var MODES = [
             { key: 'top3', label: 'Topp-3' },
             { key: 'p1', label: '1. plass' },
@@ -434,9 +444,7 @@ var StandplassClubStats = (function () {
             + MODES.map(function (m) {
                 return '<button type="button" class="top3-mode-btn" data-mode="' + m.key + '"'
                     + ' aria-pressed="' + (mode === m.key ? 'true' : 'false') + '">' + m.label + '</button>';
-            }).join('')
-            + '<button type="button" class="top3-mode-btn top3-ovelser-btn" id="top3-ovelser-btn" aria-pressed="' + (showOvelser ? 'true' : 'false') + '">'
-            + (showOvelser ? 'Skjul øvelser' : 'Vis øvelser') + '</button></div>';
+            }).join('') + '</div>';
         if (empty) {
             return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
                 + modeHtml
@@ -449,32 +457,45 @@ var StandplassClubStats = (function () {
         });
         var comboOrder = Object.keys(comboTotals)
             .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
-        var visibleShooters = ranking;
-        var headers = showOvelser
-            ? comboOrder.map(function (k, ci) {
-                var parts = k.split('|');
-                return '<th scope="col" class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + esc(parts[0]) + ' ' + esc(parts[1]) + '</th>';
-            }).join('')
-            : '';
-        var rowsHtml = visibleShooters.map(function (s, i) {
-            var cells = showOvelser
-                ? comboOrder.map(function (k, ci) {
-                    return '<td class="ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : '') + '">' + (s.combos[k] || '') + '</td>';
-                }).join('')
-                : '';
-            return '<tr><td class="ranking-rank">' + (i + 1) + '</td>'
-                + '<th scope="row">' + esc(s.name) + '</th>' + cells
-                + '<td class="ranking-score">' + s.total + '</td></tr>';
-        }).join('');
+
+        var columns = [
+            { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+            { key: 'name', label: 'Navn', asRowHeader: true, sortable: true, defaultDir: 'asc' }
+        ];
+        comboOrder.forEach(function (k, ci) {
+            var parts = k.split('|');
+            columns.push({
+                key: 'combo|' + k,
+                label: parts[0] + ' ' + parts[1],
+                cellClass: 'ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : ''),
+                defaultHidden: true,
+                // Zero-count cells render empty, matching the hand-rolled
+                // table (s.combos[k] || '').
+                cell: function (row) { return row.combos[k] || ''; }
+            });
+        });
+        columns.push({ key: 'total', label: 'Totalt', align: 'right', sortable: true, defaultDir: 'desc' });
+
+        top3Spec = {
+            columns: columns,
+            rows: ranking,
+            ariaLabel: 'Flest topp-3 plasseringer i ' + String(year) + ' for ' + clubName,
+            wrapClass: 'ranking-card-table-wrap club-stats-list-scroll',
+            defaultSort: { key: 'total', dir: 'desc' },
+            picker: { buttonLabel: 'Kolonner' }
+        };
+
         // All shooters render at once (row paging removed) — the wrap's
         // scroll cap (from the user's "Rader" setting) confines the height
         // instead. overflow-x: auto stays for wide øvelser tables.
         return '<section class="ranking-card club-stats-section" data-card="top3"><div class="ranking-card-header"><h2 class="ranking-card-title">Flest topp-3 plasseringer</h2></div>'
             + modeHtml
-            + '<div class="ranking-card-table-wrap club-stats-list-scroll">'
-            + '<table class="ranking-table" id="top3-table" aria-label="Flest topp-3 plasseringer i ' + esc(String(year)) + ' for ' + esc(clubName) + '">'
-            + '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Navn</th>' + headers + '<th scope="col" class="ranking-score">Totalt</th></tr></thead>'
-            + '<tbody>' + rowsHtml + '</tbody></table></div>'
+            + StandplassDataTable.renderTable('top3', top3Spec, {
+                sort: opts.sort || null,
+                hidden: opts.hidden || {},
+                runtimeHidden: [],
+                widthTier: null
+            })
             + '</section>';
     }
 
@@ -863,9 +884,13 @@ var StandplassClubStats = (function () {
         // allClubNames accumulated across all loaded years
         var allClubNames = {};
         var dataLoaded = false;
-        var top3State = { mode: 'top3', showOvelser: false };
+        var top3State = { mode: 'top3', hidden: {} };
         var top3Rows = [];
         var top3Club = '';
+        // Live wire handle for the top-3 card's picker + sort wiring; the
+        // dropdown's outside-click listener outlives its DOM, so this must
+        // be destroyed before every replacement of the section.
+        var top3Wire = null;
         // Toplist interactivity state (session-only, survives filter
         // changes): sort per toplist id, column-visibility per toplist id,
         // and the column spec + designated default sort each toplist last
@@ -1215,6 +1240,9 @@ var StandplassClubStats = (function () {
 
         function renderToplists() {
             resolvedClub = null;
+            // Leaving the drilldown: the top-3 wire (if any) dies with its
+            // DOM except the picker's outside-click listener — destroy it.
+            if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             titleEl.textContent = 'Klubbstatistikk';
             leadEl.innerHTML = 'Topplister og statistikk for skytteklubber. '
                 + 'Data fra skyting.no – kun pistol og revolver (feltskyting og baneskyting).';
@@ -1450,7 +1478,7 @@ var StandplassClubStats = (function () {
             // changes — a year/program re-render for the same club must keep
             // the user's toggles. top3Club starts '' so the first entry still
             // resets.
-            if (resolved !== top3Club) { top3State = { mode: 'top3', showOvelser: false }; }
+            if (resolved !== top3Club) { top3State = { mode: 'top3', hidden: {} }; }
             top3Club = resolved;
             var top3Ranking = computeTopThreeRanking(top3Rows, resolved, modePosition(top3State.mode));
             var bestHtml = renderTopThreeHtml(top3Ranking, resolved, activeYear, top3State);
@@ -1472,6 +1500,7 @@ var StandplassClubStats = (function () {
                 : '';
 
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
+            wireTop3();
         }
 
         // ── Main render ────────────────────────────────────────────────
@@ -1521,29 +1550,74 @@ var StandplassClubStats = (function () {
             }
         });
 
-        // Top-3 card toggles: one delegated listener for the drilldown's
-        // top-3 card. Registered once here — the section's inner HTML is
+        // Top-3 card: one delegated listener for the drilldown's mode
+        // buttons. Registered once here — the section's inner HTML is
         // replaced on toggle, so per-render bindings would be lost and
-        // per-render listener adds would stack.
+        // per-render listener adds would stack. Column show/hide lives in
+        // the shared base's picker (wired per render in wireTop3), not here.
         contentEl.addEventListener('click', function (e) {
             var btn = e.target.closest ? e.target.closest('.top3-mode-btn') : null;
             if (!btn) { return; }
-            if (btn.classList.contains('top3-ovelser-btn')) {
-                top3State.showOvelser = !top3State.showOvelser;
-            } else {
-                top3State.mode = btn.getAttribute('data-mode');
-            }
+            top3State.mode = btn.getAttribute('data-mode');
+            rerenderTop3Section();
+            var refocus = contentEl.querySelector('.top3-mode [aria-pressed="true"]');
+            if (refocus) { refocus.focus(); }
+        });
+
+        function top3Handlers() {
+            return {
+                onSortChange: function (sort) {
+                    top3State.sort = sort;
+                    rerenderTop3Table();
+                    var sbtn = contentEl.querySelector('table[data-dt-id="top3"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (sbtn) { sbtn.focus(); }
+                },
+                onColumnsChange: function (hidden) {
+                    top3State.hidden = hidden;
+                    rerenderTop3Table();
+                }
+            };
+        }
+
+        function rerenderTop3Section() {
+            // Full section re-render (mode change): the old wire's dropdown
+            // outside-click listener must be destroyed with the section.
+            if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             var top3Section = contentEl.querySelector('[data-card="top3"]');
             if (top3Section) {
                 top3Section.outerHTML = renderTopThreeHtml(
                     computeTopThreeRanking(top3Rows, top3Club, modePosition(top3State.mode)),
                     top3Club, activeYear, top3State);
-                var refocus = btn.classList.contains('top3-ovelser-btn')
-                    ? contentEl.querySelector('#top3-ovelser-btn')
-                    : contentEl.querySelector('.top3-mode [aria-pressed="true"]');
-                if (refocus) { refocus.focus(); }
+                wireTop3();
             }
-        });
+        }
+
+        function wireTop3() {
+            if (!top3Spec) { return; }
+            if (!contentEl.querySelector('table[data-dt-id="top3"]')) { return; }
+            if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
+            top3Wire = StandplassDataTable.wireTable(contentEl, 'top3', top3Spec, top3Handlers(), top3State);
+        }
+
+        function rerenderTop3Table() {
+            // Surgical re-render: replace only the table element, keeping
+            // the toolbar — and its open picker panel — alive. The old
+            // table's listeners die with it; the new table re-wires
+            // without touching the picker.
+            var tableEl = contentEl.querySelector('table[data-dt-id="top3"]');
+            if (!tableEl || !top3Spec) { return; }
+            tableEl.outerHTML = StandplassDataTable.renderTable('top3', {
+                columns: top3Spec.columns,
+                rows: top3Spec.rows,
+                ariaLabel: top3Spec.ariaLabel,
+                wrapClass: top3Spec.wrapClass,
+                defaultSort: top3Spec.defaultSort
+            }, top3State);
+            StandplassDataTable.wireTable(contentEl, 'top3', {
+                columns: top3Spec.columns,
+                defaultSort: top3Spec.defaultSort
+            }, top3Handlers(), top3State);
+        }
 
         statusEl.textContent = 'Laster data…';
 

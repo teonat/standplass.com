@@ -2,6 +2,10 @@
 var assert = require('node:assert');
 var CS = require('../public/js/club-stats-page.js');
 global.StandplassStevnerPage = require('../public/js/stevner-page.js');
+// Cross-module globals the page modules reference at call time (same
+// pattern as every other page test in this repo).
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
 
@@ -559,11 +563,24 @@ var sortRanking = CS.computeTopThreeRanking([
 assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
 
 // ── renderTopThreeHtml ────────────────────────────────────────────────
+// opts: { mode, hidden: {colKey: bool}, sort: {key, dir} } — the shared
+// table base contract. Øvelse columns are defaultHidden; revealing them
+// is a false entry in the hidden map (the column picker's state).
 
 var top3Ranking = [
     { personId: 'p1', name: 'Alice', total: 3, combos: { 'Finfelt|A': 2, 'Spesialpistol|Åpen': 1 } },
     { personId: 'p2', name: 'Bob', total: 2, combos: { 'Finfelt|A': 1, 'Finfelt|Åpen': 1 } }
 ];
+function showAllCombos(ranking) {
+    var hidden = {};
+    var totals = {};
+    ranking.forEach(function (s) {
+        Object.keys(s.combos).forEach(function (k) { totals[k] = (totals[k] || 0) + s.combos[k]; });
+    });
+    Object.keys(totals).forEach(function (k) { hidden['combo|' + k] = false; });
+    return hidden;
+}
+
 var top3Html = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, {});
 assert.ok(top3Html.indexOf('Flest topp-3 plasseringer') >= 0, 'card title');
 assert.ok(top3Html.indexOf('aria-label="Flest topp-3 plasseringer i 2026 for K1"') >= 0, 'table aria-label names club and year');
@@ -573,7 +590,14 @@ assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
 assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
 assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
 assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
-assert.ok(top3Html.indexOf('Vis øvelser') >= 0, 'øvelser reveal toggle present');
+assert.ok(top3Html.indexOf('Vis øvelser') < 0, 'øvelser reveal toggle replaced by the column picker');
+assert.ok(top3Html.indexOf('data-dt-picker') >= 0, 'column picker button (Kolonner) present');
+assert.ok(top3Html.indexOf('dt-picker-anchor') >= 0, 'picker scaffold anchor present');
+assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
+assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
+assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');
+assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+    'page order stands until a sort is set');
 // Placement-mode group: 4 buttons, aria-pressed only on the active one
 assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
 assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
@@ -583,15 +607,14 @@ assert.ok(top3Html.indexOf('data-mode="p1" aria-pressed="false"') >= 0, 'inactiv
 var p2ModeHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { mode: 'p2' });
 assert.ok(p2ModeHtml.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'selected mode pressed');
 assert.ok(p2ModeHtml.indexOf('data-mode="top3" aria-pressed="true"') < 0, 'default mode unpressed when p2 selected');
-// showOvelser: true reveals ALL combo headers
-var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { showOvelser: true });
+// hidden map with false entries reveals the øvelse columns
+var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { hidden: showAllCombos(top3Ranking) });
 assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
 assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
-assert.ok(ovelserHtml.indexOf('Skjul øvelser') >= 0, 'label flips when shown');
 // Alternating-column shading on øvelse columns (class-based, never nth-child):
 // odd-index visible combos get .top3-col-alt on their th and every td.
 var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
-var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { showOvelser: true });
+var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: showAllCombos(altRanking) });
 assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Grovfelt B') >= 0, 'odd-index combo header shaded');
 assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Finfelt A') >= 0, 'first combo header unshaded');
 assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Finfelt A') < 0, 'first combo header never shaded');
@@ -602,7 +625,7 @@ assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded co
 assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
 assert.strictEqual((altHtml.match(/top3-col-alt/g) || []).length, 2, 'exactly one th and one td shaded (single shooter, one odd combo)');
 assert.strictEqual(CS.renderTopThreeHtml(altRanking, 'K1', 2026, {}).indexOf('top3-col-alt'), -1, 'no shading when øvelser hidden');
-// Row paging: 10 shown, toggle appears beyond that
+// Row paging: all rows rendered, no toggle
 var manyRows = [];
 for (var ri = 0; ri < 14; ri++) {
     manyRows.push({ personId: 'r' + ri, name: 'Skytter ' + ri, total: 1, combos: { 'Finfelt|A': 1 } });
@@ -611,13 +634,15 @@ var pagedHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, {});
 assert.ok(pagedHtml.indexOf('Skytter 13') >= 0, 'all rows rendered, no row paging');
 assert.ok(pagedHtml.indexOf('top3-row-toggle') < 0 && pagedHtml.indexOf('Vis alle (') < 0, 'no row paging toggle');
 assert.ok(pagedHtml.indexOf('club-stats-list-scroll') >= 0, 'table region gets the scroll cap');
-// No combo cap: 14 combos all rendered when øvelser shown (zero-padding makes
+// No combo cap: 14 combos all rendered when shown (zero-padding makes
 // the alphabetical tie order deterministic)
 var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
+var allCombosHidden = {};
 for (var ci = 0; ci < 14; ci++) {
     manyCombos[0].combos['Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = 1;
+    allCombosHidden['combo|Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = false;
 }
-var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { showOvelser: true });
+var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { hidden: allCombosHidden });
 for (var ai = 0; ai < 14; ai++) {
     assert.ok(allCombosHtml.indexOf('Øvelse ' + (ai < 10 ? '0' + ai : ai) + ' A') >= 0, 'all combo headers shown, no cap (' + ai + ')');
 }
@@ -625,26 +650,37 @@ assert.ok(allCombosHtml.indexOf('Vis alle øvelser') < 0 && allCombosHtml.indexO
 assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking -> no card');
 
 var evilTop3 = CS.renderTopThreeHtml(
-    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026, { showOvelser: true });
+    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026,
+    { hidden: { 'combo|<b>Finfelt</b>|A': false } });
 assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
 assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
 
 // ── empty ranking in a non-default mode keeps the card shell ──────────
-// (mode buttons and øvelser toggle must stay reachable in-card)
-var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false });
+// (mode buttons must stay reachable in-card)
+var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2' });
 assert.ok(emptyP2Html.indexOf('data-card="top3"') >= 0, 'empty p2 mode keeps card shell');
 assert.ok(emptyP2Html.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'shell keeps current mode pressed');
 assert.ok(emptyP2Html.indexOf('data-mode="top3" aria-pressed="false"') >= 0, 'shell keeps other modes unpressed');
-assert.ok(emptyP2Html.indexOf('Vis øvelser') >= 0, 'shell keeps øvelser toggle');
 assert.ok(emptyP2Html.indexOf('ranking-status-msg') >= 0, 'empty-state uses status msg class');
 assert.ok(emptyP2Html.indexOf('Ingen 2. plasser for denne klubben i 2026.') >= 0, 'empty-state line names mode and year');
-var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false });
+var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3' });
 assert.ok(emptyP3Html.indexOf('Ingen 3. plasser for denne klubben i 2026.') >= 0, 'p3 empty-state names 3. plasser');
 assert.ok(emptyP3Html.indexOf('data-mode="p3" aria-pressed="true"') >= 0, 'p3 shell keeps mode pressed');
-// Initial render (default mode, øvelser hidden) with no data: no card at all
-assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + øvelser hidden -> no card');
-// øvelser toggle carries a stable id so the delegated handler can refocus it
-assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
+// Initial render (default mode, no column choices) with no data: no card at all
+assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + no column choices -> no card');
+// A column choice made earlier keeps the shell reachable in-card
+assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': false } }).indexOf('data-card="top3"') >= 0,
+    'empty ranking + column choices -> card shell kept');
+
+// Sorting survives the state→render→wire round-trip (Review Focus #3):
+// the page persists the sort in top3State and passes the same state back.
+var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">1</td><th scope="row">Bob</th>') >= 0,
+    'asc sort reorders rows, # recomputes, data-dt-row keeps data index');
+assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
+var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">1</td><th scope="row">Bob</th>') >= 0,
+    'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────
 // Every klubbstatistikk table renders all rows (no paging, no "Vis
@@ -839,9 +875,6 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
 // StandplassDataTable.renderTable inside buildTableCard's tableHtml path.
 // This mirrors that composition and pins today's observable markup: same
 // thead cells, same row cells, club links escaped, all rows rendered.
-
-global.StandplassTable = require('../public/js/table-renderer.js');
-global.StandplassDataTable = require('../public/js/data-table.js');
 
 (function () {
     function escT(s) {
