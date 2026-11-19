@@ -457,8 +457,23 @@ var StandplassClubStats = (function () {
         var comboOrder = Object.keys(comboTotals)
             .sort(function (a, b) { return comboTotals[b] - comboTotals[a] || a.localeCompare(b, 'no'); });
 
+        // Flattened rows for the base: rank and per-combo counts become
+        // plain row[key] data. Sortable columns MUST be data-backed — a
+        // cell fn is invisible to sorting — so the øvelse columns read
+        // these flattened keys. The rank is each shooter's placement in
+        // the page order and TRAVELS with the row under sorting; # does
+        // not renumber (renumbering would make the rank lie under a
+        // Navn sort). Combos a shooter lacks stay undefined: they render
+        // empty (esc maps undefined to '') and sort last, matching the
+        // hand-rolled table's zero-count cells.
+        var rows = ranking.map(function (s, i) {
+            var r = { rank: i + 1, name: s.name, total: s.total };
+            Object.keys(s.combos).forEach(function (k) { r['combo|' + k] = s.combos[k]; });
+            return r;
+        });
+
         var columns = [
-            { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+            { key: 'rank', label: '#', align: 'center' },
             { key: 'name', label: 'Navn', asRowHeader: true, sortable: true, defaultDir: 'asc' }
         ];
         comboOrder.forEach(function (k, ci) {
@@ -468,16 +483,15 @@ var StandplassClubStats = (function () {
                 label: parts[0] + ' ' + parts[1],
                 cellClass: 'ranking-score' + (ci % 2 === 1 ? ' top3-col-alt' : ''),
                 defaultHidden: true,
-                // Zero-count cells render empty, matching the hand-rolled
-                // table (s.combos[k] || '').
-                cell: function (row) { return row.combos[k] || ''; }
+                sortable: true,
+                defaultDir: 'desc'
             });
         });
         columns.push({ key: 'total', label: 'Totalt', align: 'right', sortable: true, defaultDir: 'desc' });
 
         top3Spec = {
             columns: columns,
-            rows: ranking,
+            rows: rows,
             ariaLabel: 'Flest topp-3 plasseringer i ' + String(year) + ' for ' + clubName,
             wrapClass: 'ranking-card-table-wrap club-stats-list-scroll',
             defaultSort: { key: 'total', dir: 'desc' },
@@ -1097,8 +1111,17 @@ var StandplassClubStats = (function () {
         // rename away from silently rendering one toplist's data under
         // another's header).
         function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel) {
+            // Flattened rows: rank is each club's placement in the page
+            // order, data-backed so # travels with the row under sorting
+            // instead of renumbering (a Klubb sort must not relabel the
+            // ranks). The value column reads the metric key directly.
+            var rows = ranked.map(function (entry, i) {
+                var r = { club: entry.club, rank: i + 1 };
+                r[valueKey] = entry[valueKey];
+                return r;
+            });
             var columns = [
-                { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+                { key: 'rank', label: '#', align: 'center' },
                 { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
                     cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } },
                 { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
@@ -1106,10 +1129,10 @@ var StandplassClubStats = (function () {
             toplistSpecs[id] = { columns: columns, defaultSort: { key: valueKey, dir: 'desc' } };
             return buildTableCard({
                 title: title,
-                rows: ranked,
+                rows: rows,
                 tableHtml: StandplassDataTable.renderTable(id, {
                     columns: columns,
-                    rows: ranked,
+                    rows: rows,
                     ariaLabel: ariaLabel || (title + ' ' + activeYear),
                     defaultSort: { key: valueKey, dir: 'desc' }
                 }, {

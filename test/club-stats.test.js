@@ -615,15 +615,16 @@ assert.ok(p2ModeHtml.indexOf('data-mode="top3" aria-pressed="true"') < 0, 'defau
 var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { hidden: showAllCombos(top3Ranking) });
 assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
 assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
+assert.ok(ovelserHtml.indexOf('data-dt-sort="combo|Finfelt|A"') >= 0, 'øvelse columns are sortable');
 // Alternating-column shading on øvelse columns (class-based, never nth-child):
 // odd-index visible combos get .top3-col-alt on their th and every td.
 var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
 var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: showAllCombos(altRanking) });
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Grovfelt B') >= 0, 'odd-index combo header shaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Finfelt A') >= 0, 'first combo header unshaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Finfelt A') < 0, 'first combo header never shaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Militærfelt C') >= 0, 'third combo header unshaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Militærfelt C') < 0, 'third combo header never shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Grovfelt|B">Grovfelt B') >= 0, 'odd-index combo header shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">Finfelt A') >= 0, 'first combo header unshaded');
+assert.ok(altHtml.indexOf('top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">') < 0, 'first combo header never shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">Militærfelt C') >= 0, 'third combo header unshaded');
+assert.ok(altHtml.indexOf('top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">') < 0, 'third combo header never shaded');
 assert.ok(altHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0, 'shaded combo column body cells carry the class');
 assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded combo body cells stay plain');
 assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
@@ -678,12 +679,16 @@ assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': f
 
 // Sorting survives the state→render→wire round-trip (Review Focus #3):
 // the page persists the sort in top3State and passes the same state back.
+// The # column is each shooter's RANK (page-order placement) — it travels
+// with the row under sorting instead of renumbering.
 var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">1</td><th scope="row">Bob</th>') >= 0,
-    'asc sort reorders rows, # recomputes, data-dt-row keeps data index');
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+    'asc sort: Bob leads but keeps his rank (2)');
+assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+    'asc sort: Alice is second but keeps her rank (1)');
 assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
 var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">1</td><th scope="row">Bob</th>') >= 0,
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
     'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────
@@ -887,9 +892,11 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
     // Same column spec the migrated toplistCard builds (klubbstatistikk).
+    // The # column is data-backed (row.rank) — each club's placement in
+    // the page order, traveling with the row under sorting.
     function toplistColumns(valueKey, valueLabel) {
         return [
-            { key: 'rank', label: '#', align: 'center', cell: function (row, i) { return i + 1; } },
+            { key: 'rank', label: '#', align: 'center' },
             { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
                 cell: function (row) { return '<a href="?klubb=' + encodeURIComponent(row.club) + '">' + escT(row.club) + '</a>'; } },
             { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
@@ -897,8 +904,8 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     }
 
     var ranked = [
-        { club: 'A & B', totalStarts: 30 },
-        { club: 'Klubb C', totalStarts: 25 }
+        { club: 'A & B', totalStarts: 30, rank: 1 },
+        { club: 'Klubb C', totalStarts: 25, rank: 2 }
     ];
 
     var tableHtml = StandplassDataTable.renderTable('toplist-starts', {
@@ -945,6 +952,20 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
         '<tr data-dt-row="0"><td class="ranking-rank">1</td><td><a href="?klubb=A%20%26%20B">A &amp; B</a></td><td class="ranking-score">30</td></tr>'
         + '<tr data-dt-row="1"><td class="ranking-rank">2</td><td><a href="?klubb=Klubb%20C">Klubb C</a></td><td class="ranking-score">25</td></tr>') !== -1,
         'row cells match today\'s toplist markup with A & B escaped');
+
+    // Sorted by club (desc): Klubb C leads the table but keeps her rank
+    // (2) — # is a data-anchored rank that travels with the row, not a
+    // renumbering of the current order.
+    var byClubDesc = StandplassDataTable.renderTable('toplist-starts', {
+        columns: toplistColumns('totalStarts', 'starter'),
+        rows: ranked,
+        ariaLabel: 'Flest starter 2026',
+        defaultSort: { key: 'totalStarts', dir: 'desc' }
+    }, { sort: { key: 'club', dir: 'desc' }, hidden: {}, runtimeHidden: [], widthTier: null });
+    assert.ok(byClubDesc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><a href="?klubb=Klubb%20C">Klubb C</a></td>') >= 0,
+        'club sort: Klubb C keeps rank 2');
+    assert.ok(byClubDesc.indexOf('<tr data-dt-row="1">') < byClubDesc.indexOf('<tr data-dt-row="0">'),
+        'club sort desc: Klubb C renders first, A & B second');
 })();
 
 console.log('club-stats.test.js: all tests passed');
