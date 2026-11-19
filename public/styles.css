@@ -1586,8 +1586,16 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 
 /* A picker button hosted in a controls row (e.g. the top-3 mode row)
    sits at the row's right end, and its panel opens leftward from the
-   anchor so it stays inside the card. */
-.top3-mode .dt-picker-btn { margin-left: auto; }
+   anchor so it stays inside the card. In the mode row it also adopts
+   the mode buttons' metrics — the default taller padding/font would
+   stretch the whole flex row and read as clipping into the table
+   header directly below (the row has no bottom margin, matching the
+   pre-migration layout). */
+.top3-mode .dt-picker-btn {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  padding: 0.2rem 1.5rem 0.2rem 0.6rem;
+}
 .dt-picker-anchor .checkbox-dropdown-panel { left: auto; }
 
 /* Same visual treatment as .checkbox-dropdown-btn (values copied, not
