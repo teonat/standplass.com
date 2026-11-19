@@ -77,7 +77,9 @@ StandplassPersonModal.renderChart(container, chartEntries, 'rankingScore');
 assert.ok(container.innerHTML.includes('viewBox="0 0 400 120"'), 'renders the expected viewBox');
 assert.ok(container.innerHTML.includes('<polyline'), 'renders a polyline for the best-per-date line');
 assert.match(container.innerHTML, /<circle[^>]*>[\s\S]*<circle[^>]*>[\s\S]*<circle/, 'renders one circle per entry');
-assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 3, 'one dot per entry, no extra overlap rings');
+// 2 circles per plotted dot: a selection ring + the dot itself. No extra
+// overlap rings — the three dates are distinct.
+assert.strictEqual((container.innerHTML.match(/<circle/g) || []).length, 6, 'one ring + one dot per entry, no extra overlap rings');
 
 // Plot-area inset: the first dot sits half an x-step right of the y-axis
 // (PL=40, three points a month apart → half-step ≈ 28 → first cx ≈ 68).
@@ -103,7 +105,7 @@ var posEntries = [
 ];
 var posContainer = {};
 StandplassPersonModal.renderChart(posContainer, posEntries, 'position');
-var cys = [].concat(posContainer.innerHTML.match(/<circle[^>]*cy="([\d.]+)"/g)).map(function (m) {
+var cys = [].concat(posContainer.innerHTML.match(/class="person-chart-dot"[^>]*cy="([\d.]+)"/g)).map(function (m) {
     return parseFloat(m.match(/cy="([\d.]+)"/)[1]);
 });
 assert.ok(cys[1] < cys[0], 'position=1 (better) plots higher (smaller cy) than position=5 (worse)');
@@ -185,6 +187,59 @@ assert.ok(html.indexOf('Grovfelt') !== -1 && html.indexOf('Fellesfelt') !== -1, 
     assert.ok(linkContainer.innerHTML.indexOf('data-idx="0"') !== -1, 'first dot carries data-idx 0');
     assert.ok(linkContainer.innerHTML.indexOf('data-idx="1"') === -1, 'filtered entry has no dot');
     assert.ok(linkContainer.innerHTML.indexOf('data-idx="2"') !== -1, 'third dot carries data-idx 2 (original position)');
+})();
+
+// Every dot gets a paired selection ring (same data-idx) — the visible
+// active indicator when a dot is activated from the chart or from a
+// table row. Counted per dot, so the plot has 2 circles per plotted entry.
+(function () {
+    var ringContainer = {};
+    StandplassPersonModal.renderChart(ringContainer, chartEntries, 'rankingScore');
+    var rings = ringContainer.innerHTML.match(/class="person-chart-dot-ring"/g) || [];
+    assert.strictEqual(rings.length, 3, 'one selection ring per plotted dot');
+    var dots = ringContainer.innerHTML.match(/class="person-chart-dot"/g) || [];
+    assert.strictEqual(dots.length, 3, 'one dot per plotted entry');
+    // ring and dot share the data-idx so activation can pair them
+    ['0', '1', '2'].forEach(function (i) {
+        assert.ok(
+            ringContainer.innerHTML.indexOf('person-chart-dot-ring" data-idx="' + i + '"') !== -1,
+            'selection ring carries data-idx ' + i
+        );
+    });
+    // renderChart hands back an interaction handle for the caller (the
+    // modal controller) to activate dots from table-row clicks.
+    var handle = StandplassPersonModal.renderChart(ringContainer, chartEntries, 'rankingScore');
+    assert.strictEqual(typeof handle.activateDot, 'function', 'renderChart returns an activateDot handle');
+    assert.strictEqual(typeof handle.clearActive, 'function', 'renderChart returns a clearActive handle');
+})();
+
+// Overlap rings (same-day dots) are classed so CSS can keep them from
+// intercepting pointer events — without this they swallow taps aimed at
+// the dot cluster without ever resolving to anything.
+(function () {
+    var ovContainer = {};
+    StandplassPersonModal.renderChart(ovContainer, [
+        { date: '2025-05-01', competition: 'A', discipline: 'Felt', class: 'A', position: 3, score: 240, rankingScore: 90 },
+        { date: '2025-05-01', competition: 'A', discipline: 'Felt', class: 'A', position: 3, score: 240, rankingScore: 90 },
+        { date: '2025-06-01', competition: 'B', discipline: 'Felt', class: 'A', position: 3, score: 240, rankingScore: 80 }
+    ], 'rankingScore');
+    assert.ok(ovContainer.innerHTML.indexOf('person-chart-overlap-ring') !== -1, 'overlap rings carry the pointer-events-none class');
+})();
+
+// findNearestPoint: nearest-point tap/hover resolution in viewBox units —
+// a fat-fingered tap resolves to the *closest* dot, not the topmost one,
+// and taps beyond the threshold resolve to nothing at all.
+(function () {
+    var pts = [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 100, y: 50 }];
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 12, 11, 16), 0, 'tap near a dot resolves to it');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 19, 12, 16), 1, 'nearest dot wins, not topmost');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 15, 10, 16), 0, 'an exact tie resolves to the earlier dot');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 40, 10, 16), -1, 'beyond the threshold resolves to nothing');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 100, 50, 16), 2, 'a dead-center hit resolves to that dot');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 100, 60, 9.9), -1, 'just outside the threshold resolves to nothing');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 100, 60, 10), -1, 'exactly at the threshold does not resolve (threshold is exclusive)');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint(pts, 100, 60, 10.5), 2, 'just inside the threshold resolves');
+    assert.strictEqual(StandplassPersonModal.findNearestPoint([], 10, 10, 16), -1, 'no dots resolves to nothing');
 })();
 
 console.log('person-modal.test.js: all assertions passed');

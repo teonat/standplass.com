@@ -1271,8 +1271,35 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     margin-bottom: 0.5rem;
 }
 .person-chart-dot { cursor: pointer; }
-.person-chart-dot--linked { stroke: var(--text); stroke-width: 1.5; }
-.person-row-highlight { background: var(--surface-hover); outline: none; }
+/* Decorative same-day markers never intercept pointer events — the chart
+   resolves taps nearest-dot itself, and these sit over the plot. */
+.person-chart-overlap-ring { pointer-events: none; }
+/* Selection ring: the visible active-dot indicator, paired to its dot by
+   data-idx. Brand accent (not a chart-series color) so it can't be
+   confused with a data meaning. */
+.person-chart-dot-ring {
+    fill: none;
+    stroke: var(--brand-accent);
+    stroke-width: 1.5;
+    opacity: 0;
+    pointer-events: none;
+}
+.person-chart-dot-ring--active { opacity: 1; }
+.person-chart-dot--active { stroke: var(--text); stroke-width: 1; }
+/* Row highlight follows the site's selected-state convention (see
+   .autocomplete-list li[aria-selected="true"]): brand-accent tinted
+   background plus an inset accent bar on the first cell — the old
+   --surface-hover (a 5% overlay) was indistinguishable from an unlit
+   row. The class is the indicator; the programmatic row focus stays
+   outline-free on purpose. */
+.person-row-highlight { outline: none; }
+.person-row-highlight td:first-child { box-shadow: inset 3px 0 0 var(--brand-accent); }
+tr[data-idx] { cursor: pointer; }
+.person-table-scroll tbody tr[data-idx]:hover td { background: var(--surface-hover); }
+/* A highlighted row keeps its tint while hovered (the plain hover rule
+   above is equal-specificity but earlier, so it loses here). */
+.person-table-scroll tbody tr.person-row-highlight td,
+.person-table-scroll tbody tr.person-row-highlight:hover td { background: var(--brand-accent-bg-subtle); }
 /* The person modal's result table scrolls internally (same treatment as
    the klubbstatistikk lists): clicking a chart dot scrolls to the row
    INSIDE this region, so the modal — and the chart — never jump away.
