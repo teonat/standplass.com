@@ -236,7 +236,12 @@ var StandplassDataTable = (function () {
             return null;
         }
         var columns = opts.columns || [];
-        var pickerBtn = scopeRoot.querySelector('.dt-picker-btn');
+        // The class is one STYLING of a picker button, the data-dt-picker
+        // attribute (which renderPickerButton has always emitted) is the
+        // semantic hook — discover either, so a page can style its picker
+        // freely (the stevner stats-bar button wears the Fold-alle look
+        // and carries no dt-picker-btn class).
+        var pickerBtn = scopeRoot.querySelector('.dt-picker-btn, [data-dt-picker]');
         var anchor = scopeRoot.querySelector('.dt-picker-anchor');
         if (!pickerBtn || !anchor) { return null; }
         anchor.innerHTML = '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">Nullstill</button>'

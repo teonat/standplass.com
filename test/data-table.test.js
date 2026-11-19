@@ -157,6 +157,64 @@ assert.ok(secHtml.indexOf('Ærlig') < secHtml.indexOf('Åpen') && secHtml.indexO
 // manual-QA per project convention.
 assert.strictEqual(typeof StandplassDataTable.wirePicker, 'function', 'wirePicker exported');
 
+// wirePicker discovers its button by [data-dt-picker] as well as by the
+// .dt-picker-btn class: the attribute (which renderPickerButton has
+// always emitted) is the semantic hook, the class is just one styling
+// of it. A page can style its picker button freely — the stevner
+// stats-bar Kolonner button reuses the Fold-alle look and carries no
+// dt-picker-btn class at all. Fake-DOM stand-ins, the filter-widgets
+// convention.
+global.StandplassFilterWidgets = global.StandplassFilterWidgets || require('../public/js/filter-widgets.js');
+function wpEl() {
+    return {
+        listeners: {},
+        addEventListener: function (evt, fn) { (this.listeners[evt] = this.listeners[evt] || []).push(fn); },
+        removeEventListener: function (evt, fn) {
+            var arr = this.listeners[evt] || [];
+            var i = arr.indexOf(fn);
+            if (i !== -1) { arr.splice(i, 1); }
+        },
+        hasAttribute: function () { return true; },
+        setAttribute: function () {},
+        removeAttribute: function () {}
+    };
+}
+var wpBtn = wpEl();
+wpBtn.getRootNode = function () { return wpRootNode; };
+wpBtn.parentElement = { contains: function () { return false; } };
+var wpRootNode = wpEl();
+var wpPanel = wpEl();
+var wpListEl = wpEl();
+var wpClearAll = wpEl();
+var wpAnchor = {
+    innerHTML: '',
+    querySelector: function (sel) {
+        if (sel.indexOf('panel') !== -1) { return wpPanel; }
+        if (sel.indexOf('list') !== -1) { return wpListEl; }
+        if (sel.indexOf('clear-all') !== -1) { return wpClearAll; }
+        return null;
+    }
+};
+// Returns the button ONLY for a selector that mentions data-dt-picker —
+// pins that the discovery query covers attribute-only buttons.
+var wpScope = {
+    querySelector: function (sel) {
+        if (sel.indexOf('data-dt-picker') !== -1) { return wpBtn; }
+        if (sel.indexOf('dt-picker-anchor') !== -1) { return wpAnchor; }
+        return null;
+    }
+};
+var wpHandle = StandplassDataTable.wirePicker(wpScope,
+    { columns: [{ key: 'a', label: 'A' }], picker: { buttonLabel: 'Kolonner' } }, {},
+    { hidden: {}, runtimeHidden: [], widthTier: null });
+assert.ok(wpHandle, 'wirePicker wires a button discovered by [data-dt-picker]');
+assert.strictEqual(wpBtn.listeners.click ? wpBtn.listeners.click.length : 0, 1,
+    'the attribute-discovered button got its click listener');
+assert.strictEqual(wpBtn.textContent, 'Kolonner', 'the picker label is forced onto the button');
+wpHandle.destroy();
+assert.strictEqual(wpBtn.listeners.click ? wpBtn.listeners.click.length : 0, 0,
+    'the handle destroys the wiring');
+
 // --- renderTable: golden markup ---
 
 function escText(s) {
