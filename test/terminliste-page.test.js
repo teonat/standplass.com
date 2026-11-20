@@ -168,4 +168,21 @@ assert.ok(tier900.indexOf('>Arrangør</th>') >= 0, 'tier 900 keeps Arrangør');
 assert.ok(tier900.indexOf('>Gren</th>') < 0 && tier900.indexOf('>Påmeldingsfrist</th>') < 0, 'tier 900 hides Gren and Påmeldingsfrist');
 assert.ok(pageHtml.indexOf('>Arrangør</th>') >= 0 && pageHtml.indexOf('>Gren</th>') >= 0, 'no tier keeps everything visible');
 
+// ── shouldLoadMore: the scroll auto-load predicate (pure, no DOM) ─────
+assert.strictEqual(typeof TP.shouldLoadMore, 'function', 'shouldLoadMore is exported');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 40, clientHeight: 60, scrollHeight: 160 }), true,
+    'exactly at the 60px threshold: true');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 39, clientHeight: 60, scrollHeight: 160 }), false,
+    '1px short of the threshold: false');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 0, clientHeight: 0, scrollHeight: 0 }), false,
+    'a zero-height (unlaid-out) wrap never triggers a load');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 100, clientHeight: 500, scrollHeight: 600 }), true,
+    'scrolled to the very bottom: true');
+
+// the "Last inn flere" button is gone; the wrap is a capped scroll area
+var fullMarkup = TP.buildMarkup('tl', false);
+assert.ok(fullMarkup.indexOf('more-btn') < 0, 'no more-btn in the full-page markup');
+assert.ok(fullMarkup.indexOf('Last inn flere') < 0, 'no Last inn flere button text');
+assert.ok(fullMarkup.indexOf('terminliste-scroll-wrap') >= 0, 'the table wrap gains the scroll-cap class');
+
 console.log('terminliste-page.test.js: all assertions passed');

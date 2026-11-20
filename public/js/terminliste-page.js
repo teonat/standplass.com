@@ -245,7 +245,6 @@ var StandplassTerminlistePage = (function () {
         var kretsInput = id('-krets-input'), kretsList = id('-krets-list'), kretsTags = id('-krets-tags'), kretsClear = id('-krets-clear');
         var statusEl = id('-status');
         var tableWrapEl = id('-table-wrap');
-        var moreBtn = id('-more-btn');
 
         var today = new Date();
         var defaultFra = today.toISOString().slice(0, 10);
@@ -433,6 +432,9 @@ var StandplassTerminlistePage = (function () {
         var PAGE_SIZE = 50;
         var hasMore = false;
         var currentAbort = null;
+        // True while a page fetch is in flight -- the scroll auto-load
+        // must not stack a second fetch on top of a pending one.
+        var loading = false;
         // Session-only view state (never persisted -- standing ruling):
         // the picker's live hidden-column map and the smallest crossed
         // responsive breakpoint (700 mobile / 900 tablet), converted
@@ -508,20 +510,30 @@ var StandplassTerminlistePage = (function () {
         function renderTable() {
             if (!rows.length) {
                 tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen stevner funnet.</p></div>';
-                moreBtn.hidden = true;
                 return;
             }
             tableWrapEl.innerHTML = StandplassDataTable.renderTable(
                 config.idPrefix + '-table',
                 terminlisteTableSpec(rows.map(resolveRow), hidden),
                 tableState());
-            moreBtn.hidden = !hasMore;
         }
 
+        // Auto-load: near the bottom of the capped scroll area, fetch the
+        // next page. The whole table re-renders (rows accumulate), and the
+        // wrap keeps its scrollTop -- the user stays at their position
+        // with more content below.
+        tableWrapEl.addEventListener('scroll', function () {
+            if (hasMore && !loading && shouldLoadMore(tableWrapEl)) {
+                pageIndex++;
+                fetchAndRender(false);
+            }
+        });
+
         function fetchAndRender(reset) {
-            if (reset) { pageIndex = 0; rows = []; }
+            if (reset) { pageIndex = 0; rows = []; tableWrapEl.scrollTop = 0; }
             if (currentAbort) { currentAbort.abort(); }
             currentAbort = new AbortController();
+            loading = true;
             statusEl.textContent = 'Laster…';
             var thisAbort = currentAbort;
             var url = StandplassTerminlistePage.buildCompetitionListUrl({
@@ -535,6 +547,7 @@ var StandplassTerminlistePage = (function () {
                 return r.json();
             }).then(function (data) {
                 if (thisAbort !== currentAbort) { return; }
+                loading = false;
                 var items = (data && data.items) || [];
                 rows = reset ? items : rows.concat(items);
                 hasMore = !!(data && data.paging && data.paging.hasNextPage);
@@ -542,12 +555,11 @@ var StandplassTerminlistePage = (function () {
                 renderTable();
             }, function (err) {
                 if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
+                loading = false;
                 statusEl.textContent = 'Kunne ikke hente data.';
                 statusEl.classList.add('ranking-error');
             });
         }
-
-        moreBtn.addEventListener('click', function () { pageIndex++; fetchAndRender(false); });
 
         Promise.all([
             ensureBranchlist(window.fetch.bind(window)),
@@ -748,6 +760,16 @@ var StandplassTerminlistePage = (function () {
         };
     }
 
+    // Pure predicate for the scroll auto-load: is the wrap near enough
+    // to its bottom (60px of slack) to fetch the next page? Takes a
+    // plain { scrollTop, clientHeight, scrollHeight } -- no DOM -- so
+    // the threshold is testable. A zero-height (unlaid-out) wrap never
+    // triggers a load.
+    function shouldLoadMore(wrap) {
+        if (!wrap.clientHeight) { return false; }
+        return wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 60;
+    }
+
     function buildMarkup(idPrefix, compact) {
         if (compact) { return buildCompactMarkup(idPrefix); }
         return '<div class="container">'
@@ -797,8 +819,7 @@ var StandplassTerminlistePage = (function () {
             + '    </div></div></div>'
             + '</div>'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
-            + '<div id="' + idPrefix + '-table-wrap"></div>'
-            + '<button class="ranking-more-btn" id="' + idPrefix + '-more-btn" type="button" hidden>Last inn flere</button>'
+            + '<div id="' + idPrefix + '-table-wrap" class="terminliste-scroll-wrap"></div>'
             // Required by mountDirect's own embed-builder wiring in
             // embed.js, which unconditionally does
             // getElementById(idPrefix + '-embed-builder').innerHTML = ...
@@ -819,6 +840,7 @@ var StandplassTerminlistePage = (function () {
         groupsForBranches: groupsForBranches,
         buildMarkup: buildMarkup,
         terminlisteTableSpec: terminlisteTableSpec,
+        shouldLoadMore: shouldLoadMore,
         init: init
     };
 })();

@@ -329,6 +329,14 @@ h1, h2, h3 {
 .terminliste-date { white-space: nowrap; }
 .terminliste-result-cell { text-align: center; }
 
+/* Full page's capped scroll area (replaces the old "Last inn flere"
+   button): 25 typical rows (rows * 2.1rem + 2rem head, the
+   klubbstatistikk rowsToMaxHeight formula); rows carrying sub-lines
+   read slightly shorter in count. overflow-y: auto, never hidden:
+   browser find-in-page must be able to reach rows past the cap (same
+   reason as .club-stats-list-scroll). */
+.terminliste-scroll-wrap { overflow-y: auto; max-height: 54.5rem; }
+
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
    [data-mode="dark"] overrides from the start (not a later fix round) --
    see this plan's Global Constraints and STATUS.md's klubb-view gotcha #2
