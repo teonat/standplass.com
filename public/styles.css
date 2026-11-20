@@ -326,7 +326,24 @@ h1, h2, h3 {
 }
 .comp-detail-btn:hover, .comp-detail-btn:focus-visible { border-color: var(--brand-accent); color: var(--brand-accent); }
 .terminliste-sub { display: block; font-size: 0.75rem; color: var(--text-muted); }
-.terminliste-date { white-space: nowrap; }
+/* NO mid-word breaking anywhere in these tables — owner rulings
+   2026-11-20: orphaned single letters ("Sportsskytter" + lone "e")
+   and split years ("2/026") are unacceptable, and dictionary
+   hyphenation (hyphens: auto) is engine- and dictionary-dependent
+   (measured: Chrome's Norwegian patterns hyphenate "Sportsskytter|e",
+   orphaning the plural e; Firefox would break differently but just
+   as uncontrollably — the owner browses Firefox). The fix is
+   structural instead: the tiers hide Arrangør below 860 and Gren +
+   Påmeldingsfrist below 1030 — measured: the seven-column set's
+   floor is 740px and the nine-column table's floor is 911px, and
+   org names break only at spaces. Anything that still cannot fit
+   its column (a pathological title in a very narrow embed) overflows
+   or scrolls rather than mangling — the honest fallback. Dates are
+   the one structured case and get explicit treatment in
+   dateRangeCellHtml (terminliste-page.js): nbsp within each half, a
+   wbr after the en-dash as the ONLY break opportunity, so a range
+   wraps exactly "28. feb–" / "4. mar 2026" and never mid-year. */
+.terminliste-date { white-space: normal; }
 .terminliste-result-cell { text-align: center; }
 
 /* Full page's capped scroll area (replaces the old "Last inn flere"

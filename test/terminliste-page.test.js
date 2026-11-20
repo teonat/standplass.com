@@ -136,7 +136,7 @@ assert.ok(pageHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--clickabl
     'the clickable-row attributes carry over with data-dt-row and data-title');
 assert.ok(pageHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
     'the ⓘ button cell with its aria-label');
-assert.ok(pageHtml.indexOf('<td class="terminliste-date">16.–17. nov 2026</td>') >= 0, 'Dato cell');
+assert.ok(pageHtml.indexOf('<td class="terminliste-date">16.–<wbr>17.\u00A0nov\u00A02026</td>') >= 0, 'Dato cell — nbsp halves, break only after the en-dash');
 assert.ok(pageHtml.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a><span class="terminliste-sub">Bomba Skytterhus</span></td>') >= 0,
     'Stevne cell: title link + facility sub-line');
 assert.ok(pageHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
@@ -156,17 +156,31 @@ assert.ok(pageHtml.indexOf('aria-label="Se detaljer for Julestevne – Avvist"')
 assert.ok(pageHtml.indexOf('<td class="terminliste-result-cell">–</td>') >= 0, 'no result renders –');
 assert.ok(pageHtml.indexOf('<td>–</td>') >= 0, 'empty org/type render –');
 
-// responsive tiers preserve today's CSS hiding exactly: at ≤700 both the
-// mobile-hide (Arrangør) and tablet-hide (Gren, Påmeldingsfrist) rules
-// fired; at ≤900 only the tablet-hide ones did
+// responsive tiers: Arrangør hides below 860 (its column is floored by
+// the unbreakable "Sportsskytterforbund" org word — no mid-word
+// breaking, owner ruling 2026-11-20), and Gren/Påmeldingsfrist below
+// 1030 (the nine-column table's measured floor is 911px)
 var tier700 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(700));
 assert.ok(tier700.indexOf('>Arrangør</th>') < 0, 'tier 700 hides Arrangør');
-assert.ok(tier700.indexOf('>Gren</th>') < 0 && tier700.indexOf('>Påmeldingsfrist</th>') < 0, 'tier 700 hides Gren and Påmeldingsfrist');
-assert.ok(tier700.indexOf('>Øvelsesgruppe</th>') >= 0 && tier700.indexOf('>Stevne</th>') >= 0, 'tier 700 keeps the always-visible columns');
+// soft hyphens (U+00AD) live inside the two long single-word header
+// labels so they can wrap in the tight band instead of flooring the
+// table's min width — goldens pin them explicitly
+var FRIST_HEADER = '>Påmeldings\u00ADfrist</th>';
+var GRUPPE_HEADER = '>Øvelses\u00ADgruppe</th>';
+assert.ok(tier700.indexOf('>Gren</th>') < 0 && tier700.indexOf(FRIST_HEADER) < 0, 'tier 700 hides Gren and Påmeldingsfrist');
+assert.ok(tier700.indexOf(GRUPPE_HEADER) >= 0 && tier700.indexOf('>Stevne</th>') >= 0, 'tier 700 keeps the always-visible columns');
 assert.ok(tier700.indexOf('Kongsvinger Sportsskyttere') < 0, 'tier 700 drops Arrangør cells too');
 var tier900 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(900));
-assert.ok(tier900.indexOf('>Arrangør</th>') >= 0, 'tier 900 keeps Arrangør');
-assert.ok(tier900.indexOf('>Gren</th>') < 0 && tier900.indexOf('>Påmeldingsfrist</th>') < 0, 'tier 900 hides Gren and Påmeldingsfrist');
+assert.ok(tier900.indexOf('>Arrangør</th>') >= 0, 'tier 900 keeps Arrangør (org tier is 860)');
+assert.ok(tier900.indexOf('>Gren</th>') < 0 && tier900.indexOf(FRIST_HEADER) < 0, 'tier 900 still hides Gren and Påmeldingsfrist (their tier is 1030)');
+var tier859 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(859));
+assert.ok(tier859.indexOf('>Arrangør</th>') < 0, 'tier 859 hides Arrangør');
+var tier861 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(861));
+assert.ok(tier861.indexOf('>Arrangør</th>') >= 0, 'tier 861 is the first to keep Arrangør');
+var tier1030 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(1030));
+assert.ok(tier1030.indexOf('>Gren</th>') < 0 && tier1030.indexOf(FRIST_HEADER) < 0, 'tier 1030 is the last width that hides Gren and Påmeldingsfrist');
+var tier1031 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(1031));
+assert.ok(tier1031.indexOf('>Gren</th>') >= 0 && tier1031.indexOf(FRIST_HEADER) >= 0, 'above 1030 the full column set returns');
 assert.ok(pageHtml.indexOf('>Arrangør</th>') >= 0 && pageHtml.indexOf('>Gren</th>') >= 0, 'no tier keeps everything visible');
 
 // ── shouldLoadMore: the scroll auto-load predicate (pure, no DOM) ─────
@@ -244,7 +258,7 @@ assert.ok(compactHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--click
     'the clickable-row attributes carry over');
 assert.ok(compactHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
     'the ⓘ cell never appends status text in the widget');
-assert.ok(compactHtml.indexOf('<td class="terminliste-date">16.–17. nov 2026</td>') >= 0, 'Dato cell');
+assert.ok(compactHtml.indexOf('<td class="terminliste-date">16.–<wbr>17.\u00A0nov\u00A02026</td>') >= 0, 'Dato cell — nbsp halves, break only after the en-dash');
 assert.ok(compactHtml.indexOf('<td>Høststevne</td>') >= 0, 'Stevne cell is plain text, no link');
 assert.ok(compactHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
 assert.ok(compactHtml.indexOf('<td class="terminliste-result-cell"><a href="https://example.com/r.pdf" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a></td>') >= 0,

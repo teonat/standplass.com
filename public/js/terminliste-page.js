@@ -79,7 +79,7 @@ var StandplassTerminlistePage = (function () {
     }
 
     function buildCompactMarkup(idPrefix) {
-        return '<div class="terminliste-widget">'
+        return '<div class="terminliste-widget" lang="no">'
             + '<div class="terminliste-widget-years" id="' + idPrefix + '-year-nav"></div>'
             + '<div id="' + idPrefix + '-table-wrap" class="terminliste-widget-scroll"><p class="ranking-status-msg">Laster…</p></div>'
             + '<p class="terminliste-widget-link" id="' + idPrefix + '-more-link"></p>'
@@ -107,11 +107,15 @@ var StandplassTerminlistePage = (function () {
         // re-render (same two-breakpoint pattern as the full page; no
         // picker, no auto-load -- one fixed request per year).
         var widgetRows = [];
-        var currentWidthTier = computeWidthTier();
-        [700, 900].forEach(function (w) {
+        // The widget's own hideBelow breakpoints ([700]): Stevnetype
+        // hides below 700. Derived from the spec so a new hideBelow
+        // value flows here automatically.
+        var WIDGET_BREAKPOINTS = specBreakpoints(compactTableSpec([]).columns);
+        var currentWidthTier = computeWidthTier(WIDGET_BREAKPOINTS);
+        WIDGET_BREAKPOINTS.forEach(function (w) {
             var mql = window.matchMedia('(max-width:' + w + 'px)');
             var onChange = function () {
-                var next = computeWidthTier();
+                var next = computeWidthTier(WIDGET_BREAKPOINTS);
                 if (next === currentWidthTier) { return; }
                 currentWidthTier = next;
                 if (widgetRows.length) { renderWidgetTable(); }
@@ -462,11 +466,18 @@ var StandplassTerminlistePage = (function () {
         var loading = false;
         // Session-only view state (never persisted -- standing ruling):
         // the picker's live hidden-column map and the smallest crossed
-        // responsive breakpoint (700 mobile / 900 tablet), converted
+        // responsive breakpoint (Arrangør 860; Gren/Påmeldingsfrist
+        // 1030), converted
         // from the old .terminliste-mobile-hide/.terminliste-tablet-hide
         // CSS rules at identical widths.
         var hidden = {};
-        var currentWidthTier = computeWidthTier();
+        // The page's hideBelow breakpoints (Arrangør 860; Gren and
+        // Påmeldingsfrist 1030 — the org column needs a ~770px card and
+        // the nine-column table a ~935px card; measured 2026-11-20).
+        // Derived from the spec so a new hideBelow value flows here
+        // automatically.
+        var PAGE_BREAKPOINTS = specBreakpoints(buildColumns(hidden));
+        var currentWidthTier = computeWidthTier(PAGE_BREAKPOINTS);
 
         // Shared column picker: wired once (the button lives outside the
         // re-rendered table wrap, so it survives renderTable), and
@@ -487,10 +498,10 @@ var StandplassTerminlistePage = (function () {
         }
         wireColumnPicker();
 
-        [700, 900].forEach(function (w) {
+        PAGE_BREAKPOINTS.forEach(function (w) {
             var mql = window.matchMedia('(max-width:' + w + 'px)');
             var onChange = function () {
-                var next = computeWidthTier();
+                var next = computeWidthTier(PAGE_BREAKPOINTS);
                 if (next === currentWidthTier) { return; }
                 currentWidthTier = next;
                 // Rows may still be loading (or empty after a filter) -- a
@@ -786,7 +797,7 @@ var StandplassTerminlistePage = (function () {
         return [
             { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, pickerLabel: 'Detaljer', cellClass: 'terminliste-detail-col', raw: true,
                 cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="' + detailAriaLabel(r) + '">ⓘ</button>'; } },
-            { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
+            { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', raw: true, cell: function (r) { return dateRangeCellHtml(r.dateRange); } },
             { key: 'starttid', label: 'Starttid', defaultHidden: true, cellClass: 'terminliste-date', cell: function (r) { return r.starttid || '–'; } },
             { key: 'title', label: 'Stevne', raw: true, cell: function (r) {
                 return '<a href="' + r.href + '" target="_blank" rel="noopener noreferrer">' + esc(r.title || '–') + '</a>'
@@ -797,13 +808,26 @@ var StandplassTerminlistePage = (function () {
             { key: 'status', label: 'Status', defaultHidden: true, cell: function (r) {
                 return r.status != null && r.status !== 1 ? (STATUS_LABEL[r.status] || '–') : '–';
             } },
-            { key: 'orgName', label: 'Arrangør', hideBelow: 700, raw: true, cell: function (r) {
+            // Arrangør hides below 860 (not the usual 700): the org
+            // column's min-content is the widest unbreakable org word
+            // ("Sportsskytterforbund", ~156px with padding — mid-word
+            // breaking is an owner-rejected 2026-11-20 ruling), and the
+            // seven-column set fits only from a ~740px card. The picker
+            // can still re-show it at any width.
+            { key: 'orgName', label: 'Arrangør', hideBelow: 860, raw: true, cell: function (r) {
                 return esc(r.orgName) + (r.kretsName && hidden.krets !== false ? '<span class="terminliste-sub">' + esc(r.kretsName) + '</span>' : '');
             } },
             { key: 'krets', label: 'Krets', defaultHidden: true, cell: function (r) { return r.kretsName || '–'; } },
-            { key: 'branchNames', label: 'Gren', hideBelow: 900, cell: function (r) { return r.branchNames; } },
-            { key: 'groupNames', label: 'Øvelsesgruppe', cell: function (r) { return r.groupNames; } },
-            { key: 'frist', label: 'Påmeldingsfrist', hideBelow: 900, cellClass: 'terminliste-date', cell: function (r) { return r.frist; } },
+            // Gren + Påmeldingsfrist hide below 1030 (not the usual 900):
+            // measured 2026-11-20, the nine-column table's floor is 911px
+            // (header-floored columns plus the unbreakable org word), so
+            // the full set needs a ~935px card; below 1030 it forced either
+            // horizontal scroll or mid-word breaking, both rejected by
+            // owner ruling. The picker can still re-show these columns at
+            // any width (explicit user choice beats the tier).
+            { key: 'branchNames', label: 'Gren', hideBelow: 1030, cell: function (r) { return r.branchNames; } },
+            { key: 'groupNames', label: 'Øvelses\u00ADgruppe', cell: function (r) { return r.groupNames; } },
+            { key: 'frist', label: 'Påmeldings\u00ADfrist', hideBelow: 1030, cellClass: 'terminliste-date', cell: function (r) { return r.frist; } },
             { key: 'klasseforende', label: 'Klasseførende', defaultHidden: true, raw: true, cell: function (r) { return r.klasseforendeBadge || '–'; } },
             { key: 'resultat', label: 'Resultater', cellClass: 'terminliste-result-cell', raw: true, cell: function (r) {
                 return (r.hasResult && r.resultFileUrl)
@@ -811,6 +835,17 @@ var StandplassTerminlistePage = (function () {
                     : '–';
             } }
         ];
+    }
+
+    // Date-range cell rendering: nbsp within each half, and the ONLY
+    // break opportunity sits right after the en-dash — the natural
+    // split for a range (owner ruling 2026-11-20: "breaking at the
+    // hyphen"). With slack the string renders on one line (nbsp reads
+    // as a space); when the table is tight it wraps as "28. feb–" /
+    // "4. mar 2026" instead of at a mid-range space. Generated strings
+    // only (month names and digits), safe to emit raw.
+    function dateRangeCellHtml(raw) {
+        return String(raw || '').replace(/ /g, '\u00A0').replace('–', '–<wbr>');
     }
 
     // The full page's table as a base spec. Rows are pre-resolved by
@@ -833,11 +868,29 @@ var StandplassTerminlistePage = (function () {
         };
     }
 
-    // Smallest crossed responsive breakpoint (700 mobile / 900 tablet) --
+    // The spec's distinct hideBelow breakpoints, ascending — the same
+    // set the base derives for its own matchMedia listeners. Consumed
+    // by computeWidthTier and the page/widget resize listeners so a new
+    // hideBelow value in a spec flows everywhere (a hardcoded
+    // [700, 900] list missed the 1000 tablet breakpoint added
+    // 2026-11-20, leaving the initial render with the full column set
+    // at widths where the tier should be hiding some).
+    function specBreakpoints(columns) {
+        var values = [];
+        (columns || []).forEach(function (col) {
+            if (col.hideBelow != null && values.indexOf(col.hideBelow) === -1) {
+                values.push(col.hideBelow);
+            }
+        });
+        return values.sort(function (a, b) { return a - b; });
+    }
+
+    // Smallest crossed responsive breakpoint among the given values --
     // the tier the base's hideBelow semantics consume. Shared by the
-    // full page and the compact widget.
-    function computeWidthTier() {
-        var crossed = [700, 900].filter(function (w) {
+    // full page (Arrangør 860 / Gren+Frist 1030) and the compact
+    // widget (700 only).
+    function computeWidthTier(breakpoints) {
+        var crossed = (breakpoints || []).filter(function (w) {
             return window.matchMedia('(max-width:' + w + 'px)').matches;
         });
         return crossed.length ? crossed[0] : null;
@@ -863,7 +916,7 @@ var StandplassTerminlistePage = (function () {
             columns: [
                 { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, pickerLabel: 'Detaljer', cellClass: 'terminliste-detail-col', raw: true,
                     cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="Se detaljer for ' + esc(r.title || '–') + '">ⓘ</button>'; } },
-                { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
+                { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', raw: true, cell: function (r) { return dateRangeCellHtml(r.dateRange); } },
                 { key: 'title', label: 'Stevne', cell: function (r) { return r.title || '–'; } },
                 { key: 'competitionTypeName', label: 'Stevnetype', hideBelow: 700, cell: function (r) { return r.competitionTypeName || '–'; } },
                 { key: 'resultat', label: 'Resultater', cellClass: 'terminliste-result-cell', raw: true, cell: function (r) {
