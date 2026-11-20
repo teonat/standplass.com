@@ -2108,8 +2108,18 @@ var StandplassClubStats = (function () {
             // it outlives its DOM.
             if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             if (!top3Spec) { return; }
-            if (!contentEl.querySelector('table[data-dt-id="top3"]')) { return; }
-            top3Wire = StandplassDataTable.wireTable(contentEl, 'top3', top3Spec, top3Handlers(), top3State);
+            var tableEl = contentEl.querySelector('table[data-dt-id="top3"]');
+            if (!tableEl) { return; }
+            // Root is the table's own card, matching wireDrilldownTable:
+            // wirePicker finds button + anchor via querySelector on the
+            // root, and the drilldown's pickered cards render before this
+            // card in the content element — a contentEl root would bind
+            // this table's picker to the first drilldown button and leave
+            // this card's own Kolonner button dead (it also re-hijacked
+            // that drilldown button after every mode change, which
+            // re-runs this wire).
+            var root = tableEl.closest('.ranking-card') || contentEl;
+            top3Wire = StandplassDataTable.wireTable(root, 'top3', top3Spec, top3Handlers(), top3State);
         }
 
         function rerenderTop3Table() {
