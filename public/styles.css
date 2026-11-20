@@ -330,17 +330,34 @@ h1, h2, h3 {
 .terminliste-result-cell { text-align: center; }
 
 /* Full page's capped scroll area (replaces the old "Last inn flere"
-   button): 25 typical rows (rows * 2.1rem + 2rem head, the
+   button): the scroll region IS the table card — the scrollbar hugs
+   the card's top and bottom edges. (An outer-wrap scroll started
+   1.5rem above the card — the card's own margin-top — leaving the
+   track floating beside empty space; scroll belongs on the card
+   itself.) The card's existing overflow-x: auto joins this as ONE
+   scroll container. 25 typical rows (rows * 2.1rem + 2rem head, the
    klubbstatistikk rowsToMaxHeight formula); rows carrying sub-lines
    read slightly shorter in count. overflow-y: auto, never hidden:
    browser find-in-page must be able to reach rows past the cap (same
    reason as .club-stats-list-scroll). */
 .terminliste-scroll-wrap { overflow-y: auto; max-height: 54.5rem; }
-.terminliste-picker-row { display: flex; justify-content: flex-end; }
+/* With the cap, the header pins to the top of the scroll region so
+   column meanings survive a 25-row scroll. border-collapse: collapse
+   does not move a sticky th's borders with it — separate + spacing 0
+   renders identically for this table's simple bottom borders. */
+.terminliste-scroll-wrap .ranking-table { border-collapse: separate; border-spacing: 0; }
+.terminliste-scroll-wrap thead th { position: sticky; top: 0; z-index: 1; }
+/* Toolbar right above the card: status left, Kolonner right (the
+   stevner stats-bar pattern). min-height on the status keeps the row
+   stable while empty. */
+.terminliste-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1rem; }
+.terminliste-toolbar .ranking-status-msg { margin-top: 0; }
 /* Compact widget's own scroll cap: 10 typical rows (rows * 2.1rem +
    2rem head). overflow-y: auto, never hidden -- same find-in-page rule
-   as the full page's cap. */
+   as the full page's cap; header pins like the full page's. */
 .terminliste-widget-scroll { overflow-y: auto; max-height: 23rem; }
+.terminliste-widget-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
+.terminliste-widget-scroll thead th { position: sticky; top: 0; z-index: 1; }
 /* Norgesfelt's per-tab Kolonner rows, injected after each panel's
    filter row (the page markup is static HTML). */
 .norgesfelt-picker-row { display: flex; justify-content: flex-end; }

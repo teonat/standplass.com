@@ -119,9 +119,10 @@ var pageState = function (tier) {
 };
 var pageHtml = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(null));
 
-// wrapper + table element: byte-identical to the hand-rolled markup
-assert.ok(pageHtml.indexOf('<div class="ranking-full-table"><table class="ranking-table" data-dt-id="tl-table" aria-label="Terminliste">') >= 0,
-    'the ranking-full-table wrap and aria-label carry over');
+// wrapper + table element: the scroll region IS the card (the scrollbar
+// hugs the card's top/bottom edges, not a wrap that starts above it)
+assert.ok(pageHtml.indexOf('<div class="ranking-full-table terminliste-scroll-wrap"><table class="ranking-table" data-dt-id="tl-table" aria-label="Terminliste">') >= 0,
+    'the ranking-full-table wrap carries the scroll cap and aria-label');
 // header row: the visually-hidden Detaljer label survives via labelRaw
 assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>') >= 0,
     'the Detaljer header stays a visually-hidden span');
@@ -179,11 +180,11 @@ assert.strictEqual(TP.shouldLoadMore({ scrollTop: 0, clientHeight: 0, scrollHeig
 assert.strictEqual(TP.shouldLoadMore({ scrollTop: 100, clientHeight: 500, scrollHeight: 600 }), true,
     'scrolled to the very bottom: true');
 
-// the "Last inn flere" button is gone; the wrap is a capped scroll area
+// the "Last inn flere" button is gone; the wrap is a plain container
+// (the scroll cap lives on the table card via the spec's wrapClass)
 var fullMarkup = TP.buildMarkup('tl', false);
 assert.ok(fullMarkup.indexOf('more-btn') < 0, 'no more-btn in the full-page markup');
 assert.ok(fullMarkup.indexOf('Last inn flere') < 0, 'no Last inn flere button text');
-assert.ok(fullMarkup.indexOf('terminliste-scroll-wrap') >= 0, 'the table wrap gains the scroll-cap class');
 
 // ── expanded column set: five opt-in columns, sub-line interplay ───────
 // the page threads the SAME hidden map into the spec (sub-line interplay)
@@ -215,8 +216,11 @@ assert.ok(interplay.indexOf('<span class="terminliste-sub">Bomba Skytterhus</spa
 assert.ok(interplay.indexOf('<td>Kongsvinger Sportsskyttere</td>') >= 0, 'org name itself stays in the Arrangør cell');
 assert.ok(interplay.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a></td>') >= 0, 'title link stays in the Stevne cell');
 
-// the picker button markup is emitted after the filter row
-assert.ok(fullMarkup.indexOf('terminliste-picker-row') >= 0, 'picker row emitted');
+// the picker button sits in a toolbar with the status message, right
+// above the table card (status left, Kolonner right — the stevner
+// stats-bar pattern)
+assert.ok(fullMarkup.indexOf('terminliste-toolbar') >= 0, 'toolbar row emitted');
+assert.ok(fullMarkup.indexOf('terminliste-picker-row') < 0, 'no detached picker row above the status gap');
 assert.ok(fullMarkup.indexOf('data-dt-picker') >= 0, 'picker button carries the data-dt-picker hook');
 assert.ok(fullMarkup.indexOf('>Kolonner</button>') >= 0, 'picker button labelled Kolonner');
 assert.ok(fullMarkup.indexOf('dt-picker-anchor') >= 0, 'picker anchor emitted');

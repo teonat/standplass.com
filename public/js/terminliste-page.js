@@ -809,7 +809,7 @@ var StandplassTerminlistePage = (function () {
                     + '" data-status="' + esc(String(r.status != null ? r.status : 1))
                     + '" data-title="' + esc(r.title || '–') + '"';
             },
-            wrapClass: 'ranking-full-table',
+            wrapClass: 'ranking-full-table terminliste-scroll-wrap',
             tableClass: 'ranking-table',
             ariaLabel: 'Terminliste'
         };
@@ -913,14 +913,18 @@ var StandplassTerminlistePage = (function () {
             + '      <ul id="' + idPrefix + '-group-list" class="checkbox-dropdown-list" aria-label="Velg øvelsesgrupper"></ul>'
             + '    </div></div></div>'
             + '</div>'
-            // Shared Kolonner picker, right-aligned under the filter bar.
-            // renderPickerButton emits the button plus its anchor (the
-            // dropdown's positioning context); buildMarkup runs
-            // post-dependencies on both adapters, so the base is
-            // available here.
-            + '<div class="terminliste-picker-row">' + StandplassDataTable.renderPickerButton() + '</div>'
+            // Toolbar right above the table card: status message left,
+            // shared Kolonner picker right (the stevner stats-bar
+            // pattern — no dead space between the button and the
+            // table; the status p's min-height keeps the row stable
+            // when empty). renderPickerButton emits the button plus
+            // its anchor (the dropdown's positioning context);
+            // buildMarkup runs post-dependencies on both adapters.
+            + '<div class="terminliste-toolbar">'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
-            + '<div id="' + idPrefix + '-table-wrap" class="terminliste-scroll-wrap"></div>'
+            + StandplassDataTable.renderPickerButton()
+            + '</div>'
+            + '<div id="' + idPrefix + '-table-wrap"></div>'
             // Required by mountDirect's own embed-builder wiring in
             // embed.js, which unconditionally does
             // getElementById(idPrefix + '-embed-builder').innerHTML = ...
