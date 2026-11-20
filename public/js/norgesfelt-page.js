@@ -16,6 +16,17 @@ var StandplassNorgesfeltPage = (function () {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // Escapes a value for use inside a double-quoted CSS attribute
+    // selector. Backslash FIRST — an unescaped backslash would eat the
+    // following character's escape (CodeQL flagged the quote-only
+    // version as js/incomplete-sanitization); then the quote itself.
+    // Site reference data carries neither, so this is hardening, not
+    // a data fix.
+    function selAttr(v) {
+        return String(v == null ? '' : v)
+            .replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
     // Duplicated from stevner-page.js rather than loading that ~900-line
     // felt/bane-specific engine for two pure functions -- duplication
     // is the established pattern for these helpers, not a
@@ -486,7 +497,7 @@ var StandplassNorgesfeltPage = (function () {
             var spec = toplisteSpecs[discName];
             if (!spec) { return; }
             var dtId = 'norgesfelt-card-' + discName;
-            var tableSel = 'table[data-dt-id="' + dtId.replace(/"/g, '\\"') + '"]';
+            var tableSel = 'table[data-dt-id="' + selAttr(dtId) + '"]';
             if (!cell.querySelector(tableSel)) { return; }
             StandplassDataTable.wireTable(cell, dtId, spec, {
                 onSortChange: function (sort) {
@@ -506,7 +517,7 @@ var StandplassNorgesfeltPage = (function () {
         }
 
         function renderCard(discName) {
-            var cell = cardsWrap.querySelector('[data-disc-name="' + discName.replace(/"/g, '\\"') + '"]');
+            var cell = cardsWrap.querySelector('[data-disc-name="' + selAttr(discName) + '"]');
             if (!cell) { return; }
             var rows = (data.disciplines[discName][activeSubType] || []);
             var filtered = getFilteredEntries(rows, activeClubs);
