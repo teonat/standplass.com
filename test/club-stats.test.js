@@ -76,6 +76,69 @@ var noClubStats = CS.computeClubStats(noClubRows);
 assert.strictEqual(Object.keys(noClubStats).length, 1, 'empty club name → "Ukjent" bucket');
 assert.strictEqual(noClubStats['Ukjent'].uniqueShooters, 1, 'Ukjent bucket has 1 shooter');
 
+// ── hosted/external splits (the toplists' klubb/andre columns) ─────────
+
+// buildCompOrganizerIndex: competitionId → normalized organizer, with
+// year + program filtering and no-organizer comps left out.
+var orgYearData = {
+    '/data/felt|2026': { competitions: [
+        { id: 'c1', organizationName: 'Klubb A' },
+        { id: 'c2', organizationName: 'Andre SK' },
+        { id: 'c3', organizationName: 'KLUBB B' },
+        { id: 'c-no-org', startDate: '2026-05-01' }
+    ] },
+    '/data/bane|2026': { competitions: [
+        { id: 'b1', organizationName: 'Bane KLubb' }
+    ] },
+    '/data/felt|2025': { competitions: [
+        { id: 'old1', organizationName: 'Klubb A' }
+    ] }
+};
+var orgIdx = CS.buildCompOrganizerIndex(orgYearData, 2026, 'alle');
+assert.strictEqual(orgIdx.c1, 'klubba', 'organizer names are normalized');
+assert.strictEqual(orgIdx.b1, 'baneklubb', 'alle spans both programs');
+assert.ok(!('c-no-org' in orgIdx), 'competitions without an organizer are not in the index');
+assert.ok(!('old1' in orgIdx), 'other years are filtered out');
+var feltOnlyIdx = CS.buildCompOrganizerIndex(orgYearData, 2026, 'felt');
+assert.ok(!('b1' in feltOnlyIdx), 'felt program excludes bane competitions');
+assert.strictEqual(feltOnlyIdx.c3, 'klubbb', 'uppercase organizers normalize (c3 → Klubb B)');
+
+// computeClubStats with the index: a club's starts and attended stevner
+// split into its own hosted stevner and external ones. A start without a
+// competitionId is external by definition; a club's shooter at ANOTHER
+// club's stevne is external too.
+var splitRows = [
+    { personId: 's1', club: 'Klubb A', competitionId: 'c1', position: 1 },
+    { personId: 's2', club: 'Klubb A', competitionId: 'c1', position: 2 },
+    { personId: 's1', club: 'Klubb A', competitionId: 'c2', position: 3 },
+    { personId: 's3', club: 'Klubb A', position: 4 },
+    { personId: 's4', club: 'Klubb B', competitionId: 'c1', position: 5 },
+    { personId: 's5', club: 'Klubb B', competitionId: 'c3', position: 1 }
+];
+var splitStats = CS.computeClubStats(splitRows, orgIdx);
+assert.strictEqual(splitStats['Klubb A'].clubStarts, 2, 'Klubb A: 2 starts at its own stevne (c1)');
+assert.strictEqual(splitStats['Klubb A'].otherStarts, 2, 'Klubb A: c2 start + one without a compId are external');
+assert.strictEqual(splitStats['Klubb A'].clubStevner, 1, 'Klubb A attended its own c1');
+assert.strictEqual(splitStats['Klubb A'].otherStevner, 1, 'Klubb A attended external c2');
+assert.strictEqual(splitStats['Klubb A'].clubStarts + splitStats['Klubb A'].otherStarts,
+    splitStats['Klubb A'].totalStarts, 'start splits sum to the total');
+assert.strictEqual(splitStats['Klubb A'].clubStevner + splitStats['Klubb A'].otherStevner,
+    splitStats['Klubb A'].competitionsAttended, 'stevne splits sum to the total');
+assert.strictEqual(splitStats['Klubb B'].clubStarts, 1, 'Klubb B: its shooter at KLUBB B\'s c3 is hosted (case-insensitive organizer)');
+assert.strictEqual(splitStats['Klubb B'].otherStarts, 1, 'Klubb B: its shooter at Klubb A\'s c1 is external');
+assert.strictEqual(splitStats['Klubb B'].clubStevner, 1, 'Klubb B attended its own c3');
+assert.strictEqual(splitStats['Klubb B'].otherStevner, 1, 'Klubb B attended external c1');
+
+// Without an organizer index nothing is a club comp — splits still sum.
+var noIdxStats = CS.computeClubStats(splitRows);
+assert.strictEqual(noIdxStats['Klubb A'].clubStarts, 0, 'no organizer index → nothing hosted');
+assert.strictEqual(noIdxStats['Klubb A'].otherStarts, noIdxStats['Klubb A'].totalStarts, 'every start lands in andre');
+
+// rankClubs passes the split keys through for the toplist columns.
+var splitRanked = CS.rankClubs(splitStats, 'totalStarts', { minShooters: 0, minStarts: 0 });
+assert.strictEqual(splitRanked[0].clubStarts, 2, 'rankClubs carries clubStarts through');
+assert.strictEqual(splitRanked[0].otherStevner, 1, 'rankClubs carries otherStevner through');
+
 // ── rankClubs ──────────────────────────────────────────────────────────
 
 // Sort by uniqueShooters (no threshold filtering for these tests)

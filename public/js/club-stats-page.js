@@ -144,8 +144,14 @@ var StandplassClubStats = (function () {
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
+    // compOrganizerById (competitionId → normalized organizer, from
+    // buildCompOrganizerIndex) splits each club's starts and attended
+    // stevner into stevner the club hosted itself and external ones —
+    // the overview toplists' klubb/andre columns. A start without a
+    // competitionId is external by definition (a club's own comps always
+    // carry ids), so the splits always sum to the totals.
     // Returns { "ClubName": { uniqueShooters, totalStarts, ... }, ... }.
-    function computeClubStats(rows) {
+    function computeClubStats(rows, compOrganizerById) {
         var clubs = {};
         (rows || []).forEach(function (r) {
             var name = r.club || 'Ukjent';
@@ -154,6 +160,10 @@ var StandplassClubStats = (function () {
                     shooters: {},
                     starts: 0,
                     competitions: {},
+                    clubStarts: 0,
+                    otherStarts: 0,
+                    clubCompetitions: {},
+                    otherCompetitions: {},
                     topThree: 0,
                     disciplines: {},
                     classes: {}
@@ -161,6 +171,15 @@ var StandplassClubStats = (function () {
             }
             var c = clubs[name];
             c.starts++;
+            var hosted = !!(r.competitionId && compOrganizerById
+                && compOrganizerById[r.competitionId] === StandplassStevnerPage.normalizeClub(name));
+            if (hosted) {
+                c.clubStarts++;
+                c.clubCompetitions[r.competitionId] = true;
+            } else {
+                c.otherStarts++;
+                if (r.competitionId) { c.otherCompetitions[r.competitionId] = true; }
+            }
             if (r.personId) { c.shooters[r.personId] = true; }
             if (r.competitionId) { c.competitions[r.competitionId] = true; }
             var pos = Number(r.position);
@@ -175,11 +194,15 @@ var StandplassClubStats = (function () {
             c.uniqueShooters = Object.keys(c.shooters).length;
             c.totalStarts = c.starts;
             c.competitionsAttended = Object.keys(c.competitions).length;
+            c.clubStevner = Object.keys(c.clubCompetitions).length;
+            c.otherStevner = Object.keys(c.otherCompetitions).length;
             c.disciplinesRepresented = Object.keys(c.disciplines).length;
             c.classesRepresented = Object.keys(c.classes).length;
             delete c.shooters;
             delete c.starts;
             delete c.competitions;
+            delete c.clubCompetitions;
+            delete c.otherCompetitions;
             delete c.disciplines;
             delete c.classes;
         });
@@ -207,6 +230,10 @@ var StandplassClubStats = (function () {
                     uniqueShooters: s.uniqueShooters,
                     totalStarts: s.totalStarts,
                     competitionsAttended: s.competitionsAttended,
+                    clubStarts: s.clubStarts,
+                    otherStarts: s.otherStarts,
+                    clubStevner: s.clubStevner,
+                    otherStevner: s.otherStevner,
                     topThree: s.topThree,
                     disciplinesRepresented: s.disciplinesRepresented,
                     classesRepresented: s.classesRepresented
@@ -242,6 +269,28 @@ var StandplassClubStats = (function () {
                 isNew: prev === 0 && cur > 0
             };
         });
+    }
+
+    // competitionId → normalized organizer name for one year/program —
+    // the same yearData walk the drilldown's clubCompIds uses, kept as
+    // a lookup so computeClubStats can split each club's activity into
+    // stevner the club hosted itself and external ones. Competitions
+    // without an organizer are left out (they can never be a club's
+    // own).
+    function buildCompOrganizerIndex(yearData, year, program) {
+        var byId = {};
+        Object.keys(yearData || {}).forEach(function (key) {
+            if (key.indexOf('|' + year) === -1) { return; }
+            var base = key.split('|')[0];
+            if (program === 'felt' && base !== '/data/felt') { return; }
+            if (program === 'bane' && base !== '/data/bane') { return; }
+            (yearData[key].competitions || []).forEach(function (comp) {
+                if (comp && comp.id != null && comp.organizationName) {
+                    byId[comp.id] = StandplassStevnerPage.normalizeClub(comp.organizationName);
+                }
+            });
+        });
+        return byId;
     }
 
     // ── Klasse semantics (Klassefordeling / topp-3) ────────────────────
@@ -1478,7 +1527,10 @@ var StandplassClubStats = (function () {
             var cacheKey = program + '|' + year;
             if (statsCache[cacheKey]) { return statsCache[cacheKey]; }
             var rows = getRowsForYear(year, program);
-            var stats = computeClubStats(rows);
+            // The organizer index is built once per cache entry — the
+            // toplists' split columns come straight from the cached
+            // stats, so a sort's full re-render never re-walks the data.
+            var stats = computeClubStats(rows, buildCompOrganizerIndex(yearData, year, program));
             statsCache[cacheKey] = stats;
             return stats;
         }
@@ -1491,22 +1543,30 @@ var StandplassClubStats = (function () {
         // breaking rendering (the old title-string dispatch was one
         // rename away from silently rendering one toplist's data under
         // another's header).
-        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel) {
+        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel, extraColumns) {
+            extraColumns = extraColumns || [];
             // Flattened rows: rank is each club's placement in the page
             // order, data-backed so # travels with the row under sorting
             // instead of renumbering (a Klubb sort must not relabel the
             // ranks). The value column reads the metric key directly.
             var rows = ranked.map(function (entry, i) {
                 var r = { club: entry.club, rank: i + 1 };
+                extraColumns.forEach(function (col) { r[col.key] = entry[col.key]; });
                 r[valueKey] = entry[valueKey];
                 return r;
             });
+            // extraColumns sit between Klubb and the value column — the
+            // drilldown's splits-before-total order — so every toplist
+            // keeps its ranking value at the right edge.
             var columns = [
                 { key: 'rank', label: '#', align: 'center' },
                 { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
-                    cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } },
+                    cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } }
+            ].concat(extraColumns.map(function (col) {
+                return { key: col.key, label: col.label, align: 'right', sortable: true, defaultDir: 'desc' };
+            })).concat([
                 { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
-            ];
+            ]);
             toplistSpecs[id] = { columns: columns, defaultSort: { key: valueKey, dir: 'desc' } };
             return buildTableCard({
                 title: title,
@@ -1651,8 +1711,21 @@ var StandplassClubStats = (function () {
             var stats = getStatsForYear(activeYear, activeProgram);
             var prevYear = activeYear - 1;
             var prevStats = getStatsForYear(prevYear, activeProgram);
+            // Same guard as the yoy card: no previous-year data (the
+            // first data year) means no change column at all.
+            var hasPrevStats = !!(prevStats && Object.keys(prevStats).length);
 
             var byShooters = rankClubs(stats, 'uniqueShooters', { minShooters: 0, minStarts: 0 });
+            if (hasPrevStats) {
+                byShooters.forEach(function (e) {
+                    var prev = prevStats[e.club];
+                    // A club absent from the previous year changed by its
+                    // full count (all its shooters are new); the yoy card
+                    // filters such clubs out for ranking fairness, this
+                    // indicator column just reports the arithmetic.
+                    e.shooterDelta = e.uniqueShooters - (prev ? prev.uniqueShooters : 0);
+                });
+            }
             var byStarts = rankClubs(stats, 'totalStarts', { minShooters: 0, minStarts: 0 });
             var byCompetitions = rankClubs(stats, 'competitionsAttended', { minShooters: 0, minStarts: 0 });
             var byTopThree = rankClubs(stats, 'topThree', { minShooters: 0, minStarts: 0 });
@@ -1718,9 +1791,12 @@ var StandplassClubStats = (function () {
 
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
-                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'skyttere')
-                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'starter')
-                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner')
+                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'skyttere', null,
+                    hasPrevStats ? [{ key: 'shooterDelta', label: 'endring' }] : null)
+                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'starter', null,
+                    [{ key: 'clubStarts', label: 'klubbstarter' }, { key: 'otherStarts', label: 'andre starter' }])
+                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner', null,
+                    [{ key: 'clubStevner', label: 'klubbstevner' }, { key: 'otherStevner', label: 'andre stevner' }])
                 + toplistCard('toplist-top3', 'Flest topp-3 plasseringer', byTopThree, 'topThree', 'plasseringer')
                 + yoyHtml
                 + organizerHtml
@@ -2206,6 +2282,7 @@ var StandplassClubStats = (function () {
         computeClubStats: computeClubStats,
         rankClubs: rankClubs,
         computeYearOverYear: computeYearOverYear,
+        buildCompOrganizerIndex: buildCompOrganizerIndex,
         ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
