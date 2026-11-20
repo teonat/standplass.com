@@ -6,6 +6,10 @@ var assert = require('node:assert');
 // just the warning channel to keep this file's output clean.
 process.removeAllListeners('warning');
 global.StandplassFormat = require('../public/js/format.js');
+// renderResultsBody renders through the shared base now -- same load
+// order as the pages' script tags (table-renderer.js before data-table.js)
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var CM = require('../public/js/comp-modal.js');
 
 var events = [
@@ -17,6 +21,29 @@ var grouped = CM.groupEventsByDiscipline(events);
 assert.strictEqual(grouped.length, 2);
 assert.strictEqual(grouped[0].discipline, 'Fellesfelt', 'groups sort alphabetically');
 assert.strictEqual(grouped[1].events.length, 2);
+
+// Resultater tables render through the shared base: the spec builder
+// turns per-class groups (rows pre-sorted by position) into a base spec.
+assert.strictEqual(typeof CM.competitionResultsTableSpec, 'function', 'competitionResultsTableSpec is exported');
+var resultsSpec = CM.competitionResultsTableSpec([
+    { label: 'Senior', rows: [
+        { position: 1, fullName: 'A Person', organizationName: 'Klubb A', score: 50 },
+        { position: null, fullName: 'C Person', organizationName: 'Klubb C', score: 10 }
+    ] },
+    { label: 'Junior', rows: [
+        { position: 2, fullName: 'B Person', organizationName: 'Klubb B', score: 40 },
+        { position: 3, organizationName: 'Klubb D', score: 5 }
+    ] }
+]);
+var resultsTable = StandplassDataTable.renderTable('comp-results-0', resultsSpec, { hidden: {}, runtimeHidden: [], widthTier: null });
+assert.ok(resultsTable.indexOf('<table class="ranking-full-table ranking-table" data-dt-id="comp-results-0">') >= 0, 'the table keeps its classes and gains a data-dt-id');
+assert.ok(resultsTable.indexOf('<thead><tr><th scope="col">Plass</th><th scope="col">Navn</th><th scope="col">Klubb</th><th scope="col">Klasse</th><th scope="col">Poeng</th></tr></thead>') >= 0, 'the five headers render in order');
+assert.ok(resultsTable.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="5">Senior</th></tr>') >= 0, 'class headers render as base group rows');
+assert.ok(resultsTable.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="5">Junior</th></tr>') >= 0, 'every class gets a group row');
+assert.ok(resultsTable.indexOf('<tr data-dt-row="0"><td>1</td><td>A Person</td><td>Klubb A</td><td>Senior</td><td>50</td></tr>') >= 0, 'data cells are byte-identical to the hand-rolled markup');
+assert.ok(resultsTable.indexOf('<tr data-dt-row="1"><td>–</td><td>C Person</td><td>Klubb C</td><td>Senior</td><td>10</td></tr>') >= 0, 'null position falls back to –');
+assert.ok(resultsTable.indexOf('<tr data-dt-row="2"><td>2</td><td>B Person</td><td>Klubb B</td><td>Junior</td><td>40</td></tr>') >= 0, 'rows keep caller order within groups');
+assert.ok(resultsTable.indexOf('<tr data-dt-row="3"><td>3</td><td>–</td><td>Klubb D</td><td>Junior</td><td>5</td></tr>') >= 0, 'missing fullName falls back to –');
 
 // description comes from a third-party API and must be escaped
 var xssBody = CM.renderDetailBody({ competitionNumber: '1', description: '<img src=x onerror=alert(1)>', events: [] });
@@ -175,13 +202,17 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
         { disciplineId: 'd1', classId: 'cA', position: 1, fullName: 'A1 Person', organizationName: 'Klubb A', score: 50 }
     ];
     var classGroupedBody = CM.renderResultsBody(twoClassResults);
-    var headerA = classGroupedBody.indexOf('ranking-class-header');
+    var headerA = classGroupedBody.indexOf('dt-group-row');
     var posA1 = classGroupedBody.indexOf('A1 Person');
     var posA2 = classGroupedBody.indexOf('A2 Person');
     var posB1 = classGroupedBody.indexOf('B1 Person');
     assert.ok(headerA >= 0, 'a class-header row is rendered');
     assert.ok(posA1 < posA2, 'within a class, rows sort by position ascending');
     assert.ok(posA2 < posB1, 'class cA (sorted before cB) is fully rendered before class cB starts');
+    assert.ok(classGroupedBody.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="5">cA</th></tr>') >= 0, 'class headers render as base group rows with full colspan');
+    assert.ok(classGroupedBody.indexOf('<tr data-dt-row="0"><td>1</td><td>A1 Person</td><td>Klubb A</td><td>cA</td><td>50</td></tr>') >= 0, 'class-grouped rows render byte-identical through the base');
+    assert.ok(classGroupedBody.indexOf('data-dt-id="comp-results-0"') >= 0, 'each discipline table gets a base data-dt-id');
+    assert.ok(classGroupedBody.indexOf('<table class="ranking-full-table ranking-table"') >= 0, 'the results tables keep their styling classes');
 
     // the Gren filter lists every distinct discipline present, and selecting
     // one hides rows from every other discipline
