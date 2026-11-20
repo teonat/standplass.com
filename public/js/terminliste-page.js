@@ -448,6 +448,26 @@ var StandplassTerminlistePage = (function () {
             return crossed.length ? crossed[0] : null;
         }
         var currentWidthTier = computeWidthTier();
+
+        // Shared column picker: wired once (the button lives outside the
+        // re-rendered table wrap, so it survives renderTable), and
+        // re-wired destroy-before-rewire on tier change — wirePicker
+        // snapshots widthTier at wire time, and the panel's checkbox
+        // defaults must follow the new tier. The hidden map is synced IN
+        // PLACE (the interplay cells close over it).
+        var pickerWire = null;
+        function wireColumnPicker() {
+            if (pickerWire) { pickerWire.destroy(); pickerWire = null; }
+            pickerWire = StandplassDataTable.wirePicker(root, { columns: buildColumns(hidden) }, {
+                onColumnsChange: function (next) {
+                    Object.keys(hidden).forEach(function (k) { delete hidden[k]; });
+                    Object.keys(next).forEach(function (k) { hidden[k] = next[k]; });
+                    if (rows.length) { renderTable(); }
+                }
+            }, tableState());
+        }
+        wireColumnPicker();
+
         [700, 900].forEach(function (w) {
             var mql = window.matchMedia('(max-width:' + w + 'px)');
             var onChange = function () {
@@ -457,6 +477,9 @@ var StandplassTerminlistePage = (function () {
                 // Rows may still be loading (or empty after a filter) -- a
                 // tier flip must not conjure the "ingen stevner" state.
                 if (rows.length) { renderTable(); }
+                // The picker's checkbox defaults are tier-dependent -- its
+                // captured state must carry the new tier.
+                wireColumnPicker();
             };
             if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', onChange); }
             else if (typeof mql.addListener === 'function') { mql.addListener(onChange); }
@@ -713,41 +736,54 @@ var StandplassTerminlistePage = (function () {
         });
     }
 
-    // The full page's table as a base spec. Rows are pre-resolved by
-    // init's resolveRow (names looked up, dates formatted, hrefs built)
-    // so every column reads plain strings off the row shape the plan
-    // fixed. `hidden` is the page-owned live picker map -- empty until
-    // the picker lands; kept in the signature from day one so state
-    // threading never changes shape.
-    function terminlisteTableSpec(rows, hidden) {
-        hidden = hidden || {};
+    // The column list is shared by the table spec and the picker wiring
+    // (the picker needs the same keys/labels/defaults). `hidden` is the
+    // page's live picker map — the two sub-line-bearing cells read it at
+    // render time so a shown column drops the sub-line that would
+    // duplicate it (in-place sync keeps this closure valid).
+    function buildColumns(hidden) {
         function detailAriaLabel(r) {
             var statusText = r.status !== 1 ? (STATUS_LABEL[r.status] || null) : null;
             return 'Se detaljer for ' + esc(r.title || '–') + (statusText ? ' – ' + esc(statusText) : '');
         }
-        var columns = [
+        return [
             { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, cellClass: 'terminliste-detail-col', raw: true,
                 cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="' + detailAriaLabel(r) + '">ⓘ</button>'; } },
             { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
+            { key: 'starttid', label: 'Starttid', defaultHidden: true, cellClass: 'terminliste-date', cell: function (r) { return r.starttid || '–'; } },
             { key: 'title', label: 'Stevne', raw: true, cell: function (r) {
                 return '<a href="' + r.href + '" target="_blank" rel="noopener noreferrer">' + esc(r.title || '–') + '</a>'
-                    + (r.facilityName ? '<span class="terminliste-sub">' + esc(r.facilityName) + '</span>' : '');
+                    + (r.facilityName && hidden.anlegg !== false ? '<span class="terminliste-sub">' + esc(r.facilityName) + '</span>' : '');
             } },
+            { key: 'anlegg', label: 'Anlegg', defaultHidden: true, cell: function (r) { return r.facilityName || '–'; } },
             { key: 'competitionTypeName', label: 'Stevnetype', cell: function (r) { return r.competitionTypeName || '–'; } },
-            { key: 'orgName', label: 'Arrangør', hideBelow: 700, raw: true, cell: function (r) {
-                return esc(r.orgName) + (r.kretsName ? '<span class="terminliste-sub">' + esc(r.kretsName) + '</span>' : '');
+            { key: 'status', label: 'Status', defaultHidden: true, cell: function (r) {
+                return r.status != null && r.status !== 1 ? (STATUS_LABEL[r.status] || '–') : '–';
             } },
+            { key: 'orgName', label: 'Arrangør', hideBelow: 700, raw: true, cell: function (r) {
+                return esc(r.orgName) + (r.kretsName && hidden.krets !== false ? '<span class="terminliste-sub">' + esc(r.kretsName) + '</span>' : '');
+            } },
+            { key: 'krets', label: 'Krets', defaultHidden: true, cell: function (r) { return r.kretsName || '–'; } },
             { key: 'branchNames', label: 'Gren', hideBelow: 900, cell: function (r) { return r.branchNames; } },
             { key: 'groupNames', label: 'Øvelsesgruppe', cell: function (r) { return r.groupNames; } },
             { key: 'frist', label: 'Påmeldingsfrist', hideBelow: 900, cellClass: 'terminliste-date', cell: function (r) { return r.frist; } },
+            { key: 'klasseforende', label: 'Klasseførende', defaultHidden: true, raw: true, cell: function (r) { return r.klasseforendeBadge || '–'; } },
             { key: 'resultat', label: 'Resultater', cellClass: 'terminliste-result-cell', raw: true, cell: function (r) {
                 return (r.hasResult && r.resultFileUrl)
                     ? '<a href="' + esc(r.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
                     : '–';
             } }
         ];
+    }
+
+    // The full page's table as a base spec. Rows are pre-resolved by
+    // init's resolveRow (names looked up, dates formatted, hrefs built)
+    // so every column reads plain strings off the row shape the plan
+    // fixed. `hidden` is the page-owned live picker map.
+    function terminlisteTableSpec(rows, hidden) {
+        hidden = hidden || {};
         return {
-            columns: columns,
+            columns: buildColumns(hidden),
             rows: rows,
             rowAttrs: function (r) {
                 return 'class="terminliste-row--clickable" data-id="' + esc(r.id)
@@ -818,6 +854,12 @@ var StandplassTerminlistePage = (function () {
             + '      <ul id="' + idPrefix + '-group-list" class="checkbox-dropdown-list" aria-label="Velg øvelsesgrupper"></ul>'
             + '    </div></div></div>'
             + '</div>'
+            // Shared Kolonner picker, right-aligned under the filter bar.
+            // renderPickerButton emits the button plus its anchor (the
+            // dropdown's positioning context); buildMarkup runs
+            // post-dependencies on both adapters, so the base is
+            // available here.
+            + '<div class="terminliste-picker-row">' + StandplassDataTable.renderPickerButton() + '</div>'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
             + '<div id="' + idPrefix + '-table-wrap" class="terminliste-scroll-wrap"></div>'
             // Required by mountDirect's own embed-builder wiring in

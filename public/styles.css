@@ -336,6 +336,7 @@ h1, h2, h3 {
    browser find-in-page must be able to reach rows past the cap (same
    reason as .club-stats-list-scroll). */
 .terminliste-scroll-wrap { overflow-y: auto; max-height: 54.5rem; }
+.terminliste-picker-row { display: flex; justify-content: flex-end; }
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
    [data-mode="dark"] overrides from the start (not a later fix round) --

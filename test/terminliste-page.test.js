@@ -185,4 +185,43 @@ assert.ok(fullMarkup.indexOf('more-btn') < 0, 'no more-btn in the full-page mark
 assert.ok(fullMarkup.indexOf('Last inn flere') < 0, 'no Last inn flere button text');
 assert.ok(fullMarkup.indexOf('terminliste-scroll-wrap') >= 0, 'the table wrap gains the scroll-cap class');
 
+// ── expanded column set: five opt-in columns, sub-line interplay ───────
+// the page threads the SAME hidden map into the spec (sub-line interplay)
+// and the render state (column visibility) -- the tests mirror that
+var pageStateWith = function (tier, hidden) {
+    return { sort: null, hidden: hidden, runtimeHidden: [], widthTier: tier };
+};
+// all five render when explicitly shown (hidden[key] === false) …
+var shown = { krets: false, status: false, anlegg: false, starttid: false, klasseforende: false };
+var expanded = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, shown), pageStateWith(null, shown));
+assert.ok(expanded.indexOf('>Krets</th>') >= 0 && expanded.indexOf('<td>Glåmdalen skytterkrets</td>') >= 0, 'Krets column renders when shown');
+assert.ok(expanded.indexOf('>Status</th>') >= 0 && expanded.indexOf('<td>Avvist</td>') >= 0, 'Status column renders non-approved labels');
+assert.ok(expanded.indexOf('>Anlegg</th>') >= 0 && expanded.indexOf('<td>Bomba Skytterhus</td>') >= 0, 'Anlegg column renders when shown');
+assert.ok(expanded.indexOf('>Starttid</th>') >= 0 && expanded.indexOf('<td class="terminliste-date">11:00</td>') >= 0, 'Starttid column renders when shown');
+assert.ok(expanded.indexOf('>Klasseførende</th>') >= 0 && expanded.indexOf('comp-modal-badge--yes') >= 0, 'Klasseførende badge renders when shown');
+// … and are all absent by default
+assert.ok(pageHtml.indexOf('>Krets</th>') < 0 && pageHtml.indexOf('>Status</th>') < 0 && pageHtml.indexOf('>Anlegg</th>') < 0
+    && pageHtml.indexOf('>Starttid</th>') < 0 && pageHtml.indexOf('>Klasseførende</th>') < 0,
+    'the five new columns are hidden by default');
+
+// sub-line interplay: showing a column drops the sub-line that would
+// duplicate it under its parent column
+assert.ok(pageHtml.indexOf('<span class="terminliste-sub">Glåmdalen skytterkrets</span>') >= 0, 'krets sub-line present by default');
+assert.ok(pageHtml.indexOf('<span class="terminliste-sub">Bomba Skytterhus</span>') >= 0, 'facility sub-line present by default');
+var interplayMap = { krets: false, anlegg: false };
+var interplay = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, interplayMap), pageStateWith(null, interplayMap));
+assert.ok(interplay.indexOf('<span class="terminliste-sub">Glåmdalen skytterkrets</span>') < 0, 'krets sub-line drops when the Krets column is shown');
+assert.ok(interplay.indexOf('<span class="terminliste-sub">Bomba Skytterhus</span>') < 0, 'facility sub-line drops when the Anlegg column is shown');
+assert.ok(interplay.indexOf('<td>Kongsvinger Sportsskyttere</td>') >= 0, 'org name itself stays in the Arrangør cell');
+assert.ok(interplay.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a></td>') >= 0, 'title link stays in the Stevne cell');
+
+// the picker button markup is emitted after the filter row
+assert.ok(fullMarkup.indexOf('terminliste-picker-row') >= 0, 'picker row emitted');
+assert.ok(fullMarkup.indexOf('data-dt-picker') >= 0, 'picker button carries the data-dt-picker hook');
+assert.ok(fullMarkup.indexOf('>Kolonner</button>') >= 0, 'picker button labelled Kolonner');
+assert.ok(fullMarkup.indexOf('dt-picker-anchor') >= 0, 'picker anchor emitted');
+
+// the new columns stay hidden at tier 700 too
+assert.ok(tier700.indexOf('>Krets</th>') < 0 && tier700.indexOf('>Starttid</th>') < 0, 'new columns stay hidden at tier 700');
+
 console.log('terminliste-page.test.js: all assertions passed');
