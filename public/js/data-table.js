@@ -294,7 +294,11 @@ var StandplassDataTable = (function () {
             labelNone: 'Ingen kolonner',
             getItems: function () {
                 return listed.map(function (col) {
-                    return { id: col.key, name: col.label };
+                    // pickerLabel: the picker-facing name for columns
+                    // whose label is pre-built header HTML (labelRaw —
+                    // e.g. a visually-hidden span); without it the
+                    // dropdown would list literal markup soup.
+                    return { id: col.key, name: col.pickerLabel || col.label };
                 });
             },
             getSelected: function () {

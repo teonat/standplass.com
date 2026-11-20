@@ -257,4 +257,31 @@ assert.ok(compactHtml.indexOf('>Stevnetype</th>') >= 0, 'no tier keeps Stevnetyp
 var compactMarkup = TP.buildMarkup('tl', true);
 assert.ok(compactMarkup.indexOf('terminliste-widget-scroll') >= 0, 'widget wrap gets the 10-row scroll-cap class');
 
+// ── wiring pins: the auto-load must target the REAL scroll container ───
+// QA round 1 moved the cap onto the base-emitted card (.terminliste-
+// scroll-wrap via the spec's wrapClass) — element scroll events do NOT
+// bubble, so a listener on the outer #table-wrap never fires and rows
+// past the first page became unreachable (whole-batch review C1).
+var fs = require('fs');
+var tpSrc = fs.readFileSync(__dirname + '/../public/js/terminliste-page.js', 'utf8');
+assert.ok(tpSrc.indexOf("querySelector('.terminliste-scroll-wrap')") >= 0,
+    'the render path re-queries the scroll card (the actual scroll container)');
+assert.ok(tpSrc.indexOf("card.addEventListener('scroll'") >= 0,
+    'the scroll listener attaches to the card itself (scroll events do not bubble)');
+assert.ok(tpSrc.indexOf("tableWrapEl.addEventListener('scroll'") < 0,
+    'no scroll listener on the non-scrolling outer wrap');
+assert.ok(tpSrc.indexOf('card.scrollTop = prevScroll') >= 0,
+    'a full re-render restores the scroll position (no snap-to-top per page)');
+
+// ── picker-facing labels must be plain text (review I1) ───────────────
+// labelRaw headers (the visually-hidden Detaljer span) would otherwise
+// list as literal HTML soup in the Kolonner dropdown.
+var pickerNames = TP.terminlisteTableSpec(resolvedRows, {}).columns.map(function (col) {
+    return col.pickerLabel || col.label;
+});
+assert.ok(pickerNames.every(function (n) { return String(n).indexOf('<') < 0; }),
+    'every picker-listed column name is plain text');
+assert.ok(pickerNames.indexOf('Detaljer') >= 0,
+    'the visually-hidden detaljer column gets a plain picker label');
+
 console.log('terminliste-page.test.js: all assertions passed');

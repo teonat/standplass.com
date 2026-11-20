@@ -554,32 +554,46 @@ var StandplassTerminlistePage = (function () {
                 tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen stevner funnet.</p></div>';
                 return;
             }
+            // The scroll container is the CARD the base emits (the
+            // spec's wrapClass) — not this outer wrap. A full re-render
+            // rebuilds the card, so the scroll position is captured and
+            // restored: a freshly-landed page must not snap the user
+            // back to the top.
+            var prevCard = tableWrapEl.querySelector('.terminliste-scroll-wrap');
+            var prevScroll = prevCard ? prevCard.scrollTop : 0;
             tableWrapEl.innerHTML = StandplassDataTable.renderTable(
                 config.idPrefix + '-table',
                 terminlisteTableSpec(rows.map(resolveRow), hidden),
                 tableState());
+            // Element scroll events do NOT bubble — the auto-load
+            // listener is attached to the card itself on every render;
+            // each re-render's old card dies with its listener, the
+            // fresh card gets a fresh one.
+            var card = tableWrapEl.querySelector('.terminliste-scroll-wrap');
+            if (card) {
+                card.scrollTop = prevScroll;
+                card.addEventListener('scroll', function () {
+                    if (hasMore && !loading && shouldLoadMore(card)) {
+                        fetchAndRender(false, pageIndex + 1);
+                    }
+                });
+            }
         }
 
-        // Auto-load: near the bottom of the capped scroll area, fetch the
-        // next page. The whole table re-renders (rows accumulate), and the
-        // wrap keeps its scrollTop -- the user stays at their position
-        // with more content below.
-        tableWrapEl.addEventListener('scroll', function () {
-            if (hasMore && !loading && shouldLoadMore(tableWrapEl)) {
-                pageIndex++;
-                fetchAndRender(false);
+        function fetchAndRender(reset, nextPage) {
+            if (reset) {
+                pageIndex = 0; rows = [];
+                var card = tableWrapEl.querySelector('.terminliste-scroll-wrap');
+                if (card) { card.scrollTop = 0; }
             }
-        });
-
-        function fetchAndRender(reset) {
-            if (reset) { pageIndex = 0; rows = []; tableWrapEl.scrollTop = 0; }
             if (currentAbort) { currentAbort.abort(); }
             currentAbort = new AbortController();
             loading = true;
             statusEl.textContent = 'Laster…';
             var thisAbort = currentAbort;
+            var page = reset ? 0 : (nextPage != null ? nextPage : pageIndex);
             var url = StandplassTerminlistePage.buildCompetitionListUrl({
-                pageIndex: pageIndex, pageSize: PAGE_SIZE,
+                pageIndex: page, pageSize: PAGE_SIZE,
                 fra: selectedFra, til: selectedTil,
                 branchIds: selectedBranchIds, orgIds: selectedOrgIds, kretsIds: selectedKretsIds,
                 typeIds: selectedTypeIds, groupIds: selectedGroupIds, name: selectedName
@@ -590,6 +604,10 @@ var StandplassTerminlistePage = (function () {
             }).then(function (data) {
                 if (thisAbort !== currentAbort) { return; }
                 loading = false;
+                // Commit the page index only on success — a failed
+                // fetch leaves it where it was, so the auto-load's
+                // retry fetches the SAME page instead of skipping it.
+                pageIndex = page;
                 var items = (data && data.items) || [];
                 rows = reset ? items : rows.concat(items);
                 hasMore = !!(data && data.paging && data.paging.hasNextPage);
@@ -766,7 +784,7 @@ var StandplassTerminlistePage = (function () {
             return 'Se detaljer for ' + esc(r.title || '–') + (statusText ? ' – ' + esc(statusText) : '');
         }
         return [
-            { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, cellClass: 'terminliste-detail-col', raw: true,
+            { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, pickerLabel: 'Detaljer', cellClass: 'terminliste-detail-col', raw: true,
                 cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="' + detailAriaLabel(r) + '">ⓘ</button>'; } },
             { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
             { key: 'starttid', label: 'Starttid', defaultHidden: true, cellClass: 'terminliste-date', cell: function (r) { return r.starttid || '–'; } },
@@ -843,7 +861,7 @@ var StandplassTerminlistePage = (function () {
     function compactTableSpec(rows) {
         return {
             columns: [
-                { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, cellClass: 'terminliste-detail-col', raw: true,
+                { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, pickerLabel: 'Detaljer', cellClass: 'terminliste-detail-col', raw: true,
                     cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="Se detaljer for ' + esc(r.title || '–') + '">ⓘ</button>'; } },
                 { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
                 { key: 'title', label: 'Stevne', cell: function (r) { return r.title || '–'; } },
