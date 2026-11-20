@@ -261,19 +261,27 @@ var StandplassNorgesfeltPage = (function () {
             else if (typeof mql.addListener === 'function') { mql.addListener(onTierChange); }
         });
 
-        // Each tab panel's own Kolonner button, injected right after its
+        // Each tab panel's own Kolonner button, appended INTO the panel's
         // filter row (the page markup is static HTML, so the button is
         // injected here at init — post-dependencies, the base is
-        // available). The anchor WRAPS the button (stevner pattern):
-        // the panel right-aligns against the anchor, so the button
-        // sits exactly where the panel opens.
+        // available). The anchor WRAPS the button (stevner pattern): the
+        // panel right-aligns against the anchor, so the button sits
+        // exactly where the panel opens; the filter row's
+        // align-items: flex-end puts it on the controls' baseline.
         [panelSok, panelTopp].forEach(function (panel) {
             var filters = panel.querySelector('.ranking-filters');
             if (!filters) { return; }
-            var row = document.createElement('div');
-            row.className = 'norgesfelt-picker-row';
-            row.innerHTML = '<div class="dt-picker-anchor"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
-            filters.parentNode.insertBefore(row, filters.nextSibling);
+            var wrap = document.createElement('div');
+            wrap.className = 'dt-picker-anchor';
+            var pickerBtn = document.createElement('button');
+            pickerBtn.type = 'button';
+            pickerBtn.className = 'dt-picker-btn';
+            pickerBtn.setAttribute('data-dt-picker', '');
+            pickerBtn.setAttribute('aria-haspopup', 'true');
+            pickerBtn.setAttribute('aria-expanded', 'false');
+            pickerBtn.textContent = 'Kolonner';
+            wrap.appendChild(pickerBtn);
+            filters.appendChild(wrap);
         });
 
         function syncHiddenMap(map, next) {
@@ -281,34 +289,53 @@ var StandplassNorgesfeltPage = (function () {
             Object.keys(next || {}).forEach(function (k) { map[k] = next[k]; });
         }
 
-        // destroy-before-rewire per render: wirePicker snapshots the
-        // width tier AND the column list at wire time, and the specs'
-        // column sets vary with the active filters (Gren only unfiltered,
-        // Dato only enkeltresultater) — the picker must list only
-        // currently-applicable columns.
+        // destroy-before-rewire — but ONLY when the column list or tier
+        // actually changed: onColumnsChange re-renders through these
+        // functions too, and a destroy-before-rewire on every toggle
+        // would close the user's OPEN panel mid-click (owner QA:
+        // "clicking a column immediately closes it"). The hidden map
+        // syncs in place either way; the picker's checkbox defaults are
+        // tier- and column-set-dependent (Gren only unfiltered, Dato
+        // only enkeltresultater), which is what the signature captures.
         var searchPickerWire = null;
+        var searchPickerSig = null;
         function wireSearchPicker() {
+            if (!searchSpec) {
+                if (searchPickerWire) { searchPickerWire.destroy(); searchPickerWire = null; }
+                searchPickerSig = null;
+                return;
+            }
+            var sig = currentWidthTier + '|' + searchSpec.columns.map(function (c) { return c.key; }).join(',');
+            if (searchPickerWire && sig === searchPickerSig) { return; }
             if (searchPickerWire) { searchPickerWire.destroy(); searchPickerWire = null; }
-            if (!searchSpec) { return; }
             searchPickerWire = StandplassDataTable.wirePicker(panelSok, { columns: searchSpec.columns }, {
                 onColumnsChange: function (next) {
                     syncHiddenMap(sokHidden, next);
                     renderSearchTable();
                 }
             }, searchTableState());
+            searchPickerSig = sig;
         }
 
         var toppPickerWire = null;
+        var toppPickerSig = null;
         function wireTopplistePicker() {
-            if (toppPickerWire) { toppPickerWire.destroy(); toppPickerWire = null; }
             var first = Object.keys(toplisteSpecs)[0];
-            if (!first) { return; }
+            if (!first) {
+                if (toppPickerWire) { toppPickerWire.destroy(); toppPickerWire = null; }
+                toppPickerSig = null;
+                return;
+            }
+            var sig = currentWidthTier + '|' + toplisteSpecs[first].columns.map(function (c) { return c.key; }).join(',');
+            if (toppPickerWire && sig === toppPickerSig) { return; }
+            if (toppPickerWire) { toppPickerWire.destroy(); toppPickerWire = null; }
             toppPickerWire = StandplassDataTable.wirePicker(panelTopp, { columns: toplisteSpecs[first].columns }, {
                 onColumnsChange: function (next) {
                     syncHiddenMap(topplisteHidden, next);
                     renderCards();
                 }
             }, cardTableState(first));
+            toppPickerSig = sig;
         }
 
         // "Rader" — one select per tab panel (the page's precedent: the

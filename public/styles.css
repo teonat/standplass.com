@@ -367,9 +367,9 @@ h1, h2, h3 {
    whatever the HOST page paints behind it, so no opaque header color
    exists -- the header scrolls away, same as the source's own widget. */
 .terminliste-widget-scroll { overflow-y: auto; max-height: 23rem; }
-/* Norgesfelt's per-tab Kolonner rows, injected after each panel's
-   filter row (the page markup is static HTML). */
-.norgesfelt-picker-row { display: flex; justify-content: flex-end; }
+/* Norgesfelt's per-tab Kolonner buttons are appended INTO each panel's
+   filter row (injected at init — the page markup is static HTML); the
+   row's align-items: flex-end puts them on the controls' baseline. */
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
    [data-mode="dark"] overrides from the start (not a later fix round) --

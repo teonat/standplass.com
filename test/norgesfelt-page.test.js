@@ -203,6 +203,14 @@ var fs = require('fs');
 var nfSrc = fs.readFileSync(__dirname + '/../public/js/norgesfelt-page.js', 'utf8');
 assert.ok(nfSrc.indexOf('norgesfelt-mobile-hide') < 0 && nfSrc.indexOf('norgesfelt-tablet-hide') < 0,
     'no norgesfelt hide classes remain in the page source');
+// the Kolonner button lives INSIDE the filter row (owner QA: a
+// standalone row between filters and table read as squashed), and the
+// picker re-wires only when the column set or tier changes — a
+// destroy-before-rewire on every toggle closed the open panel mid-click
+assert.ok(nfSrc.indexOf('filters.appendChild') >= 0,
+    'the Kolonner button is appended into the filter row');
+assert.ok(nfSrc.indexOf('searchPickerSig') >= 0 && nfSrc.indexOf('toppPickerSig') >= 0,
+    'both pickers guard re-wiring by a column-set signature');
 var cssSrc = fs.readFileSync(__dirname + '/../public/styles.css', 'utf8');
 assert.ok(cssSrc.indexOf('norgesfelt-mobile-hide') < 0 && cssSrc.indexOf('norgesfelt-tablet-hide') < 0
     && cssSrc.indexOf('terminliste-mobile-hide') < 0 && cssSrc.indexOf('terminliste-tablet-hide') < 0,
