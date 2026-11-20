@@ -599,8 +599,10 @@ assert.ok(top3Html.indexOf('dt-toolbar') === -1, 'no separate toolbar row above 
 assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
 assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
 assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');
-assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td>') >= 0,
+assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice" data-metric="position">Alice</button></td>') >= 0,
     'page order stands until a sort is set');
+assert.ok(top3Html.indexOf('data-person-id="p1" data-person-name="Alice" data-metric="position"') >= 0,
+    'top-3 names are person buttons that open the modal on the Plassering chart');
 // Placement-mode group: 4 buttons, aria-pressed only on the active one
 assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
 assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
@@ -694,13 +696,13 @@ assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': f
 // The # column is each shooter's RANK (page-order placement) — it travels
 // with the row under sorting instead of renumbering.
 var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p2" data-person-name="Bob" data-metric="position">Bob</button></td>') >= 0,
     'asc sort: Bob leads but keeps his rank (2)');
-assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice" data-metric="position">Alice</button></td>') >= 0,
     'asc sort: Alice is second but keeps her rank (1)');
 assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
 var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') >= 0,
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p2" data-person-name="Bob" data-metric="position">Bob</button></td>') >= 0,
     'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────

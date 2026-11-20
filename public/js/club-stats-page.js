@@ -743,14 +743,23 @@ var StandplassClubStats = (function () {
         // empty (esc maps undefined to '') and sort last, matching the
         // hand-rolled table's zero-count cells.
         var rows = ranking.map(function (s, i) {
-            var r = { rank: i + 1, name: s.name, total: s.total };
+            var r = { rank: i + 1, name: s.name, total: s.total, personId: s.personId };
             Object.keys(s.combos).forEach(function (k) { r['combo|' + k] = s.combos[k]; });
             return r;
         });
 
         var columns = [
             { key: 'rank', label: '#', align: 'center' },
-            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' }
+            // Byte-exact with the drilldown's mest-aktive buttons (klubb-
+            // page's leaderboard markup) plus data-metric: this table
+            // counts placements, so the person modal opens on its
+            // Plassering chart. computeTopThreeRanking skips rows
+            // without a personId, so every row can carry the button.
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) {
+                    return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                        + '" data-person-name="' + esc(row.name) + '" data-metric="position">' + esc(row.name) + '</button>';
+                } }
         ];
         comboOrder.forEach(function (k) {
             var parts = k.split('|');
@@ -1291,7 +1300,11 @@ var StandplassClubStats = (function () {
                 personModal.open(personBtn, {
                     personId: personBtn.dataset.personId,
                     personName: personBtn.dataset.personName,
-                    initialDisc: personBtn.dataset.discipline || null
+                    initialDisc: personBtn.dataset.discipline || null,
+                    // The top-3 table's buttons carry data-metric
+                    // ("position"); the drilldown's don't, and a null
+                    // metric leaves the modal's last-active chart alone.
+                    metric: personBtn.dataset.metric || null
                 });
             }
         });

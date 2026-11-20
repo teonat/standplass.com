@@ -347,7 +347,13 @@ var StandplassPersonModalController = (function () {
         function open(triggerEl, opts) {
             modalOpener = triggerEl || null;
             cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, cfg.defaultYear));
-            renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null, null);
+            // opts.metric rides renderPersonModal's urlFilters slot — the
+            // same path a p_metric deep link takes — so an entry point can
+            // ask for a specific chart (a placements leaderboard opens
+            // Plassering). Without it the last-active metric sticks,
+            // exactly like the modal's own toggle buttons.
+            renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
+                opts.metric ? { metric: opts.metric } : null);
         }
 
         function openFromUrl() {
