@@ -775,9 +775,9 @@ assert.strictEqual(maSpec.ariaLabel, 'Mest aktive skyttere for Klubb X', 'mest a
 var maHtml = StandplassDataTable.renderTable('mest-aktive', maSpec, ddState);
 assert.ok(maHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'mest aktive: sortable Navn/Starter headers');
+    'mest aktive: sortable Navn/Starter headers, Starter marked aria-sort descending (page order is starts-desc)');
 assert.ok(maHtml.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td><td class="ranking-score">9</td></tr>') !== -1,
     'mest aktive: row markup matches today');
 var maAsc = ddSorted(maSpec, 'starts', 'asc');
@@ -796,9 +796,9 @@ var discHtml = StandplassDataTable.renderTable('ovelsesfordeling', discSpec, ddS
 assert.ok(discHtml.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'øvelsesfordeling: all three columns sortable');
+    'øvelsesfordeling: all three columns sortable, Starter marked aria-sort descending (page order is starts-desc)');
 assert.ok(discHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td class="ranking-score">3</td><td class="ranking-score">7</td></tr>') !== -1,
     'øvelsesfordeling: bare-name rows flattened with counts');
 var discAsc = ddSorted(discSpec, 'shooters', 'asc');
@@ -821,6 +821,8 @@ assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td
 var orgAsc = ddSorted(orgSpec, 'startDate', 'asc');
 assert.ok(orgAsc.indexOf('Vårfeltet') < orgAsc.indexOf('Høststevnet') && orgAsc.indexOf('Høststevnet') < orgAsc.indexOf('Uten dato'),
     'arrangerte: Dato asc sorts chronologically, nulls last');
+assert.ok(orgHtml.indexOf('aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="startDate"') !== -1,
+    'arrangerte: Dato marked aria-sort descending (page order is date-desc)');
 
 // Klassefordeling
 var cdSpec = CS.classDistTableSpec([
@@ -833,9 +835,9 @@ assert.ok(cdHtml.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="class">Klasse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'klassefordeling: all four columns sortable');
+    'klassefordeling: all four columns sortable, Starter marked aria-sort descending (page order is starts-desc)');
 assert.ok(cdHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td>Åpen</td><td class="ranking-score">2</td><td class="ranking-score">5</td></tr>') !== -1,
     'klassefordeling: row markup matches today');
 var cdAsc = ddSorted(cdSpec, 'class', 'asc');

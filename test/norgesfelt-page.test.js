@@ -93,7 +93,7 @@ var nfEntries = [
 var nfSpecFull = NP.searchTableSpec(nfEntries, true, 'individual');
 var nfFull = StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, NF_STATE);
 assert.ok(nfFull.indexOf('<thead><tr>'
-    + '<th scope="col" class="ranking-rank"><button type="button" class="dt-sort-btn" data-dt-sort="rank">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-rank" aria-sort="ascending"><button type="button" class="dt-sort-btn" data-dt-sort="rank">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Forening<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Gren<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
@@ -101,7 +101,7 @@ assert.ok(nfFull.indexOf('<thead><tr>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'norgesfelt search: full header — all columns sortable, tiers carry the old breakpoints');
+    'norgesfelt search: full header — all columns sortable, # marked aria-sort ascending (page order is rank asc), tiers carry the old breakpoints');
 assert.ok(nfFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td>Oslo PK</td><td>Finfelt</td><td>01.11.2026</td><td class="ranking-score">289</td><td class="ranking-score">41</td></tr>') !== -1,
     'norgesfelt search: row markup, hide classes replaced by tiers');
 assert.ok(nfFull.indexOf('<td>–</td>') !== -1,
@@ -144,10 +144,10 @@ assert.ok(tpFull.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'topliste: full header — Navn/Klubb/Dato/Poeng/Innertreff sortable, # plain');
+    'topliste: full header — Navn/Klubb/Dato/Poeng/Innertreff sortable, # plain, Poeng marked aria-sort descending (page order is the ranking)');
 assert.ok(tpFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td>Oslo PK</td><td>01.11.2026</td><td class="ranking-score">289</td><td>41</td></tr>') !== -1,
     'topliste: full row markup matches today\'s card cells');
 var tpDate = nfSorted(tpSpecFull, 'dateSort', 'asc');

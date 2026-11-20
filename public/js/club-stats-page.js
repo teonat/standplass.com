@@ -352,6 +352,9 @@ var StandplassClubStats = (function () {
                 { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc (topShooters is sorted that way
+            // upstream) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: (topShooters || []).map(function (s, i) {
                 return { rank: i + 1, name: s.name, starts: s.starts };
             }),
@@ -366,6 +369,9 @@ var StandplassClubStats = (function () {
                 { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc (discRows sorted that way
+            // upstream) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: (discRows || []).map(function (d) {
                 return { discipline: d, shooters: Object.keys(discData[d].shooters).length, starts: discData[d].starts };
             }),
@@ -383,6 +389,11 @@ var StandplassClubStats = (function () {
                 { key: 'facilityName', label: 'Anlegg', sortable: true, defaultDir: 'asc',
                     cell: function (row) { return row.facilityName || '–'; } }
             ],
+            // Page order is date-desc (organizedComps sorted by
+            // startDate desc upstream; the column sorts ISO date
+            // strings, which order chronologically) — Dato desc is a
+            // true initial sort.
+            defaultSort: { key: 'startDate', dir: 'desc' },
             rows: organizedComps || [],
             ariaLabel: 'Arrangerte stevner for ' + clubName
         };
@@ -400,6 +411,9 @@ var StandplassClubStats = (function () {
                 { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc globally (computeClassDistribution
+            // sorts that way) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: dist || [],
             ariaLabel: 'Klassefordeling for ' + clubName
         };

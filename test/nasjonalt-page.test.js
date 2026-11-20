@@ -128,9 +128,9 @@ var npHtml = StandplassDataTable.renderTable('nasjonal-ranking', npSpec, NP_STAT
 assert.ok(npHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="fullName">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="org">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'nasjonal ranking: Navn/Klubb/Poeng sortable headers');
+    'nasjonal ranking: Navn/Klubb/Poeng sortable headers, Poeng marked aria-sort descending (page order is the ranking)');
 assert.ok(npHtml.indexOf('<td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Anne">Anne</button></td>') !== -1,
     'nasjonal ranking: clickable Navn is today\'s exact person button');
 assert.ok(npHtml.indexOf('<tr data-dt-row="2"><td class="ranking-rank">3</td>') !== -1,

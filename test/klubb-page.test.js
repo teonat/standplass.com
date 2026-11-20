@@ -36,9 +36,9 @@ assert.strictEqual(KP.leaderboardCardSpec([], 'Finfelt'), null, 'empty entries p
 var lbHtml = SDT.renderTable('klubb-card-d1', lbSpec, lbState);
 assert.ok(lbHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="fullName">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'leaderboard: sortable Navn/Poeng headers');
+    'leaderboard: sortable Navn/Poeng headers, Poeng marked aria-sort descending (page order is the ranking)');
 // Person button markup, byte-exact vs the hand-rolled table — the
 // grid wrap's delegated person-modal listener depends on these classes
 // and data attributes.

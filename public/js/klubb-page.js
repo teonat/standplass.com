@@ -40,6 +40,10 @@ var StandplassKlubbPage = (function () {
             rows: entries.map(function (e, i) {
                 return { rank: e.position || (i + 1), personId: e.personId, fullName: e.fullName, totalScore: e.totalScore };
             }),
+            // Page order is the ranking (position asc = Poeng desc; a
+            // stable desc sort of a rank-ordered list reproduces it,
+            // ties included) — Poeng desc is a true initial sort.
+            defaultSort: { key: 'totalScore', dir: 'desc' },
             ariaLabel: discName
         };
     }
