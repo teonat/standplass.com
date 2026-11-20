@@ -402,11 +402,11 @@ h1, h2, h3 {
    row's align-items: flex-end puts them on the controls' baseline. */
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
-   [data-mode="dark"] overrides from the start (not a later fix round) --
-   see this plan's Global Constraints and STATUS.md's klubb-view gotcha #2
-   about --brand-primary-as-text; this uses fixed amber/red instead, same
-   choice the source itself made, just re-keyed to this project's own
-   [data-mode="dark"] convention instead of [data-theme="dark"]. */
+   [data-mode="dark"] overrides from the start (not a later fix round).
+   Fixed amber/red values, not --brand-primary: the brand gold is an
+   accent, not a text color (it fails as tint/text in the klubb view);
+   same choice the source itself made, just re-keyed to this project's
+   own [data-mode="dark"] convention instead of [data-theme="dark"]. */
 tr[data-status="0"] td { background: rgba(160, 110, 0, 0.07); }
 tr[data-status="2"] td, tr[data-status="3"] td { background: rgba(180, 30, 30, 0.07); }
 tr[data-status="0"] .comp-detail-btn { border-color: #b45309; color: #b45309; }
