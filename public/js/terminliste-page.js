@@ -433,17 +433,40 @@ var StandplassTerminlistePage = (function () {
         var PAGE_SIZE = 50;
         var hasMore = false;
         var currentAbort = null;
+        // Session-only view state (never persisted -- standing ruling):
+        // the picker's live hidden-column map and the smallest crossed
+        // responsive breakpoint (700 mobile / 900 tablet), converted
+        // from the old .terminliste-mobile-hide/.terminliste-tablet-hide
+        // CSS rules at identical widths.
+        var hidden = {};
+        function computeWidthTier() {
+            var crossed = [700, 900].filter(function (w) {
+                return window.matchMedia('(max-width:' + w + 'px)').matches;
+            });
+            return crossed.length ? crossed[0] : null;
+        }
+        var currentWidthTier = computeWidthTier();
+        [700, 900].forEach(function (w) {
+            var mql = window.matchMedia('(max-width:' + w + 'px)');
+            var onChange = function () {
+                var next = computeWidthTier();
+                if (next === currentWidthTier) { return; }
+                currentWidthTier = next;
+                // Rows may still be loading (or empty after a filter) -- a
+                // tier flip must not conjure the "ingen stevner" state.
+                if (rows.length) { renderTable(); }
+            };
+            if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', onChange); }
+            else if (typeof mql.addListener === 'function') { mql.addListener(onChange); }
+        });
 
-        function renderRow(c) {
-            var href = 'https://app.skyting.no/p/c/' + esc(c.id) + '/details';
-            var frist = c.registrationEndDate ? StandplassFormat.formatDate(c.registrationEndDate) : '–';
-            var resultCell = (c.hasResult && c.resultFileUrl)
-                ? '<a href="' + esc(c.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
-                : '–';
-            var statusText = c.status !== 1 ? (StandplassTerminlistePage.STATUS_LABEL[c.status] || null) : null;
-            var detailAriaLabel = 'Se detaljer for ' + esc(c.title || '–') + (statusText ? ' – ' + esc(statusText) : '');
-            var orgName = allClubs.filter(function (o) { return o.id === c.organizationId; })[0];
-            var kretsName = allKretser.filter(function (k) { return k.id === c.regionOrganizationId; })[0];
+        // Pre-resolves a competitionlist row into the plain shape
+        // terminlisteTableSpec's columns read: org/krets/branch/group
+        // names looked up against the reference data, dates formatted,
+        // the skyting.no href pre-built (pre-escaped).
+        function resolveRow(c) {
+            var org = allClubs.filter(function (o) { return o.id === c.organizationId; })[0];
+            var krets = allKretser.filter(function (k) { return k.id === c.regionOrganizationId; })[0];
             var branchNames = (c.branches || []).map(function (bid) {
                 var b = branchlistData.branches.filter(function (x) { return x.id === bid; })[0];
                 return b ? b.name : null;
@@ -452,48 +475,46 @@ var StandplassTerminlistePage = (function () {
                 var g = StandplassTerminlistePage.groupsForBranches(branchlistData.branches, []).filter(function (x) { return x.id === gid; })[0];
                 return g ? g.name : null;
             }).filter(Boolean).join(', ') || '–';
-
-            return '<tr class="terminliste-row--clickable" data-id="' + esc(c.id) + '" data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
-                + '<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="' + esc(c.id) + '" aria-label="' + detailAriaLabel + '">ⓘ</button></td>'
-                + '<td class="terminliste-date">' + esc(StandplassFormat.formatDateRange(c.startDate, c.endDate)) + '</td>'
-                + '<td><a href="' + href + '" target="_blank" rel="noopener noreferrer">' + esc(c.title || '–') + '</a>'
-                + (c.facilityName ? '<span class="terminliste-sub">' + esc(c.facilityName) + '</span>' : '') + '</td>'
-                + '<td>' + esc(c.competitionTypeName || '–') + '</td>'
-                + '<td class="terminliste-mobile-hide">' + esc(orgName ? orgName.name : (c.organizationName || '–'))
-                + (kretsName ? '<span class="terminliste-sub">' + esc(kretsName.name) + '</span>' : '') + '</td>'
-                + '<td class="terminliste-tablet-hide">' + esc(branchNames) + '</td>'
-                + '<td>' + esc(groupNames) + '</td>'
-                + '<td class="terminliste-tablet-hide terminliste-date">' + esc(frist) + '</td>'
-                + '<td class="terminliste-result-cell">' + resultCell + '</td>'
-                + '</tr>';
+            return {
+                id: c.id,
+                status: c.status,
+                dateRange: StandplassFormat.formatDateRange(c.startDate, c.endDate),
+                title: c.title,
+                facilityName: c.facilityName || '',
+                competitionTypeName: c.competitionTypeName || '',
+                orgName: org ? org.name : (c.organizationName || '–'),
+                kretsName: krets ? krets.name : '',
+                branchNames: branchNames,
+                groupNames: groupNames,
+                frist: c.registrationEndDate ? StandplassFormat.formatDate(c.registrationEndDate) : '–',
+                hasResult: !!(c.hasResult && c.resultFileUrl),
+                resultFileUrl: c.resultFileUrl || '',
+                href: 'https://app.skyting.no/p/c/' + esc(c.id) + '/details',
+                starttid: c.startDate ? StandplassFormat.formatTime(c.startDate) : '',
+                klasseforendeBadge: c.applicableForClassification
+                    ? '<span class="comp-modal-badge comp-modal-badge--yes" title="Resultater teller for klasseopprykk og -nedrykk">Klasseførende</span>'
+                    : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>'
+            };
         }
 
-        // `appendItems`, when given, is just the newly-fetched page -- only
-        // those rows get rendered/appended, since `rows` (the full
-        // accumulated history across every "Last inn flere" click) is
-        // already on the page from earlier calls. Omit it (reset load) to
-        // render the full current `rows` array fresh.
-        function renderTable(appendItems) {
-            if (!appendItems && !rows.length) {
+        function tableState() {
+            return { sort: null, hidden: hidden, runtimeHidden: [], widthTier: currentWidthTier };
+        }
+
+        // Rows accumulate across every "Last inn flere" click; every
+        // fetch re-renders the whole accumulated array through the base
+        // (keeps data-dt-row indices consistent; at 50 rows per page the
+        // full re-render stays cheap).
+        function renderTable() {
+            if (!rows.length) {
                 tableWrapEl.innerHTML = '<div class="ranking-blank-state"><p>Ingen stevner funnet.</p></div>';
                 moreBtn.hidden = true;
                 return;
             }
-            if (appendItems) {
-                tableWrapEl.querySelector('tbody').insertAdjacentHTML('beforeend', appendItems.map(renderRow).join(''));
-            } else {
-                var bodyHtml = rows.map(renderRow).join('');
-                tableWrapEl.innerHTML = '<div class="ranking-full-table"><table class="ranking-table" aria-label="Terminliste">'
-                    + '<thead><tr>'
-                    + '<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>'
-                    + '<th scope="col">Dato</th><th scope="col">Stevne</th><th scope="col">Stevnetype</th>'
-                    + '<th scope="col" class="terminliste-mobile-hide">Arrangør</th>'
-                    + '<th scope="col" class="terminliste-tablet-hide">Gren</th>'
-                    + '<th scope="col">Øvelsesgruppe</th>'
-                    + '<th scope="col" class="terminliste-tablet-hide">Påmeldingsfrist</th>'
-                    + '<th scope="col">Resultater</th>'
-                    + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
-            }
+            tableWrapEl.innerHTML = StandplassDataTable.renderTable(
+                config.idPrefix + '-table',
+                terminlisteTableSpec(rows.map(resolveRow), hidden),
+                tableState());
             moreBtn.hidden = !hasMore;
         }
 
@@ -518,7 +539,7 @@ var StandplassTerminlistePage = (function () {
                 rows = reset ? items : rows.concat(items);
                 hasMore = !!(data && data.paging && data.paging.hasNextPage);
                 statusEl.textContent = '';
-                renderTable(reset ? null : items);
+                renderTable();
             }, function (err) {
                 if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
                 statusEl.textContent = 'Kunne ikke hente data.';
@@ -669,17 +690,62 @@ var StandplassTerminlistePage = (function () {
             var btn = e.target.closest('.comp-detail-btn');
             if (btn) {
                 var tr = btn.closest('tr');
-                var titleLink = tr && tr.querySelector('td:nth-child(3) a');
-                openCompModal(btn.dataset.id, titleLink ? titleLink.textContent : '');
+                openCompModal(btn.dataset.id, tr ? tr.getAttribute('data-title') : '');
                 return;
             }
             var row = e.target.closest('tr.terminliste-row--clickable');
             if (!row) { return; }
             if (e.target.closest('a, button')) { return; }
             if (window.getSelection && window.getSelection().toString()) { return; }
-            var rowTitleLink = row.querySelector('td:nth-child(3) a');
-            openCompModal(row.dataset.id, rowTitleLink ? rowTitleLink.textContent : '');
+            openCompModal(row.dataset.id, row.getAttribute('data-title') || '');
         });
+    }
+
+    // The full page's table as a base spec. Rows are pre-resolved by
+    // init's resolveRow (names looked up, dates formatted, hrefs built)
+    // so every column reads plain strings off the row shape the plan
+    // fixed. `hidden` is the page-owned live picker map -- empty until
+    // the picker lands; kept in the signature from day one so state
+    // threading never changes shape.
+    function terminlisteTableSpec(rows, hidden) {
+        hidden = hidden || {};
+        function detailAriaLabel(r) {
+            var statusText = r.status !== 1 ? (STATUS_LABEL[r.status] || null) : null;
+            return 'Se detaljer for ' + esc(r.title || '–') + (statusText ? ' – ' + esc(statusText) : '');
+        }
+        var columns = [
+            { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, cellClass: 'terminliste-detail-col', raw: true,
+                cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="' + detailAriaLabel(r) + '">ⓘ</button>'; } },
+            { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
+            { key: 'title', label: 'Stevne', raw: true, cell: function (r) {
+                return '<a href="' + r.href + '" target="_blank" rel="noopener noreferrer">' + esc(r.title || '–') + '</a>'
+                    + (r.facilityName ? '<span class="terminliste-sub">' + esc(r.facilityName) + '</span>' : '');
+            } },
+            { key: 'competitionTypeName', label: 'Stevnetype', cell: function (r) { return r.competitionTypeName || '–'; } },
+            { key: 'orgName', label: 'Arrangør', hideBelow: 700, raw: true, cell: function (r) {
+                return esc(r.orgName) + (r.kretsName ? '<span class="terminliste-sub">' + esc(r.kretsName) + '</span>' : '');
+            } },
+            { key: 'branchNames', label: 'Gren', hideBelow: 900, cell: function (r) { return r.branchNames; } },
+            { key: 'groupNames', label: 'Øvelsesgruppe', cell: function (r) { return r.groupNames; } },
+            { key: 'frist', label: 'Påmeldingsfrist', hideBelow: 900, cellClass: 'terminliste-date', cell: function (r) { return r.frist; } },
+            { key: 'resultat', label: 'Resultater', cellClass: 'terminliste-result-cell', raw: true, cell: function (r) {
+                return (r.hasResult && r.resultFileUrl)
+                    ? '<a href="' + esc(r.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
+                    : '–';
+            } }
+        ];
+        return {
+            columns: columns,
+            rows: rows,
+            rowAttrs: function (r) {
+                return 'class="terminliste-row--clickable" data-id="' + esc(r.id)
+                    + '" data-status="' + esc(String(r.status != null ? r.status : 1))
+                    + '" data-title="' + esc(r.title || '–') + '"';
+            },
+            wrapClass: 'ranking-full-table',
+            tableClass: 'ranking-table',
+            ariaLabel: 'Terminliste'
+        };
     }
 
     function buildMarkup(idPrefix, compact) {
@@ -752,6 +818,7 @@ var StandplassTerminlistePage = (function () {
         buildCompetitionListUrl: buildCompetitionListUrl,
         groupsForBranches: groupsForBranches,
         buildMarkup: buildMarkup,
+        terminlisteTableSpec: terminlisteTableSpec,
         init: init
     };
 })();

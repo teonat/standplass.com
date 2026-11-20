@@ -161,10 +161,14 @@ var StandplassDataTable = (function () {
             if (ariaSort && ariaSort.key === col.key) {
                 attrs += ' aria-sort="' + (ariaSort.dir === 'desc' ? 'descending' : 'ascending') + '"';
             }
+            // labelRaw: the label is pre-built header HTML (e.g. a
+            // visually-hidden screen-reader label) — the header-side
+            // twin of col.raw for cells. Without it, always escaped.
+            var labelText = col.labelRaw ? col.label : esc(col.label);
             var inner = col.sortable
                 ? '<button type="button" class="dt-sort-btn" data-dt-sort="' + esc(col.key) + '">'
-                    + esc(col.label) + '<span class="dt-sort-arrow" aria-hidden="true"></span></button>'
-                : esc(col.label);
+                    + labelText + '<span class="dt-sort-arrow" aria-hidden="true"></span></button>'
+                : labelText;
             return '<th' + attrs + '>' + inner + '</th>';
         }).join('');
 

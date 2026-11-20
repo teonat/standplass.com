@@ -300,6 +300,26 @@ assert.ok(tlSortBtnHtml.indexOf(
     'sortable columns wrap their label in the sort button');
 assert.ok(tlSortBtnHtml.indexOf('aria-sort') === -1, 'no aria-sort when no sort is active');
 
+// 2b. labelRaw: a column can carry pre-built header HTML (e.g. a
+//     visually-hidden screen-reader-only label); without it the label
+//     stays escaped
+var lrHtml = StandplassDataTable.renderTable(
+    'labelraw-test',
+    {
+        columns: [
+            { key: 'vh', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true },
+            { key: 'name', label: 'Navn' },
+            { key: 'xss', label: '<img src=x onerror=1>' }
+        ],
+        rows: [{ name: 'A' }]
+    },
+    emptyState
+);
+assert.ok(lrHtml.indexOf('<th scope="col"><span class="visually-hidden">Detaljer</span></th>') !== -1,
+    'labelRaw emits the header label as-is');
+assert.ok(lrHtml.indexOf('<th scope="col">&lt;img src=x onerror=1&gt;</th>') !== -1,
+    'a plain label containing HTML stays escaped');
+
 // 3. Active sort: aria-sort on that column only; tbody reorders; # recomputes;
 //    data-dt-row keeps the ORIGINAL data index so wiring can map back to rows
 var tlSortedHtml = StandplassDataTable.renderTable(

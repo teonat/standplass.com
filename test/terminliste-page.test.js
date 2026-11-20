@@ -3,6 +3,10 @@ var assert = require('assert');
 // shim the browser global before requiring, the same way
 // stevner-page.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
+// terminlisteTableSpec renders through the shared base -- same load order
+// as the page's script tags (table-renderer.js before data-table.js)
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var TP = require('../public/js/terminliste-page.js');
 
 // Shape mirrors the live branchlist response. Includes a deleted branch
@@ -87,5 +91,81 @@ var branches = [
 assert.strictEqual(TP.groupsForBranches(branches, []).length, 3, 'no branch selected -> every group is a candidate');
 var narrowed = TP.groupsForBranches(branches, ['b2']);
 assert.deepStrictEqual(narrowed.map(function (g) { return g.id; }), ['g3'], 'selecting Rifle narrows Øvelsesgruppe to only Rifle\'s groups');
+
+// ── terminlisteTableSpec: the full page's table through the base ──────
+assert.strictEqual(typeof TP.terminlisteTableSpec, 'function', 'terminlisteTableSpec is exported');
+
+// resolved-row fixtures in the shape init's resolveRow produces
+var fullRow = {
+    id: 'c-1', status: 1, dateRange: '16.–17. nov 2026', title: 'Høststevne',
+    facilityName: 'Bomba Skytterhus', competitionTypeName: 'Åpent stevne',
+    orgName: 'Kongsvinger Sportsskyttere', kretsName: 'Glåmdalen skytterkrets',
+    branchNames: 'Pistol', groupNames: 'Feltpistol', frist: '1. nov 2026',
+    hasResult: true, resultFileUrl: 'https://example.com/r.pdf',
+    href: 'https://app.skyting.no/p/c/c-1/details',
+    starttid: '11:00',
+    klasseforendeBadge: '<span class="comp-modal-badge comp-modal-badge--yes" title="Resultater teller for klasseopprykk og -nedrykk">Klasseførende</span>'
+};
+var sparseRow = {
+    id: 'c-2', status: 2, dateRange: '20. des 2026', title: 'Julestevne',
+    facilityName: '', competitionTypeName: '', orgName: '–', kretsName: '',
+    branchNames: '–', groupNames: '–', frist: '–', hasResult: false, resultFileUrl: '',
+    href: 'https://app.skyting.no/p/c/c-2/details', starttid: '', klasseforendeBadge: ''
+};
+var resolvedRows = [fullRow, sparseRow];
+
+var pageState = function (tier) {
+    return { sort: null, hidden: {}, runtimeHidden: [], widthTier: tier };
+};
+var pageHtml = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(null));
+
+// wrapper + table element: byte-identical to the hand-rolled markup
+assert.ok(pageHtml.indexOf('<div class="ranking-full-table"><table class="ranking-table" data-dt-id="tl-table" aria-label="Terminliste">') >= 0,
+    'the ranking-full-table wrap and aria-label carry over');
+// header row: the visually-hidden Detaljer label survives via labelRaw
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>') >= 0,
+    'the Detaljer header stays a visually-hidden span');
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-date">Dato</th><th scope="col">Stevne</th><th scope="col">Stevnetype</th>') >= 0,
+    'plain headers render in order (cellClass lands on th too, per base semantics)');
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-result-cell">Resultater</th>') >= 0,
+    'Resultater header carries the column class');
+
+// full row: every cell byte-identical, row attributes through rowAttrs
+assert.ok(pageHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--clickable" data-id="c-1" data-status="1" data-title="Høststevne">') >= 0,
+    'the clickable-row attributes carry over with data-dt-row and data-title');
+assert.ok(pageHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
+    'the ⓘ button cell with its aria-label');
+assert.ok(pageHtml.indexOf('<td class="terminliste-date">16.–17. nov 2026</td>') >= 0, 'Dato cell');
+assert.ok(pageHtml.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a><span class="terminliste-sub">Bomba Skytterhus</span></td>') >= 0,
+    'Stevne cell: title link + facility sub-line');
+assert.ok(pageHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
+assert.ok(pageHtml.indexOf('<td>Kongsvinger Sportsskyttere<span class="terminliste-sub">Glåmdalen skytterkrets</span></td>') >= 0,
+    'Arrangør cell: org + krets sub-line');
+assert.ok(pageHtml.indexOf('<td>Pistol</td>') >= 0, 'Gren cell');
+assert.ok(pageHtml.indexOf('<td>Feltpistol</td>') >= 0, 'Øvelsesgruppe cell');
+assert.ok(pageHtml.indexOf('<td class="terminliste-date">1. nov 2026</td>') >= 0, 'Påmeldingsfrist cell');
+assert.ok(pageHtml.indexOf('<td class="terminliste-result-cell"><a href="https://example.com/r.pdf" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a></td>') >= 0,
+    'Resultater cell: PDF link');
+
+// sparse row: fallbacks, status label in the ⓘ aria-label, no sub-lines
+assert.ok(pageHtml.indexOf('<tr data-dt-row="1" class="terminliste-row--clickable" data-id="c-2" data-status="2" data-title="Julestevne">') >= 0,
+    'data-status defaults carried, second row indexed');
+assert.ok(pageHtml.indexOf('aria-label="Se detaljer for Julestevne – Avvist"') >= 0,
+    'non-approved status appends its label to the ⓘ aria-label');
+assert.ok(pageHtml.indexOf('<td class="terminliste-result-cell">–</td>') >= 0, 'no result renders –');
+assert.ok(pageHtml.indexOf('<td>–</td>') >= 0, 'empty org/type render –');
+
+// responsive tiers preserve today's CSS hiding exactly: at ≤700 both the
+// mobile-hide (Arrangør) and tablet-hide (Gren, Påmeldingsfrist) rules
+// fired; at ≤900 only the tablet-hide ones did
+var tier700 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(700));
+assert.ok(tier700.indexOf('>Arrangør</th>') < 0, 'tier 700 hides Arrangør');
+assert.ok(tier700.indexOf('>Gren</th>') < 0 && tier700.indexOf('>Påmeldingsfrist</th>') < 0, 'tier 700 hides Gren and Påmeldingsfrist');
+assert.ok(tier700.indexOf('>Øvelsesgruppe</th>') >= 0 && tier700.indexOf('>Stevne</th>') >= 0, 'tier 700 keeps the always-visible columns');
+assert.ok(tier700.indexOf('Kongsvinger Sportsskyttere') < 0, 'tier 700 drops Arrangør cells too');
+var tier900 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(900));
+assert.ok(tier900.indexOf('>Arrangør</th>') >= 0, 'tier 900 keeps Arrangør');
+assert.ok(tier900.indexOf('>Gren</th>') < 0 && tier900.indexOf('>Påmeldingsfrist</th>') < 0, 'tier 900 hides Gren and Påmeldingsfrist');
+assert.ok(pageHtml.indexOf('>Arrangør</th>') >= 0 && pageHtml.indexOf('>Gren</th>') >= 0, 'no tier keeps everything visible');
 
 console.log('terminliste-page.test.js: all assertions passed');
