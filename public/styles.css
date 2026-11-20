@@ -248,24 +248,6 @@ h1, h2, h3 {
     font-variant-numeric: tabular-nums;
 }
 
-.ranking-toggle {
-    display: block;
-    width: 100%;
-    padding: 0.625rem;
-    background: none;
-    border: none;
-    border-top: 1px solid var(--border-faint);
-    color: var(--brand-accent-dark);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-    font-family: inherit;
-    transition: background 0.15s;
-}
-
-.ranking-toggle:hover { background: var(--brand-accent-hover); }
-
 .ranking-loading,
 .ranking-error,
 .ranking-empty {

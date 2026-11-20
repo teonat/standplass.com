@@ -629,8 +629,8 @@ var StandplassClubStats = (function () {
     // the user's "Rader" setting (--club-stats-rows-max). All rows stay
     // real DOM inside an overflow-y: auto region so browser find-in-page
     // (Ctrl+F) can scroll to matches — the reason paging was removed.
-    // renderRow must return a complete '<tr>…</tr>' and escape any
-    // caller-supplied values itself.
+    // opts.tableHtml is the fully-built <table> (data-table base); empty
+    // rows render no card at all.
     function buildTableCard(opts) {
         var rows = opts.rows || [];
         if (!rows.length) { return ''; }
@@ -1563,7 +1563,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['mest-aktive'] = mostActiveTableSpec(topShooters, resolved);
             var topShootersHtml = topShooters.length
                 ? buildTableCard({
-                    id: 'mest-aktive', title: 'Mest aktive skyttere', rows: topShooters,
+                    title: 'Mest aktive skyttere', rows: topShooters,
                     tableHtml: StandplassDataTable.renderTable('mest-aktive',
                         drilldownSpecs['mest-aktive'], drilldownState('mest-aktive'))
                 })
@@ -1572,7 +1572,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['ovelsesfordeling'] = disciplineTableSpec(discRows, discData, resolved);
             var discHtml = discRows.length
                 ? buildTableCard({
-                    id: 'ovelsesfordeling', title: 'Øvelsesfordeling', rows: discRows,
+                    title: 'Øvelsesfordeling', rows: discRows,
                     tableHtml: StandplassDataTable.renderTable('ovelsesfordeling',
                         drilldownSpecs['ovelsesfordeling'], drilldownState('ovelsesfordeling'))
                 })
@@ -1599,7 +1599,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['arrangerte-stevner'] = organizedCompsTableSpec(organizedComps, resolved);
             var orgHtml = organizedComps.length
                 ? buildTableCard({
-                    id: 'arrangerte-stevner', title: 'Arrangerte stevner', rows: organizedComps,
+                    title: 'Arrangerte stevner', rows: organizedComps,
                     tableHtml: StandplassDataTable.renderTable('arrangerte-stevner',
                         drilldownSpecs['arrangerte-stevner'], drilldownState('arrangerte-stevner'))
                 })
