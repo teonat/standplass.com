@@ -293,6 +293,14 @@ var StandplassClubStats = (function () {
         return byId;
     }
 
+    // Signed display for the økning/endring values: positives carry an
+    // explicit +, zeros render bare (no prefix), negatives already carry
+    // their own minus. Display only — sorting stays on the raw number.
+    function formatSignedDelta(v) {
+        v = Number(v);
+        return v > 0 ? '+' + v : String(v);
+    }
+
     // ── Klasse semantics (Klassefordeling / topp-3) ────────────────────
     // Skill classes are exactly A–D, single letters. Age/gender classes
     // (Menn, Kvinner, Ungdom 14, Veteran 55, SH Åpen, Åpen2, …) are
@@ -1543,7 +1551,7 @@ var StandplassClubStats = (function () {
         // breaking rendering (the old title-string dispatch was one
         // rename away from silently rendering one toplist's data under
         // another's header).
-        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel, extraColumns) {
+        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel, extraColumns, valueFormat) {
             extraColumns = extraColumns || [];
             // Flattened rows: rank is each club's placement in the page
             // order, data-backed so # travels with the row under sorting
@@ -1557,15 +1565,17 @@ var StandplassClubStats = (function () {
             });
             // extraColumns sit between Klubb and the value column — the
             // drilldown's splits-before-total order — so every toplist
-            // keeps its ranking value at the right edge.
+            // keeps its ranking value at the right edge. format (e.g.
+            // formatSignedDelta for økning/endring columns) is display
+            // only; sorting reads the raw row value.
             var columns = [
                 { key: 'rank', label: '#', align: 'center' },
                 { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
                     cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } }
             ].concat(extraColumns.map(function (col) {
-                return { key: col.key, label: col.label, align: 'right', sortable: true, defaultDir: 'desc' };
+                return { key: col.key, label: col.label, align: 'right', sortable: true, defaultDir: 'desc', format: col.format };
             })).concat([
-                { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
+                { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc', format: valueFormat }
             ]);
             toplistSpecs[id] = { columns: columns, defaultSort: { key: valueKey, dir: 'desc' } };
             return buildTableCard({
@@ -1738,8 +1748,8 @@ var StandplassClubStats = (function () {
                 var yoy = computeYearOverYear(stats, prevStats)
                     .filter(function (c) { return c.previous >= 5 && !c.isNew; })
                     .sort(function (a, b) { return b.delta - a.delta; });
-                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', '+ Skyttere',
-                    'Størst økning av aktive skyttere siden ' + prevYear);
+                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', 'Skyttere',
+                    'Størst økning av aktive skyttere siden ' + prevYear, null, formatSignedDelta);
             }
 
             // Flest stevner arrangert (competition-level organizationName)
@@ -1792,7 +1802,7 @@ var StandplassClubStats = (function () {
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
                 + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'Skyttere', null,
-                    hasPrevStats ? [{ key: 'shooterDelta', label: 'Endring' }] : null)
+                    hasPrevStats ? [{ key: 'shooterDelta', label: 'Endring', format: formatSignedDelta }] : null)
                 + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'Starter', null,
                     [{ key: 'clubStarts', label: 'Klubbstarter' }, { key: 'otherStarts', label: 'Andre starter' }])
                 + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'Stevner', null,
@@ -2283,6 +2293,7 @@ var StandplassClubStats = (function () {
         rankClubs: rankClubs,
         computeYearOverYear: computeYearOverYear,
         buildCompOrganizerIndex: buildCompOrganizerIndex,
+        formatSignedDelta: formatSignedDelta,
         ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
