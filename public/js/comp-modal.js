@@ -13,11 +13,26 @@ var StandplassCompModal = (function () {
     // un-escaping these exact fixed strings (no attributes, ever) means no
     // attacker-controlled text can become a tag: only the six literal
     // allowed-tag strings can ever appear as real markup in the output.
-    var ALLOWED_TAGS = /&lt;(\/?)(p|br|strong|em|b|i)\s*\/?&gt;/gi;
+    // Links are the one exception that needs an attribute: descriptions
+    // from skyting.no carry real <a href="..."> anchors (e.g. kart.1881.no
+    // map links), and without them the modal displays the tag as text.
+    // The opener is REBUILT from scratch around a scheme-checked href --
+    // the captured value is already escaped, so it cannot break out of
+    // the attribute -- and always carries this module's own
+    // target/rel, never the source's attributes. Anything else about
+    // the anchor (class, style, event handlers) stays escaped text.
+    var ALLOWED_TAGS = /&lt;(\/?)(p|br|strong|em|b|i|a)\s*\/?&gt;/gi;
+    var ALLOWED_LINK = /&lt;a\s+href=&quot;(.*?)&quot;\s*&gt;/gi;
     function sanitizeDescription(html) {
-        return esc(html).replace(ALLOWED_TAGS, function (m, closing, tag) {
-            return '<' + closing + tag.toLowerCase() + '>';
-        });
+        return esc(html)
+            .replace(ALLOWED_LINK, function (m, href) {
+                var scheme = href.replace(/&amp;/g, '&');
+                if (!/^(https?:\/\/|mailto:)/i.test(scheme)) { return m; }
+                return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">';
+            })
+            .replace(ALLOWED_TAGS, function (m, closing, tag) {
+                return '<' + closing + tag.toLowerCase() + '>';
+            });
     }
 
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };

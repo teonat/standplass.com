@@ -230,3 +230,23 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     console.error(err);
     process.exitCode = 1;
 });
+
+// sanitizeDescription: everything is escaped first, then only the
+// allowed tags are re-opened -- links are rebuilt around a
+// scheme-checked href with this module's own target/rel.
+var san = CM.sanitizeDescription('<p>Hei <a href="https://kart.1881.no/?r=F8192783">kart</a> &amp; <script>x()</script></p>');
+assert.strictEqual(san,
+    '<p>Hei <a href="https://kart.1881.no/?r=F8192783" target="_blank" rel="noopener noreferrer">kart</a> &amp;amp; &lt;script&gt;x()&lt;/script&gt;</p>',
+    'an https link survives with a rebuilt safe opener; script text and raw ampersands stay escaped');
+assert.strictEqual(CM.sanitizeDescription('<a href="javascript:alert(1)">x</a>'),
+    '&lt;a href=&quot;javascript:alert(1)&quot;&gt;x</a>',
+    'a javascript: href is not re-opened');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://x.example/?a=1&b=2">x</a>'),
+    '<a href="https://x.example/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">x</a>',
+    'the href stays attribute-escaped (& -> &amp;) so it cannot break out');
+assert.strictEqual(CM.sanitizeDescription('<a class="btn" href="https://x.example/">x</a>'),
+    '&lt;a class=&quot;btn&quot; href=&quot;https://x.example/&quot;&gt;x</a>',
+    'anchors carrying other attributes stay literal');
+assert.strictEqual(CM.sanitizeDescription('<A HREF="mailto:post@example.no">epost</A>'),
+    '<a href="mailto:post@example.no" target="_blank" rel="noopener noreferrer">epost</a>',
+    'mailto and uppercase markup are handled');
