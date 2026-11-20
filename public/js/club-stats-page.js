@@ -381,6 +381,7 @@ var StandplassClubStats = (function () {
             var stevner = Object.keys(s.comps).length;
             var clubStevner = Object.keys(s.clubComps).length;
             return {
+                personId: pid,
                 name: s.name,
                 stevner: stevner,
                 clubStevner: clubStevner,
@@ -418,6 +419,7 @@ var StandplassClubStats = (function () {
             }
         });
         return {
+            compId: comp.id,
             title: comp.title,
             startDate: comp.startDate,
             facilityName: comp.facilityName,
@@ -440,7 +442,16 @@ var StandplassClubStats = (function () {
         return {
             columns: [
                 { key: 'rank', label: '#', align: 'center' },
-                { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
+                // Name opens the person modal (delegated on contentEl —
+                // the markup must stay byte-exact with klubb-page's
+                // leaderboard buttons). No data-discipline: a mest
+                // aktiv shooter spans disciplines, so the modal opens
+                // without an initial-disc context.
+                { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                            + '" data-person-name="' + esc(row.name) + '">' + esc(row.name) + '</button>';
+                    } },
                 { key: 'clubStevner', label: 'Klubbstevner', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
                 { key: 'otherStevner', label: 'Andre stevner', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
                 { key: 'stevner', label: 'Stevner', align: 'right', sortable: true, defaultDir: 'desc' },
@@ -453,7 +464,7 @@ var StandplassClubStats = (function () {
             defaultSort: { key: 'starts', dir: 'desc' },
             rows: (topShooters || []).map(function (s, i) {
                 return {
-                    rank: i + 1, name: s.name,
+                    rank: i + 1, personId: s.personId, name: s.name,
                     stevner: s.stevner, clubStevner: s.clubStevner, otherStevner: s.otherStevner,
                     starts: s.starts, clubStarts: s.clubStarts, otherStarts: s.otherStarts
                 };
@@ -514,8 +525,17 @@ var StandplassClubStats = (function () {
     function organizedCompsTableSpec(organizedComps, clubName) {
         return {
             columns: [
-                { key: 'title', label: 'Stevne', sortable: true, defaultDir: 'asc',
-                    cell: function (row) { return row.title || '–'; } },
+                // Stevne opens the comp modal (delegated on contentEl;
+                // the button carries the competition id — the modal
+                // resolves everything else from its own detail fetch).
+                // Sorting stays row.title-backed; the button is
+                // invisible to it.
+                { key: 'title', label: 'Stevne', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        return row.compId
+                            ? '<button type="button" class="stevner-comp-btn" data-comp-id="' + esc(row.compId) + '">' + esc(row.title || '–') + '</button>'
+                            : (row.title || '–');
+                    } },
                 { key: 'startDate', label: 'Dato', sortable: true, defaultDir: 'asc',
                     cell: function (row) { return row.startDate ? String(row.startDate).slice(0, 10) : '–'; } },
                 { key: 'facilityName', label: 'Anlegg', sortable: true, defaultDir: 'asc',
@@ -1225,6 +1245,57 @@ var StandplassClubStats = (function () {
         var statusEl = id('-status');
         var titleEl = id('-title');
         var leadEl = id('-lead');
+
+        // ── Modals ─────────────────────────────────────────────────────
+        // Competition detail: the shared dialog host (same one stevner
+        // and terminliste use). Person: the shared controller — its
+        // entries come from the year files of the ACTIVE program (alle
+        // spans both), so a shooter's modal matches the drilldown's own
+        // scope. Both open via delegated clicks on contentEl, which is
+        // never itself replaced (only its innerHTML), so the wiring
+        // survives every drilldown re-render.
+        var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
+        var personModal = StandplassPersonModalController.create({
+            idPrefix: config.idPrefix,
+            root: root,
+            urlState: urlState,
+            fetchEntriesForYear: function (personId, year) {
+                var bases = activeProgram === 'alle' ? ['/data/felt', '/data/bane']
+                    : activeProgram === 'felt' ? ['/data/felt'] : ['/data/bane'];
+                return Promise.all(bases.map(function (base) {
+                    return fetcher.fetchYear(base, year).then(function (yd) {
+                        return StandplassStevnerPage.flattenRows(yd);
+                    });
+                })).then(function (rowSets) {
+                    var rows = [];
+                    rowSets.forEach(function (set) { rows = rows.concat(set); });
+                    return rows.filter(function (r) { return r.personId === personId; }).map(function (r) {
+                        return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                            competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                    });
+                });
+            },
+            defaultYear: activeYear,
+            firstYear: FIRST_YEAR,
+            currentYear: CURRENT_YEAR,
+            initialMetric: activeProgram === 'bane' ? 'score' : 'rankingScore'
+        });
+        contentEl.addEventListener('click', function (e) {
+            var compBtn = e.target.closest('.stevner-comp-btn');
+            if (compBtn) {
+                compModalHost.open(compBtn.dataset.compId, compBtn.textContent);
+                return;
+            }
+            var personBtn = e.target.closest('.stevner-person-btn');
+            if (personBtn) {
+                personModal.open(personBtn, {
+                    personId: personBtn.dataset.personId,
+                    personName: personBtn.dataset.personName,
+                    initialDisc: personBtn.dataset.discipline || null
+                });
+            }
+        });
+        personModal.openFromUrl();
 
         function setUrlParam(key, value) {
             var qs = new URLSearchParams(urlState.getSearch());

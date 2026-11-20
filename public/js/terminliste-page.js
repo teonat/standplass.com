@@ -669,100 +669,7 @@ var StandplassTerminlistePage = (function () {
             statusEl.classList.add('ranking-error');
         });
 
-        var compDialog = id('-comp-dialog');
-        StandplassCompModal.ensureReferenceData(window.fetch.bind(window));
-        var compOpenSeq = 0;
-        var compResults = [];
-        if (!compDialog) {
-            compDialog = document.createElement('dialog');
-            compDialog.id = config.idPrefix + '-comp-dialog';
-            compDialog.className = 'comp-modal-dialog';
-            // Two persistent body containers, toggled via `hidden` -- not a
-            // single shared body replaced by innerHTML on every tab switch.
-            // Matches the source's own NSFUI.CompModal (#comp-view-detaljer/
-            // #comp-view-resultater, _switchTab toggling .hidden), which
-            // never destroys the Detaljer render when Resultater is shown.
-            // A single-body-replace design (this file's own first draft, and
-            // stevner-page.js's already-shipped compDialog) loses the
-            // Detaljer content the moment Resultater is viewed, with no way
-            // back short of a cache-and-restore patch -- the real fix is to
-            // never destroy it in the first place.
-            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
-                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
-                + '<p class="comp-modal-meta"></p>'
-                + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
-                + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
-                + '<div class="comp-modal-body" data-comp-view="detaljer"></div>'
-                + '<div class="comp-modal-body" data-comp-view="resultater" hidden></div>';
-            (root === document ? document.body : root).appendChild(compDialog);
-        }
-        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
-        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
-
-        function openCompModal(compId, title) {
-            var mySeq = ++compOpenSeq;
-            compDialog.dataset.compId = compId;
-            compDialog.querySelector('.comp-modal-title').textContent = title || '';
-            compDialog.querySelector('.comp-modal-meta').textContent = '';
-            var detailViewEl = compDialog.querySelector('[data-comp-view="detaljer"]');
-            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
-            detailViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
-            resultsViewEl.innerHTML = '';
-            detailViewEl.hidden = false;
-            resultsViewEl.hidden = true;
-            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
-                var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
-                b.classList.toggle('program-btn--active', isDetaljer);
-                b.setAttribute('aria-pressed', String(isDetaljer));
-            });
-            compDialog.showModal();
-            StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
-                if (mySeq !== compOpenSeq) { return; }
-                compDialog.querySelector('.comp-modal-meta').textContent =
-                    StandplassCompModal.formatMetaLine(result.comp, result.facility);
-                detailViewEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
-            }, function () {
-                if (mySeq !== compOpenSeq) { return; }
-                detailViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
-            });
-        }
-
-        compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
-            var btn = e.target.closest('button[data-comp-tab]');
-            if (!btn) { return; }
-            var isDetaljer = btn.getAttribute('data-comp-tab') === 'detaljer';
-            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
-                var isActive = b === btn;
-                b.classList.toggle('program-btn--active', isActive);
-                b.setAttribute('aria-pressed', String(isActive));
-            });
-            compDialog.querySelector('[data-comp-view="detaljer"]').hidden = !isDetaljer;
-            compDialog.querySelector('[data-comp-view="resultater"]').hidden = isDetaljer;
-            if (isDetaljer) { return; }
-            var mySeq = compOpenSeq;
-            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
-            var compId = compDialog.dataset.compId;
-            resultsViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
-            function stillCurrent() {
-                return mySeq === compOpenSeq
-                    && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
-            }
-            StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
-                if (!stillCurrent()) { return; }
-                compResults = results;
-                resultsViewEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
-            }, function () {
-                if (!stillCurrent()) { return; }
-                resultsViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
-            });
-        });
-
-        compDialog.addEventListener('change', function (e) {
-            var select = e.target.closest('.comp-results-disc-filter');
-            if (!select) { return; }
-            compDialog.querySelector('[data-comp-view="resultater"]').innerHTML =
-                StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
-        });
+        var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
 
         // Whole row opens the modal, matching the source's own delegation
         // (terminliste.js's setupModalDelegation) -- only an actual <a>/
@@ -773,14 +680,14 @@ var StandplassTerminlistePage = (function () {
             var btn = e.target.closest('.comp-detail-btn');
             if (btn) {
                 var tr = btn.closest('tr');
-                openCompModal(btn.dataset.id, tr ? tr.getAttribute('data-title') : '');
+                compModalHost.open(btn.dataset.id, tr ? tr.getAttribute('data-title') : '');
                 return;
             }
             var row = e.target.closest('tr.terminliste-row--clickable');
             if (!row) { return; }
             if (e.target.closest('a, button')) { return; }
             if (window.getSelection && window.getSelection().toString()) { return; }
-            openCompModal(row.dataset.id, row.getAttribute('data-title') || '');
+            compModalHost.open(row.dataset.id, row.getAttribute('data-title') || '');
         });
     }
 

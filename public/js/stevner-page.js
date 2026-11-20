@@ -430,7 +430,7 @@ var StandplassStevnerPage = (function () {
         // national list.
         var klubbResolved = false;
         var klubbUnmatched = false;
-        // Same idea as personOpenSeq/compOpenSeq below: year files are several
+        // Same idea as personOpenSeq/comp-modal's open-sequence guard: year files are several
         // MB, so rapid year-switching can let a slow older response land after
         // a newer one and leave the page showing a year nothing else agrees on.
         var yearSeq = 0;
@@ -997,132 +997,16 @@ var StandplassStevnerPage = (function () {
         // its own). Appended onto `root` directly when `root` is a shadow
         // root (the <standplass-results> embed case), since a shadow root
         // has no `.body`; onto document.body for the direct-mount case.
-        var compDialog = id('-comp-dialog');
-        // Fire-and-forget, module-singleton (see ensureReferenceData's own
-        // guard) -- discipline/class names for the modal's events list and
-        // Resultater tab, same one-time reference fetch the source performs
-        // at load rather than per page/instance.
-        StandplassCompModal.ensureReferenceData(window.fetch.bind(window));
-        // Same idea as personOpenSeq above: guards the async fetchDetail/
-        // fetchResults writes into the shared bodyEl against a race where a
-        // stale response resolves after the modal was reopened for a
-        // different competition, or the tab was switched away and back.
-        var compOpenSeq = 0;
-        // Last-fetched Resultater rows, so the Gren filter can re-filter and
-        // re-render client-side instead of re-fetching on every change.
-        var compResults = [];
-        if (!compDialog) {
-            compDialog = document.createElement('dialog');
-            compDialog.id = config.idPrefix + '-comp-dialog';
-            compDialog.className = 'comp-modal-dialog';
-            // Two persistent body containers, toggled via `hidden` -- not a
-            // single shared body replaced by innerHTML on every tab switch.
-            // Matches the source's own NSFUI.CompModal (#comp-view-detaljer/
-            // #comp-view-resultater, _switchTab toggling .hidden), which
-            // never destroys the Detaljer render when Resultater is shown.
-            // A single-body-replace design (this file's own prior version)
-            // loses the Detaljer content the moment Resultater is viewed,
-            // with no way back short of a cache-and-restore patch -- the
-            // real fix is to never destroy it in the first place.
-            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
-                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
-                + '<p class="comp-modal-meta"></p>'
-                + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
-                + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
-                + '<div class="comp-modal-body" data-comp-view="detaljer"></div>'
-                + '<div class="comp-modal-body" data-comp-view="resultater" hidden></div>';
-            (root === document ? document.body : root).appendChild(compDialog);
-        }
-        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
-        // A native <dialog>'s ::backdrop delivers its click with the dialog
-        // itself as e.target (no separate backdrop node) -- same check the
-        // source uses for its own competition/person dialogs.
-        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
-
-        // The card object is deliberately NOT passed in: names shown by the
-        // modal (meta line, Arrangør, Stevnetype) resolve from the live
-        // detail fetch plus comp-modal's own reference data, keeping this
-        // view's modal independent of the scraped card data.
-        function openCompModal(compId, title) {
-            var mySeq = ++compOpenSeq;
-            compDialog.dataset.compId = compId;
-            compDialog.querySelector('.comp-modal-title').textContent = title || '';
-            compDialog.querySelector('.comp-modal-meta').textContent = '';
-            var detailViewEl = compDialog.querySelector('[data-comp-view="detaljer"]');
-            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
-            detailViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
-            resultsViewEl.innerHTML = '';
-            detailViewEl.hidden = false;
-            resultsViewEl.hidden = true;
-            // Reset to the Detaljer tab every time the modal opens for a new
-            // competition, so a previous open's Resultater selection doesn't
-            // leak into the next.
-            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
-                var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
-                b.classList.toggle('program-btn--active', isDetaljer);
-                b.setAttribute('aria-pressed', String(isDetaljer));
-            });
-            compDialog.showModal();
-            StandplassCompModal.fetchDetailWithFacility(compId, window.fetch.bind(window)).then(function (result) {
-                if (mySeq !== compOpenSeq) { return; } // a newer competition was opened since this fetch started
-                compDialog.querySelector('.comp-modal-meta').textContent =
-                    StandplassCompModal.formatMetaLine(result.comp, result.facility);
-                detailViewEl.innerHTML = StandplassCompModal.renderDetailBody(result.comp, result.facility);
-            }, function () {
-                if (mySeq !== compOpenSeq) { return; }
-                detailViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
-            });
-        }
-
-        compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
-            var btn = e.target.closest('button[data-comp-tab]');
-            if (!btn) { return; }
-            var isDetaljer = btn.getAttribute('data-comp-tab') === 'detaljer';
-            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
-                var isActive = b === btn;
-                b.classList.toggle('program-btn--active', isActive);
-                b.setAttribute('aria-pressed', String(isActive));
-            });
-            compDialog.querySelector('[data-comp-view="detaljer"]').hidden = !isDetaljer;
-            compDialog.querySelector('[data-comp-view="resultater"]').hidden = isDetaljer;
-            if (isDetaljer) { return; }
-            var mySeq = compOpenSeq;
-            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
-            var compId = compDialog.dataset.compId;
-            resultsViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
-            // compOpenSeq alone catches "a different competition opened since
-            // this fetch started"; it doesn't change on a same-competition
-            // tab click, so also re-check that Resultater is still the
-            // active tab when the fetch resolves (covers switching back to
-            // Detaljer before this fetch settles).
-            function stillCurrent() {
-                return mySeq === compOpenSeq
-                    && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
-            }
-            StandplassCompModal.fetchResults(compId, window.fetch.bind(window)).then(function (results) {
-                if (!stillCurrent()) { return; }
-                compResults = results;
-                resultsViewEl.innerHTML = StandplassCompModal.renderResultsBody(compResults, '', config.idPrefix);
-            }, function () {
-                if (!stillCurrent()) { return; }
-                resultsViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
-            });
-        });
-
-        // Delegated on compDialog (not the filter select itself) since the
-        // Resultater body -- select included -- is torn down and rebuilt by
-        // innerHTML on every filter change.
-        compDialog.addEventListener('change', function (e) {
-            var select = e.target.closest('.comp-results-disc-filter');
-            if (!select) { return; }
-            compDialog.querySelector('[data-comp-view="resultater"]').innerHTML =
-                StandplassCompModal.renderResultsBody(compResults, select.value, config.idPrefix);
-        });
+        // The scaffold, tabs, Gren filter, and fetch-sequence guards live
+        // in the shared host (comp-modal.js's createDialogHost — extracted
+        // from this page's and terminliste's line-identical copies); this
+        // page wires only its trigger below.
+        var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
 
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-comp-btn');
             if (!btn) { return; }
-            openCompModal(btn.dataset.compId, btn.textContent);
+            compModalHost.open(btn.dataset.compId, btn.textContent);
         });
 
         rowsEl.addEventListener('click', function (e) {
