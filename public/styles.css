@@ -1634,6 +1634,14 @@ tr[data-idx] { cursor: pointer; }
    column sits at its widest word. Unconstrained headers are
    unchanged (both items fit one line). */
 .club-stats-list-scroll .dt-sort-btn { flex-wrap: wrap; }
+/* Toplist sort headers wrap at the word, never on the caret: the flex
+   rule above lets the line break BETWEEN items, so a two-word header
+   that still fits the column drops the caret onto its own line. With
+   nowrap the label itself shrinks under the squeeze and wraps at its
+   space, the caret staying beside the last word; single-word headers
+   can no longer wrap at all. (The drilldown keeps the wrap rule — its
+   counting headers are two-line br labels sized for it.) */
+.club-stats-toplist .dt-sort-btn { flex-wrap: nowrap; }
 .dt-sort-btn:focus-visible {
   outline: 2px solid var(--brand-accent);
   outline-offset: 1px;

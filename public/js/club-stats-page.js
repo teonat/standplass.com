@@ -1738,7 +1738,7 @@ var StandplassClubStats = (function () {
                 var yoy = computeYearOverYear(stats, prevStats)
                     .filter(function (c) { return c.previous >= 5 && !c.isNew; })
                     .sort(function (a, b) { return b.delta - a.delta; });
-                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', '+ skyttere',
+                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', '+ Skyttere',
                     'Størst økning av aktive skyttere siden ' + prevYear);
             }
 
@@ -1760,7 +1760,7 @@ var StandplassClubStats = (function () {
                 .map(function (name) { return { club: name, delta: organizerCounts[name] }; })
                 .sort(function (a, b) { return b.delta - a.delta; });
             var organizerHtml = rankedOrganizers.length
-                ? toplistCard('toplist-arranged', 'Flest stevner arrangert', rankedOrganizers, 'delta', 'stevner')
+                ? toplistCard('toplist-arranged', 'Flest stevner arrangert', rankedOrganizers, 'delta', 'Stevner')
                 : '';
 
             var yearNote = activeYear === CURRENT_YEAR
@@ -1791,13 +1791,13 @@ var StandplassClubStats = (function () {
 
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
-                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'skyttere', null,
-                    hasPrevStats ? [{ key: 'shooterDelta', label: 'endring' }] : null)
-                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'starter', null,
-                    [{ key: 'clubStarts', label: 'klubbstarter' }, { key: 'otherStarts', label: 'andre starter' }])
-                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner', null,
-                    [{ key: 'clubStevner', label: 'klubbstevner' }, { key: 'otherStevner', label: 'andre stevner' }])
-                + toplistCard('toplist-top3', 'Flest topp-3 plasseringer', byTopThree, 'topThree', 'plasseringer')
+                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'Skyttere', null,
+                    hasPrevStats ? [{ key: 'shooterDelta', label: 'Endring' }] : null)
+                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'Starter', null,
+                    [{ key: 'clubStarts', label: 'Klubbstarter' }, { key: 'otherStarts', label: 'Andre starter' }])
+                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'Stevner', null,
+                    [{ key: 'clubStevner', label: 'Klubbstevner' }, { key: 'otherStevner', label: 'Andre stevner' }])
+                + toplistCard('toplist-top3', 'Flest topp-3 plasseringer', byTopThree, 'topThree', 'Plasseringer')
                 + yoyHtml
                 + organizerHtml
                 + '</div>'
