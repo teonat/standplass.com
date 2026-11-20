@@ -1646,17 +1646,22 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 .top3-mode .dt-picker-btn {
   margin-left: auto;
   font-size: 0.8125rem;
-  padding: 0.2rem 1.5rem 0.2rem 0.6rem;
+  /* Right padding keeps the base button's text-to-caret clearance:
+     the chevron sits at right 0.75rem and is 12px wide, so anything
+     under 2rem puts the text hard against it. Only the vertical
+     metrics adopt the mode buttons'. */
+  padding: 0.2rem 2rem 0.2rem 0.6rem;
 }
 /* Same right-end treatment for a Kolonner button hosted in a drilldown
    card header (buildTableCard): the header is a flex row, so
    margin-left: auto pushes the button to the title's opposite end, and
    the panel opens leftward from its anchor — clear of the scroll region
-   below. Mode-row sizing so the button doesn't stretch the header. */
+   below. Mode-row sizing so the button doesn't stretch the header;
+   2rem right padding keeps the chevron clear of the text (see above). */
 .ranking-card-header .dt-picker-btn {
   margin-left: auto;
   font-size: 0.8125rem;
-  padding: 0.2rem 1.5rem 0.2rem 0.6rem;
+  padding: 0.2rem 2rem 0.2rem 0.6rem;
 }
 .dt-picker-anchor .checkbox-dropdown-panel { left: auto; }
 
