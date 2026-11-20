@@ -33,3 +33,11 @@ sync-bane-year year:
 # Local dev server for public/, with the same /felt -> /felt.html rewrite Cloudflare does in production
 start:
     python3 dev-server.py
+
+# The consumer pages load embed.js and their data cross-origin from the dev
+# server, so `just start` must be running on :8800; ?origin=... points the
+# rig at another deployment instead (e.g. https://standplass.com).
+# Serves embed-check/ -- a hub index plus one page per embed case -- on :8890.
+embed-check:
+    @echo "  embed-check: http://localhost:8890  (needs 'just start' on :8800)"
+    python3 -m http.server 8890 --directory embed-check

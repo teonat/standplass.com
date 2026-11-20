@@ -211,7 +211,7 @@ h1, h2, h3 {
 
 .ranking-table th {
     text-align: left;
-    padding: 0.5rem 0.875rem;
+    padding: 0.5rem;
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -224,7 +224,7 @@ h1, h2, h3 {
 .ranking-table th.ranking-rank { text-align: center; }
 
 .ranking-table td {
-    padding: 0.4375rem 0.875rem;
+    padding: 0.4375rem 0.5rem;
     border-bottom: 1px solid var(--border-faint);
     color: var(--text-muted);
     font-size: 0.875rem;
@@ -326,15 +326,87 @@ h1, h2, h3 {
 }
 .comp-detail-btn:hover, .comp-detail-btn:focus-visible { border-color: var(--brand-accent); color: var(--brand-accent); }
 .terminliste-sub { display: block; font-size: 0.75rem; color: var(--text-muted); }
-.terminliste-date { white-space: nowrap; }
+/* NO mid-word breaking anywhere in these tables — owner rulings
+   2026-11-20: orphaned single letters ("Sportsskytter" + lone "e")
+   and split years ("2/026") are unacceptable, and dictionary
+   hyphenation (hyphens: auto) is engine- and dictionary-dependent
+   (measured: Chrome's Norwegian patterns hyphenate "Sportsskytter|e",
+   orphaning the plural e; Firefox would break differently but just
+   as uncontrollably — the owner browses Firefox). The fix is
+   structural instead: the tiers hide Arrangør below 860 and Gren +
+   Påmeldingsfrist below 1030 — measured: the seven-column set's
+   floor is 740px and the nine-column table's floor is 911px, and
+   org names break only at spaces. Anything that still cannot fit
+   its column (a pathological title in a very narrow embed) overflows
+   or scrolls rather than mangling — the honest fallback. Dates are
+   the one structured case and get explicit treatment in
+   dateRangeCellHtml (terminliste-page.js): nbsp within each half, a
+   wbr after the en-dash as the ONLY break opportunity, so a range
+   wraps exactly "28. feb–" / "4. mar 2026" and never mid-year. */
+.terminliste-date { white-space: normal; }
 .terminliste-result-cell { text-align: center; }
+/* ...and its header: cellClass lands on th too, but
+   .ranking-table th's text-align: left out-specifies a bare class —
+   the Resultater header stayed left while its cells centered (owner
+   QA 2026-11-20: the value sat far right of the header on the wide
+   compact card). th-scoped rule, same shape as the th.ranking-score
+   / th.ranking-rank precedents. */
+.ranking-table th.terminliste-result-cell { text-align: center; }
+
+/* Full page's capped scroll area (replaces the old "Last inn flere"
+   button): the scroll region IS the table card — the scrollbar hugs
+   the card's top and bottom edges. (An outer-wrap scroll started
+   1.5rem above the card — the card's own margin-top — leaving the
+   track floating beside empty space; scroll belongs on the card
+   itself.) The card's existing overflow-x: auto joins this as ONE
+   scroll container. Cap: 25 typical rows — measured live (headless
+   Chrome, getBoundingClientRect): thead 29.5px, plain row 43px (the ⓘ
+   button column drives row height), so 25*43+29.5 = 1104.5px =
+   69.03rem -> 69.1rem; rows with sub-lines or wrapped cells read
+   slightly shorter in count. overflow-y: auto, never hidden: browser
+   find-in-page must be able to reach rows past the cap (same reason
+   as .club-stats-list-scroll). */
+.terminliste-scroll-wrap { overflow-y: auto; max-height: 69.1rem; }
+/* With the cap, the header pins to the top of the scroll region so
+   column meanings survive a 25-row scroll. border-collapse: collapse
+   does not move a sticky th's borders with it — separate + spacing 0
+   renders identically for this table's simple bottom borders.
+   --surface-base is a 3%-opacity TINT, not a surface: rows scrolling
+   under a sticky header would bleed through it, so the tint is
+   composited over the card's opaque surface — identical resting look,
+   nothing shows through. */
+.terminliste-scroll-wrap .ranking-table { border-collapse: separate; border-spacing: 0; }
+.terminliste-scroll-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
+/* Toolbar right above the card: status left, Kolonner right (the
+   stevner stats-bar pattern). min-height on the status keeps the row
+   stable while empty. */
+.terminliste-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 1rem; }
+.terminliste-toolbar .ranking-status-msg { margin-top: 0; }
+/* Compact widget's own scroll cap: 10 typical rows — measured live
+   (headless Chrome): thead 29.5px, plain row 43px (the ⓘ button
+   column drives height), so 10*43+29.5 = 459.5px = 28.72rem ->
+   28.75rem: ten rows fit whole, the 11th scrolls. Narrow embeds where
+   cells wrap (49px rows) read slightly shorter. overflow-y: auto,
+   never hidden -- same find-in-page rule as the full page's cap. No
+   sticky header here: the widget paints on whatever the HOST page
+   paints behind it, so no opaque header color exists -- the header
+   scrolls away, same as the source's own widget. */
+.terminliste-widget-scroll { overflow-y: auto; max-height: 28.75rem; }
+/* Norgesfelt's per-tab Kolonner buttons are appended INTO each panel's
+   filter row (injected at init — the page markup is static HTML); the
+   row's align-items: flex-end puts them on the controls' baseline. */
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
-   [data-mode="dark"] overrides from the start (not a later fix round) --
-   see this plan's Global Constraints and STATUS.md's klubb-view gotcha #2
-   about --brand-primary-as-text; this uses fixed amber/red instead, same
-   choice the source itself made, just re-keyed to this project's own
-   [data-mode="dark"] convention instead of [data-theme="dark"]. */
+   [data-mode="dark"] overrides from the start (not a later fix round).
+   Fixed amber/red values, not --brand-primary: the brand gold is an
+   accent, not a text color (it fails as tint/text in the klubb view);
+   same choice the source itself made, just re-keyed to this project's
+   own [data-mode="dark"] convention instead of [data-theme="dark"]. */
 tr[data-status="0"] td { background: rgba(160, 110, 0, 0.07); }
 tr[data-status="2"] td, tr[data-status="3"] td { background: rgba(180, 30, 30, 0.07); }
 tr[data-status="0"] .comp-detail-btn { border-color: #b45309; color: #b45309; }
@@ -344,27 +416,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 [data-mode="dark"] tr[data-status="0"] .comp-detail-btn { border-color: #fbbf24; color: #fbbf24; }
 [data-mode="dark"] tr[data-status="2"] .comp-detail-btn, [data-mode="dark"] tr[data-status="3"] .comp-detail-btn { border-color: #f87171; color: #f87171; }
 
-/* Column hiding: terminliste uses its OWN semantic classes
-   (.terminliste-mobile-hide/.terminliste-tablet-hide), never nth-child --
-   deliberately avoiding this session's own .ranking-card[data-comp-id]
-   nth-child collision class of bug (a positional rule that accidentally
-   also matched a differently-shaped table reusing the same base class). */
-@media (max-width: 700px) {
-    .terminliste-mobile-hide { display: none; }
-}
-@media (max-width: 900px) {
-    .terminliste-tablet-hide { display: none; }
-}
-
-/* Norgesfelt uses its own semantic hide classes for the same documented
-   reason terminliste does (see above) -- never nth-child on a shared
-   .ranking-card/.ranking-table class. */
-@media (max-width: 700px) {
-    .norgesfelt-mobile-hide { display: none; }
-}
-@media (max-width: 900px) {
-    .norgesfelt-tablet-hide { display: none; }
-}
+/* Column hiding on terminliste and norgesfelt now runs through the
+   table base's hideBelow tiers (page-level matchMedia, smallest crossed
+   of 700/900) — the old semantic hide-class media queries are gone.
+   The historical note stays relevant: never nth-child on a shared
+   .ranking-card/.ranking-table class (this codebase's own positional
+   collision bug). */
 
 /* Compact club widget (the embeddable stevner-widget.js replacement) --
    the year-nav button styling mirrors .filter-period-toggle's
@@ -431,14 +488,20 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* Same pattern as .ranking-full-table (overflow-x:auto + a floor on the
    table's own width) -- a 2-column card grid gives each card roughly half
    the viewport, which can be narrower than a 6-column table needs even on
-   a normal desktop width where .norgesfelt-tablet-hide/-mobile-hide's own
-   viewport-width breakpoints don't fire (they react to the *viewport*,
-   not the card, so they can't tell a 2-up desktop card apart from a
-   comfortably wide one). Scrolling avoids both silent clipping
-   (.ranking-card's own overflow:hidden) and forced column/header
-   wrapping when the card itself is the constraint, not the viewport. */
+   a normal desktop width where the hideBelow tiers' own viewport-width
+   breakpoints don't fire (they react to the *viewport*, not the card, so
+   they can't tell a 2-up desktop card apart from a comfortably wide one).
+   Scrolling avoids both silent clipping (.ranking-card's own
+   overflow:hidden) and forced column/header wrapping when the card itself
+   is the constraint, not the viewport. */
 .ranking-card-table-wrap { overflow-x: auto; }
 .ranking-card-table-wrap .ranking-table { min-width: 400px; }
+
+/* /klubb's leaderboard cards: contained scroll tables (the
+   klubbstatistikk format) with a fixed ~10-row cap — the page is a
+   quick overview by design, so it gets no "Rader" select; all rows
+   stay real DOM (scroll/Ctrl+F reaches them). 10 rows × ~2.1rem + thead. */
+#klubb-grid-wrap { --club-stats-rows-max: 23rem; }
 .ranking-card--collapsed .ranking-card-header {
     border-bottom: none;
 }
@@ -557,7 +620,13 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     color: var(--text-muted);
     margin-bottom: 1rem;
 }
-.stevner-collapse-all-btn {
+/* The Fold-alle button style, shared with the Kolonner picker button
+   (owner: same look) via GROUPED SELECTORS, not a shared class — the
+   bulk-collapse handler on rowsEl matches clicks by
+   .stevner-collapse-all-btn, and a picker button wearing that class
+   would toggle every card and hijack the label on every open. */
+.stevner-collapse-all-btn,
+.stevner-picker-btn {
     background: none;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -565,18 +634,32 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     cursor: pointer;
     color: var(--text-muted);
 }
-.stevner-hide-club-col td:nth-child(3), .stevner-hide-club-col th:nth-child(3) {
-    display: none;
+/* The stats bar's right group: updated stamp, the shared "Kolonner"
+   picker (anchor-wrapped, Fold-alle-styled) and "Fold alle" on one
+   row. margin-left:auto keeps the group right-aligned in the
+   single-card bar too, where it is the bar's ONLY child. */
+.stevner-stats-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-left: auto;
 }
-.stevner-disc-group th {
-    font-size: 0.75rem;
-    font-weight: 700;
+.dt-group-row th {
+    font-size: 0.6875rem;
+    font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
     padding: 0.5rem 0.5rem 0.2rem;
     background: var(--surface-base);
     text-align: left;
+}
+/* Scroll, not squash: a user who forces Klubb/Ranking visible on a
+   narrow screen (explicit choices override the 700px tier) gets a
+   horizontally scrollable card table instead of a broken layout. */
+.stevner-card-table-wrap {
+    overflow-x: auto;
 }
 
 /* ── Ranking filters ──────────────────────────────────── */
@@ -981,25 +1064,6 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    override since it's not one of this project's own CSS variables. */
 .section-lead a, .section-lead a:visited { color: var(--brand-accent); }
 .section-lead a:hover { color: var(--brand-accent-dark); }
-
-/* Reuses this repo's existing 700px breakpoint (already used elsewhere in
-   this file, e.g. above) rather than porting the source's 900px -- this
-   repo already treats 700px as its one tablet/mobile line. */
-/* nth-child, not a class on the <th>s: renderRows() emits plain <td>s with no
-   per-cell classes, so a class-based rule would hide the headers only and
-   misalign every card table. Columns: # / Navn / Klubb / Øvelse / Klasse /
-   Poeng / Ranking -- Klubb is 3, Ranking is 7. Coexists with
-   .stevner-hide-club-col (JS-toggled, column 3 only); display:none is
-   idempotent, so both may apply at once.
-   Scoped to [data-comp-id] (stevner-page.js's per-competition cards only,
-   the 7-column layout this rule was written for) -- klubb-page.js reuses
-   the bare .ranking-card class for its own 3-column (#/Navn/Poeng)
-   per-discipline cards, which have no data-comp-id, so an unscoped
-   :nth-child(3) rule was hiding klubb's Poeng column on mobile instead. */
-@media (max-width: 700px) {
-    .ranking-card[data-comp-id] td:nth-child(3), .ranking-card[data-comp-id] th:nth-child(3),
-    .ranking-card[data-comp-id] td:nth-child(7), .ranking-card[data-comp-id] th:nth-child(7) { display: none; }
-}
 
 .ranking-meta {
     font-size: 0.8125rem;
@@ -1535,6 +1599,104 @@ tr[data-idx] { cursor: pointer; }
    find-in-page (Ctrl+F) must be able to scroll the region to matches. */
 .club-stats-list-scroll { overflow-y: auto; max-height: var(--club-stats-rows-max, 33.5rem); }
 
+/* ── Data-table base affordances ──────────────────────────────────── */
+/* Rendered by public/js/data-table.js. All colors are mode-flipping
+   vars, inherit, or currentColor — nothing here needs a
+   [data-mode="dark"] override. First consumer: klubbstatistikk. */
+
+/* Bare-<button> chrome reset: buttons inherit the th's font and color.
+   text-transform and letter-spacing are NOT inherited by form controls
+   (font: inherit doesn't cover them), but .ranking-table th styles them
+   (uppercase, 0.1em tracking) — take them from the th explicitly so the
+   sort buttons match the plain øvelse headers. */
+.dt-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.dt-sort-btn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
+}
+
+/* Sort direction glyph: a border-triangle shown only on the active
+   (aria-sort) column, pointing per direction, tracking text color. */
+.dt-sort-arrow { display: none; }
+th[aria-sort] .dt-sort-arrow { display: inline-block; }
+th[aria-sort="ascending"] .dt-sort-arrow::before,
+th[aria-sort="descending"] .dt-sort-arrow::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+th[aria-sort="ascending"] .dt-sort-arrow::before { border-bottom: 5px solid currentColor; }
+th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid currentColor; }
+
+.dt-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+/* Positioning context for the picker's dropdown panel (the panel is
+   position: absolute; without this it anchors to the page instead of
+   the toolbar and renders off-screen). */
+.dt-picker-anchor { position: relative; }
+
+/* A picker button hosted in a controls row (e.g. the top-3 mode row)
+   sits at the row's right end, and its panel opens leftward from the
+   anchor so it stays inside the card. In the mode row it also adopts
+   the mode buttons' metrics — the default taller padding/font would
+   stretch the whole flex row and read as clipping into the table
+   header directly below (the row has no bottom margin, matching the
+   pre-migration layout). */
+.top3-mode .dt-picker-btn {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  padding: 0.2rem 1.5rem 0.2rem 0.6rem;
+}
+.dt-picker-anchor .checkbox-dropdown-panel { left: auto; }
+
+/* Same visual treatment as .checkbox-dropdown-btn (values copied, not
+   restyled) minus the filter-bar width:100%. */
+.dt-picker-btn {
+  text-align: left;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface-card)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236c757d' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 0.75rem center;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-picker-btn:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.dt-picker-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
 .club-stats-note {
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -1601,7 +1763,7 @@ tr[data-idx] { cursor: pointer; }
 }
 
 /* Top-3 card placement-mode / øvelser-visibility toggle group */
-.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0; }
+.top3-mode { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0 0.5rem; }
 .top3-mode-btn {
   background: none; border: 1px solid var(--border); border-radius: var(--radius);
   color: var(--text-muted); font: inherit; font-size: 0.8125rem;

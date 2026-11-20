@@ -153,9 +153,11 @@ var StandplassFilterWidgets = (function () {
     // Wires up a checkbox dropdown (click-outside, Escape, rebuild).
     // cfg: { btn, panel, list, clearAllBtn, getItems(), getSelected(), labelNone,
     //        onToggle(id, name, checked), onClearAll(), searchable? }
-    // Returns: { rebuild(), destroy() } -- destroy() removes the root-node
-    // outside-click listener, which outlives this dropdown's elements; a
-    // caller that remounts must call it or that listener leaks per mount.
+    // Returns: { rebuild(), destroy() } -- destroy() removes every
+    // listener this wiring registered (btn click, panel Escape keydown,
+    // clear-all click, and the root-node outside-click listener, which
+    // outlives this dropdown's elements); a caller that remounts must
+    // call it or those listeners leak per mount.
     function makeCheckboxDropdown(cfg) {
         var searchQuery   = '';
         var searchInputEl = null;
@@ -287,7 +289,7 @@ var StandplassFilterWidgets = (function () {
             });
         }
 
-        cfg.btn.addEventListener('click', function () {
+        function onBtnClick() {
             if (cfg.btn.disabled) return;
             if (cfg.panel.hasAttribute('hidden')) {
                 openPanel();
@@ -295,18 +297,21 @@ var StandplassFilterWidgets = (function () {
                 closePanel();
                 cfg.btn.focus();
             }
-        });
+        }
+        cfg.btn.addEventListener('click', onBtnClick);
 
-        cfg.clearAllBtn.addEventListener('click', function () {
+        function onClearAllClick() {
             cfg.onClearAll();
-        });
+        }
+        cfg.clearAllBtn.addEventListener('click', onClearAllClick);
 
-        cfg.panel.addEventListener('keydown', function (e) {
+        function onPanelKeydown(e) {
             if (e.key === 'Escape') {
                 closePanel();
                 cfg.btn.focus();
             }
-        });
+        }
+        cfg.panel.addEventListener('keydown', onPanelKeydown);
 
         var wrapper = cfg.btn.parentElement;
         // getRootNode(), not document: click is composed, so a document-level
@@ -324,8 +329,17 @@ var StandplassFilterWidgets = (function () {
         }
         rootNode.addEventListener('click', onOutsideClick);
 
+        // Removes EVERY listener registered above. destroy() is the
+        // re-wire primitive: batch-2's shared stevner picker destroys and
+        // re-wires a dropdown onto a long-lived STATIC button on every
+        // render — anything left registered here would accumulate (and
+        // retain this dropdown's now-detached panel subtree via the
+        // listener closures) for the life of the page.
         function destroy() {
             rootNode.removeEventListener('click', onOutsideClick);
+            cfg.btn.removeEventListener('click', onBtnClick);
+            cfg.panel.removeEventListener('keydown', onPanelKeydown);
+            cfg.clearAllBtn.removeEventListener('click', onClearAllClick);
         }
 
         return { rebuild: rebuild, destroy: destroy };
@@ -522,6 +536,38 @@ var StandplassFilterWidgets = (function () {
         });
     }
 
+    // "Rader" — how many rows a contained table shows before it scrolls.
+    // Pure math: ~2.1rem per row + ~2rem thead; "all" uncaps entirely.
+    // Shared by every page that hosts contained scroll tables; each
+    // page opens at its own markup default (no persistence — owner
+    // ruling 2026-11-19).
+    function rowsToMaxHeight(v, rowRem, headRem) {
+        if (v === 'all') { return 'none'; }
+        if (rowRem == null) { rowRem = 2.1; }
+        if (headRem == null) { headRem = 2; }
+        return (Number(v) * rowRem + headRem).toFixed(1) + 'rem';
+    }
+
+    // Wires a "Rader" select: applies the select's (markup-default)
+    // value as --club-stats-rows-max on contentEl and fires onChange(v)
+    // after every apply — initial and change — so consumers can sync a
+    // sibling select bound to the same setting. Owner ruling
+    // 2026-11-19: NO persistence for now — localStorage is never read
+    // or written, and each page opens at its own markup default (a
+    // value left in storage by the pre-batch klubbstatistikk behavior
+    // is ignored). A future "configure"-style button will own column
+    // choice and row count together, per page applicability.
+    function wireRowsSelect(cfg) {
+        var select = cfg.select;
+        function apply() {
+            var v = select.value;
+            cfg.contentEl.style.setProperty('--club-stats-rows-max', rowsToMaxHeight(v, cfg.rowRem, cfg.headRem));
+            if (cfg.onChange) { cfg.onChange(v); }
+        }
+        select.addEventListener('change', apply);
+        apply();
+    }
+
     return {
         esc: esc,
         renderList: renderList,
@@ -529,7 +575,9 @@ var StandplassFilterWidgets = (function () {
         makeComboHandlers: makeComboHandlers,
         makeCheckboxDropdown: makeCheckboxDropdown,
         makeTagComboHandlers: makeTagComboHandlers,
-        wireClearAllFilters: wireClearAllFilters
+        wireClearAllFilters: wireClearAllFilters,
+        rowsToMaxHeight: rowsToMaxHeight,
+        wireRowsSelect: wireRowsSelect
     };
 })();
 

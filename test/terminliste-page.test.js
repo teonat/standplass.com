@@ -3,6 +3,10 @@ var assert = require('assert');
 // shim the browser global before requiring, the same way
 // stevner-page.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
+// terminlisteTableSpec renders through the shared base -- same load order
+// as the page's script tags (table-renderer.js before data-table.js)
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 var TP = require('../public/js/terminliste-page.js');
 
 // Shape mirrors the live branchlist response. Includes a deleted branch
@@ -87,5 +91,211 @@ var branches = [
 assert.strictEqual(TP.groupsForBranches(branches, []).length, 3, 'no branch selected -> every group is a candidate');
 var narrowed = TP.groupsForBranches(branches, ['b2']);
 assert.deepStrictEqual(narrowed.map(function (g) { return g.id; }), ['g3'], 'selecting Rifle narrows Øvelsesgruppe to only Rifle\'s groups');
+
+// ── terminlisteTableSpec: the full page's table through the base ──────
+assert.strictEqual(typeof TP.terminlisteTableSpec, 'function', 'terminlisteTableSpec is exported');
+
+// resolved-row fixtures in the shape init's resolveRow produces
+var fullRow = {
+    id: 'c-1', status: 1, dateRange: '16.–17. nov 2026', title: 'Høststevne',
+    facilityName: 'Bomba Skytterhus', competitionTypeName: 'Åpent stevne',
+    orgName: 'Kongsvinger Sportsskyttere', kretsName: 'Glåmdalen skytterkrets',
+    branchNames: 'Pistol', groupNames: 'Feltpistol', frist: '1. nov 2026',
+    hasResult: true, resultFileUrl: 'https://example.com/r.pdf',
+    href: 'https://app.skyting.no/p/c/c-1/details',
+    starttid: '11:00',
+    klasseforendeBadge: '<span class="comp-modal-badge comp-modal-badge--yes" title="Resultater teller for klasseopprykk og -nedrykk">Klasseførende</span>'
+};
+var sparseRow = {
+    id: 'c-2', status: 2, dateRange: '20. des 2026', title: 'Julestevne',
+    facilityName: '', competitionTypeName: '', orgName: '–', kretsName: '',
+    branchNames: '–', groupNames: '–', frist: '–', hasResult: false, resultFileUrl: '',
+    href: 'https://app.skyting.no/p/c/c-2/details', starttid: '', klasseforendeBadge: ''
+};
+var resolvedRows = [fullRow, sparseRow];
+
+var pageState = function (tier) {
+    return { sort: null, hidden: {}, runtimeHidden: [], widthTier: tier };
+};
+var pageHtml = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(null));
+
+// wrapper + table element: the scroll region IS the card (the scrollbar
+// hugs the card's top/bottom edges, not a wrap that starts above it)
+assert.ok(pageHtml.indexOf('<div class="ranking-full-table terminliste-scroll-wrap"><table class="ranking-table" data-dt-id="tl-table" aria-label="Terminliste">') >= 0,
+    'the ranking-full-table wrap carries the scroll cap and aria-label');
+// header row: the visually-hidden Detaljer label survives via labelRaw
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>') >= 0,
+    'the Detaljer header stays a visually-hidden span');
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-date">Dato</th><th scope="col">Stevne</th><th scope="col">Stevnetype</th>') >= 0,
+    'plain headers render in order (cellClass lands on th too, per base semantics)');
+assert.ok(pageHtml.indexOf('<th scope="col" class="terminliste-result-cell">Resultater</th>') >= 0,
+    'Resultater header carries the column class');
+
+// full row: every cell byte-identical, row attributes through rowAttrs
+assert.ok(pageHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--clickable" data-id="c-1" data-status="1" data-title="Høststevne">') >= 0,
+    'the clickable-row attributes carry over with data-dt-row and data-title');
+assert.ok(pageHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
+    'the ⓘ button cell with its aria-label');
+assert.ok(pageHtml.indexOf('<td class="terminliste-date">16.–<wbr>17.\u00A0nov\u00A02026</td>') >= 0, 'Dato cell — nbsp halves, break only after the en-dash');
+assert.ok(pageHtml.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a><span class="terminliste-sub">Bomba Skytterhus</span></td>') >= 0,
+    'Stevne cell: title link + facility sub-line');
+assert.ok(pageHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
+assert.ok(pageHtml.indexOf('<td>Kongsvinger Sportsskyttere<span class="terminliste-sub">Glåmdalen skytterkrets</span></td>') >= 0,
+    'Arrangør cell: org + krets sub-line');
+assert.ok(pageHtml.indexOf('<td>Pistol</td>') >= 0, 'Gren cell');
+assert.ok(pageHtml.indexOf('<td>Feltpistol</td>') >= 0, 'Øvelsesgruppe cell');
+assert.ok(pageHtml.indexOf('<td class="terminliste-date">1. nov 2026</td>') >= 0, 'Påmeldingsfrist cell');
+assert.ok(pageHtml.indexOf('<td class="terminliste-result-cell"><a href="https://example.com/r.pdf" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a></td>') >= 0,
+    'Resultater cell: PDF link');
+
+// sparse row: fallbacks, status label in the ⓘ aria-label, no sub-lines
+assert.ok(pageHtml.indexOf('<tr data-dt-row="1" class="terminliste-row--clickable" data-id="c-2" data-status="2" data-title="Julestevne">') >= 0,
+    'data-status defaults carried, second row indexed');
+assert.ok(pageHtml.indexOf('aria-label="Se detaljer for Julestevne – Avvist"') >= 0,
+    'non-approved status appends its label to the ⓘ aria-label');
+assert.ok(pageHtml.indexOf('<td class="terminliste-result-cell">–</td>') >= 0, 'no result renders –');
+assert.ok(pageHtml.indexOf('<td>–</td>') >= 0, 'empty org/type render –');
+
+// responsive tiers: Arrangør hides below 860 (its column is floored by
+// the unbreakable "Sportsskytterforbund" org word — no mid-word
+// breaking, owner ruling 2026-11-20), and Gren/Påmeldingsfrist below
+// 1030 (the nine-column table's measured floor is 911px)
+var tier700 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(700));
+assert.ok(tier700.indexOf('>Arrangør</th>') < 0, 'tier 700 hides Arrangør');
+// soft hyphens (U+00AD) live inside the two long single-word header
+// labels so they can wrap in the tight band instead of flooring the
+// table's min width — goldens pin them explicitly
+var FRIST_HEADER = '>Påmeldings\u00ADfrist</th>';
+var GRUPPE_HEADER = '>Øvelses\u00ADgruppe</th>';
+assert.ok(tier700.indexOf('>Gren</th>') < 0 && tier700.indexOf(FRIST_HEADER) < 0, 'tier 700 hides Gren and Påmeldingsfrist');
+assert.ok(tier700.indexOf(GRUPPE_HEADER) >= 0 && tier700.indexOf('>Stevne</th>') >= 0, 'tier 700 keeps the always-visible columns');
+assert.ok(tier700.indexOf('Kongsvinger Sportsskyttere') < 0, 'tier 700 drops Arrangør cells too');
+var tier900 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(900));
+assert.ok(tier900.indexOf('>Arrangør</th>') >= 0, 'tier 900 keeps Arrangør (org tier is 860)');
+assert.ok(tier900.indexOf('>Gren</th>') < 0 && tier900.indexOf(FRIST_HEADER) < 0, 'tier 900 still hides Gren and Påmeldingsfrist (their tier is 1030)');
+var tier859 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(859));
+assert.ok(tier859.indexOf('>Arrangør</th>') < 0, 'tier 859 hides Arrangør');
+var tier861 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(861));
+assert.ok(tier861.indexOf('>Arrangør</th>') >= 0, 'tier 861 is the first to keep Arrangør');
+var tier1030 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(1030));
+assert.ok(tier1030.indexOf('>Gren</th>') < 0 && tier1030.indexOf(FRIST_HEADER) < 0, 'tier 1030 is the last width that hides Gren and Påmeldingsfrist');
+var tier1031 = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, {}), pageState(1031));
+assert.ok(tier1031.indexOf('>Gren</th>') >= 0 && tier1031.indexOf(FRIST_HEADER) >= 0, 'above 1030 the full column set returns');
+assert.ok(pageHtml.indexOf('>Arrangør</th>') >= 0 && pageHtml.indexOf('>Gren</th>') >= 0, 'no tier keeps everything visible');
+
+// ── shouldLoadMore: the scroll auto-load predicate (pure, no DOM) ─────
+assert.strictEqual(typeof TP.shouldLoadMore, 'function', 'shouldLoadMore is exported');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 40, clientHeight: 60, scrollHeight: 160 }), true,
+    'exactly at the 60px threshold: true');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 39, clientHeight: 60, scrollHeight: 160 }), false,
+    '1px short of the threshold: false');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 0, clientHeight: 0, scrollHeight: 0 }), false,
+    'a zero-height (unlaid-out) wrap never triggers a load');
+assert.strictEqual(TP.shouldLoadMore({ scrollTop: 100, clientHeight: 500, scrollHeight: 600 }), true,
+    'scrolled to the very bottom: true');
+
+// the "Last inn flere" button is gone; the wrap is a plain container
+// (the scroll cap lives on the table card via the spec's wrapClass)
+var fullMarkup = TP.buildMarkup('tl', false);
+assert.ok(fullMarkup.indexOf('more-btn') < 0, 'no more-btn in the full-page markup');
+assert.ok(fullMarkup.indexOf('Last inn flere') < 0, 'no Last inn flere button text');
+
+// ── expanded column set: five opt-in columns, sub-line interplay ───────
+// the page threads the SAME hidden map into the spec (sub-line interplay)
+// and the render state (column visibility) -- the tests mirror that
+var pageStateWith = function (tier, hidden) {
+    return { sort: null, hidden: hidden, runtimeHidden: [], widthTier: tier };
+};
+// all five render when explicitly shown (hidden[key] === false) …
+var shown = { krets: false, status: false, anlegg: false, starttid: false, klasseforende: false };
+var expanded = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, shown), pageStateWith(null, shown));
+assert.ok(expanded.indexOf('>Krets</th>') >= 0 && expanded.indexOf('<td>Glåmdalen skytterkrets</td>') >= 0, 'Krets column renders when shown');
+assert.ok(expanded.indexOf('>Status</th>') >= 0 && expanded.indexOf('<td>Avvist</td>') >= 0, 'Status column renders non-approved labels');
+assert.ok(expanded.indexOf('>Anlegg</th>') >= 0 && expanded.indexOf('<td>Bomba Skytterhus</td>') >= 0, 'Anlegg column renders when shown');
+assert.ok(expanded.indexOf('>Starttid</th>') >= 0 && expanded.indexOf('<td class="terminliste-date">11:00</td>') >= 0, 'Starttid column renders when shown');
+assert.ok(expanded.indexOf('>Klasseførende</th>') >= 0 && expanded.indexOf('comp-modal-badge--yes') >= 0, 'Klasseførende badge renders when shown');
+// … and are all absent by default
+assert.ok(pageHtml.indexOf('>Krets</th>') < 0 && pageHtml.indexOf('>Status</th>') < 0 && pageHtml.indexOf('>Anlegg</th>') < 0
+    && pageHtml.indexOf('>Starttid</th>') < 0 && pageHtml.indexOf('>Klasseførende</th>') < 0,
+    'the five new columns are hidden by default');
+
+// sub-line interplay: showing a column drops the sub-line that would
+// duplicate it under its parent column
+assert.ok(pageHtml.indexOf('<span class="terminliste-sub">Glåmdalen skytterkrets</span>') >= 0, 'krets sub-line present by default');
+assert.ok(pageHtml.indexOf('<span class="terminliste-sub">Bomba Skytterhus</span>') >= 0, 'facility sub-line present by default');
+var interplayMap = { krets: false, anlegg: false };
+var interplay = StandplassDataTable.renderTable('tl-table', TP.terminlisteTableSpec(resolvedRows, interplayMap), pageStateWith(null, interplayMap));
+assert.ok(interplay.indexOf('<span class="terminliste-sub">Glåmdalen skytterkrets</span>') < 0, 'krets sub-line drops when the Krets column is shown');
+assert.ok(interplay.indexOf('<span class="terminliste-sub">Bomba Skytterhus</span>') < 0, 'facility sub-line drops when the Anlegg column is shown');
+assert.ok(interplay.indexOf('<td>Kongsvinger Sportsskyttere</td>') >= 0, 'org name itself stays in the Arrangør cell');
+assert.ok(interplay.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details" target="_blank" rel="noopener noreferrer">Høststevne</a></td>') >= 0, 'title link stays in the Stevne cell');
+
+// the picker button sits in a toolbar with the status message, right
+// above the table card (status left, Kolonner right — the stevner
+// stats-bar pattern)
+// the picker button sits INSIDE its anchor at the toolbar's right end
+// (the stevner pattern) — a bare renderPickerButton() emits button +
+// anchor as siblings, and space-between centers the button mid-row
+// while the panel opens from the anchor at the far right
+assert.ok(fullMarkup.indexOf('terminliste-toolbar') >= 0, 'toolbar row emitted');
+assert.ok(fullMarkup.indexOf('terminliste-picker-row') < 0, 'no detached picker row above the status gap');
+assert.ok(fullMarkup.indexOf('<div class="dt-picker-anchor"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') >= 0,
+    'anchor-wrapped Kolonner button emitted (button where the panel opens)');
+assert.ok(fullMarkup.indexOf('dt-picker-anchor') >= 0, 'picker anchor emitted');
+
+// the new columns stay hidden at tier 700 too
+assert.ok(tier700.indexOf('>Krets</th>') < 0 && tier700.indexOf('>Starttid</th>') < 0, 'new columns stay hidden at tier 700');
+
+// ── compactTableSpec: the widget's table through the base ─────────────
+assert.strictEqual(typeof TP.compactTableSpec, 'function', 'compactTableSpec is exported');
+var compactSpec = TP.compactTableSpec(resolvedRows);
+var compactHtml = StandplassDataTable.renderTable('tl-widget-table', compactSpec, pageState(null));
+// byte-exact compact row: plain-text title (NO link -- the widget's rows
+// open the modal on title clicks, a link would hijack that)
+assert.ok(compactHtml.indexOf('<table class="ranking-table" data-dt-id="tl-widget-table" aria-label="Stevner">') >= 0,
+    'no ranking-full-table wrap, Stevner aria-label');
+assert.ok(compactHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--clickable" data-id="c-1" data-status="1" data-title="Høststevne">') >= 0,
+    'the clickable-row attributes carry over');
+assert.ok(compactHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
+    'the ⓘ cell never appends status text in the widget');
+assert.ok(compactHtml.indexOf('<td class="terminliste-date">16.–<wbr>17.\u00A0nov\u00A02026</td>') >= 0, 'Dato cell — nbsp halves, break only after the en-dash');
+assert.ok(compactHtml.indexOf('<td>Høststevne</td>') >= 0, 'Stevne cell is plain text, no link');
+assert.ok(compactHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
+assert.ok(compactHtml.indexOf('<td class="terminliste-result-cell"><a href="https://example.com/r.pdf" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a></td>') >= 0,
+    'PDF result cell');
+// tiers: Stevnetype hides at 700, everything else stays
+var compact700 = StandplassDataTable.renderTable('tl-widget-table', compactSpec, pageState(700));
+assert.ok(compact700.indexOf('>Stevnetype</th>') < 0, 'tier 700 hides Stevnetype');
+assert.ok(compactHtml.indexOf('>Stevnetype</th>') >= 0, 'no tier keeps Stevnetype');
+// the widget wrap is a 10-row capped scroll area
+var compactMarkup = TP.buildMarkup('tl', true);
+assert.ok(compactMarkup.indexOf('terminliste-widget-scroll') >= 0, 'widget wrap gets the 10-row scroll-cap class');
+
+// ── wiring pins: the auto-load must target the REAL scroll container ───
+// QA round 1 moved the cap onto the base-emitted card (.terminliste-
+// scroll-wrap via the spec's wrapClass) — element scroll events do NOT
+// bubble, so a listener on the outer #table-wrap never fires and rows
+// past the first page became unreachable (whole-batch review C1).
+var fs = require('fs');
+var tpSrc = fs.readFileSync(__dirname + '/../public/js/terminliste-page.js', 'utf8');
+assert.ok(tpSrc.indexOf("querySelector('.terminliste-scroll-wrap')") >= 0,
+    'the render path re-queries the scroll card (the actual scroll container)');
+assert.ok(tpSrc.indexOf("card.addEventListener('scroll'") >= 0,
+    'the scroll listener attaches to the card itself (scroll events do not bubble)');
+assert.ok(tpSrc.indexOf("tableWrapEl.addEventListener('scroll'") < 0,
+    'no scroll listener on the non-scrolling outer wrap');
+assert.ok(tpSrc.indexOf('card.scrollTop = prevScroll') >= 0,
+    'a full re-render restores the scroll position (no snap-to-top per page)');
+
+// ── picker-facing labels must be plain text (review I1) ───────────────
+// labelRaw headers (the visually-hidden Detaljer span) would otherwise
+// list as literal HTML soup in the Kolonner dropdown.
+var pickerNames = TP.terminlisteTableSpec(resolvedRows, {}).columns.map(function (col) {
+    return col.pickerLabel || col.label;
+});
+assert.ok(pickerNames.every(function (n) { return String(n).indexOf('<') < 0; }),
+    'every picker-listed column name is plain text');
+assert.ok(pickerNames.indexOf('Detaljer') >= 0,
+    'the visually-hidden detaljer column gets a plain picker label');
 
 console.log('terminliste-page.test.js: all assertions passed');

@@ -21,8 +21,9 @@ var StandplassPersonModalController = (function () {
     // Shared across every widget instance on the page (any number of
     // klubb/felt/bane instances), so with two open modals, Escape closes
     // only the most-recently-opened one -- matches stevner-page.js's own
-    // prior convention exactly (a single shared pointer, not a stack; see
-    // that file's STATUS.md-documented limitation, carried over unchanged).
+    // prior convention exactly (a single shared pointer, not a stack:
+    // with two modals open, Escape reaches only the newest until it
+    // closes; a known limitation, carried over unchanged).
     var activeModalCloser = null;
     var escapeHandlerWired = false;
     function wireGlobalEscapeHandler() {

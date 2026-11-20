@@ -366,6 +366,38 @@ var StandplassCompModal = (function () {
                 + '<div class="comp-modal-events-wrap"><div class="comp-modal-events-scroll">' + eventsHtml + '</div></div>' : '');
     }
 
+    // Resultater table columns -- a straight port of the hand-rolled
+    // markup: no sorting, no picker, no tiers. The table mirrors the
+    // official registered results as app.skyting.no displays them.
+    var RESULTS_COLUMNS = [
+        { key: 'position', label: 'Plass', cell: function (r) { return r.position != null ? r.position : '–'; } },
+        { key: 'fullName', label: 'Navn', cell: function (r) { return r.fullName || '–'; } },
+        { key: 'organizationName', label: 'Klubb', cell: function (r) { return r.organizationName || '–'; } },
+        { key: 'className', label: 'Klasse', cell: function (r) { return r.className || '–'; } },
+        { key: 'score', label: 'Poeng', cell: function (r) { return r.score != null ? r.score : '–'; } }
+    ];
+
+    // classGroups: [{ label: class name, rows: result rows pre-sorted by
+    // position }] -- the shape renderResultsBody's class sub-grouping
+    // produces. Rows are copied into the base's row shape (className
+    // rides along from the group label, since the Klasse cell repeats
+    // it), keeping data-dt-row indices real; the group rows and data
+    // cells come out byte-identical to the previous hand-rolled markup.
+    function competitionResultsTableSpec(classGroups) {
+        var flat = [];
+        var groups = (classGroups || []).map(function (g) {
+            var rows = (g.rows || []).map(function (r) {
+                var row = { position: r.position, fullName: r.fullName, organizationName: r.organizationName,
+                    className: g.label, score: r.score };
+                flat.push(row);
+                return row;
+            });
+            return { label: g.label, rows: rows };
+        });
+        return { columns: RESULTS_COLUMNS, rows: flat, groupRows: function () { return groups; },
+            tableClass: 'ranking-full-table ranking-table' };
+    }
+
     function renderResultsBody(results, selectedDiscId, idPrefix) {
         var discNames = {};
         results.forEach(function (r) {
@@ -390,7 +422,7 @@ var StandplassCompModal = (function () {
         var groups = groupEventsByDiscipline(filtered.map(function (r) {
             return { discipline: refData.disciplines[r.disciplineId] || r.disciplineId || '–', row: r };
         }));
-        var tablesHtml = groups.map(function (g) {
+        var tablesHtml = groups.map(function (g, gi) {
             // Same class-header sub-grouping the source's CompModal uses
             // (_renderResultTable) -- without it, rows across different
             // classes interleave by raw position (which resets per class),
@@ -404,19 +436,13 @@ var StandplassCompModal = (function () {
             });
             classOrder.sort(function (a, b) { return a.localeCompare(b, 'no'); });
 
-            var bodyHtml = classOrder.map(function (cname) {
-                var rows = classMap[cname].slice()
-                    .sort(function (a, b) { return (a.position == null) - (b.position == null) || (a.position || 0) - (b.position || 0); });
-                return '<tr class="ranking-class-header"><th scope="colgroup" colspan="5">' + esc(cname) + '</th></tr>'
-                    + rows.map(function (r) {
-                        return '<tr><td>' + esc(r.position != null ? r.position : '–') + '</td><td>' + esc(r.fullName || '–') + '</td>'
-                            + '<td>' + esc(r.organizationName || '–') + '</td><td>' + esc(cname) + '</td>'
-                            + '<td>' + esc(r.score != null ? r.score : '–') + '</td></tr>';
-                    }).join('');
-            }).join('');
+            var classGroups = classOrder.map(function (cname) {
+                return { label: cname, rows: classMap[cname].slice()
+                    .sort(function (a, b) { return (a.position == null) - (b.position == null) || (a.position || 0) - (b.position || 0); }) };
+            });
             return '<p class="comp-modal-section-title">' + esc(g.discipline) + '</p>'
-                + '<table class="ranking-full-table ranking-table"><thead><tr><th>Plass</th><th>Navn</th><th>Klubb</th><th>Klasse</th><th>Poeng</th></tr></thead><tbody>'
-                + bodyHtml + '</tbody></table>';
+                + StandplassDataTable.renderTable('comp-results-' + gi, competitionResultsTableSpec(classGroups),
+                    { hidden: {}, runtimeHidden: [], widthTier: null });
         }).join('');
         return filterHtml + tablesHtml;
     }
@@ -444,6 +470,7 @@ var StandplassCompModal = (function () {
         fetchResults: fetchResults,
         renderDetailBody: renderDetailBody,
         renderResultsBody: renderResultsBody,
+        competitionResultsTableSpec: competitionResultsTableSpec,
         formatMetaLine: formatMetaLine
     };
 })();

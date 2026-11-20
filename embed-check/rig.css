@@ -1,0 +1,26 @@
+/* embed-check/rig.css — deliberately NOT standplass styling: these
+   pages play foreign sites (serif, warm paper background), so any
+   styling the embed needs has to arrive through its own Shadow DOM.
+   Shared by every case page. */
+* { box-sizing: border-box; }
+body {
+    font-family: Georgia, 'Times New Roman', serif;
+    max-width: 90rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #222;
+    background: #f7f4ee;
+}
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.1rem; margin-top: 2.5rem; }
+.embed-note { font-size: 0.85rem; color: #666; }
+.embed-error { color: #a00; font-weight: bold; }
+.rig-nav {
+    font-size: 0.85rem;
+    margin: 0 0 1.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #efe9de;
+    border: 1px solid #ddd5c4;
+}
+.rig-nav a { margin-right: 0.75rem; }
+.rig-nav a[aria-current="page"] { font-weight: bold; }

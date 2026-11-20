@@ -2,6 +2,10 @@
 var assert = require('node:assert');
 var CS = require('../public/js/club-stats-page.js');
 global.StandplassStevnerPage = require('../public/js/stevner-page.js');
+// Cross-module globals the page modules reference at call time (same
+// pattern as every other page test in this repo).
+global.StandplassTable = require('../public/js/table-renderer.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
 
@@ -559,11 +563,24 @@ var sortRanking = CS.computeTopThreeRanking([
 assert.deepStrictEqual(sortRanking.map(function (s) { return s.name; }), ['Abe', 'Zed'], 'total tie -> name order');
 
 // ── renderTopThreeHtml ────────────────────────────────────────────────
+// opts: { mode, hidden: {colKey: bool}, sort: {key, dir} } — the shared
+// table base contract. Øvelse columns are defaultHidden; revealing them
+// is a false entry in the hidden map (the column picker's state).
 
 var top3Ranking = [
     { personId: 'p1', name: 'Alice', total: 3, combos: { 'Finfelt|A': 2, 'Spesialpistol|Åpen': 1 } },
     { personId: 'p2', name: 'Bob', total: 2, combos: { 'Finfelt|A': 1, 'Finfelt|Åpen': 1 } }
 ];
+function showAllCombos(ranking) {
+    var hidden = {};
+    var totals = {};
+    ranking.forEach(function (s) {
+        Object.keys(s.combos).forEach(function (k) { totals[k] = (totals[k] || 0) + s.combos[k]; });
+    });
+    Object.keys(totals).forEach(function (k) { hidden['combo|' + k] = false; });
+    return hidden;
+}
+
 var top3Html = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, {});
 assert.ok(top3Html.indexOf('Flest topp-3 plasseringer') >= 0, 'card title');
 assert.ok(top3Html.indexOf('aria-label="Flest topp-3 plasseringer i 2026 for K1"') >= 0, 'table aria-label names club and year');
@@ -573,7 +590,18 @@ assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
 assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
 assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
 assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
-assert.ok(top3Html.indexOf('Vis øvelser') >= 0, 'øvelser reveal toggle present');
+assert.ok(top3Html.indexOf('Vis øvelser') < 0, 'øvelser reveal toggle replaced by the column picker');
+assert.ok(top3Html.indexOf('data-dt-picker') >= 0, 'column picker button (Kolonner) present');
+assert.ok(top3Html.indexOf('dt-picker-anchor') >= 0, 'picker scaffold anchor present');
+assert.ok(top3Html.indexOf('3. plass</button><button type="button" class="dt-picker-btn"') !== -1
+    && top3Html.indexOf('Kolonner</button><div class="dt-picker-anchor"></div></div>') !== -1,
+    'picker button + anchor sit inline in the mode row');
+assert.ok(top3Html.indexOf('dt-toolbar') === -1, 'no separate toolbar row above the table');
+assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
+assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
+assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');
+assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+    'page order stands until a sort is set');
 // Placement-mode group: 4 buttons, aria-pressed only on the active one
 assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
 assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
@@ -583,26 +611,39 @@ assert.ok(top3Html.indexOf('data-mode="p1" aria-pressed="false"') >= 0, 'inactiv
 var p2ModeHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { mode: 'p2' });
 assert.ok(p2ModeHtml.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'selected mode pressed');
 assert.ok(p2ModeHtml.indexOf('data-mode="top3" aria-pressed="true"') < 0, 'default mode unpressed when p2 selected');
-// showOvelser: true reveals ALL combo headers
-var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { showOvelser: true });
+// hidden map with false entries reveals the øvelse columns
+var ovelserHtml = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { hidden: showAllCombos(top3Ranking) });
 assert.ok(ovelserHtml.indexOf('Finfelt A') >= 0, 'combo headers revealed');
 assert.ok(ovelserHtml.indexOf('Spesialpistol Åpen') >= 0, 'effective class header revealed');
-assert.ok(ovelserHtml.indexOf('Skjul øvelser') >= 0, 'label flips when shown');
+assert.ok(ovelserHtml.indexOf('data-dt-sort="combo|Finfelt|A"') >= 0, 'øvelse columns are sortable');
 // Alternating-column shading on øvelse columns (class-based, never nth-child):
-// odd-index visible combos get .top3-col-alt on their th and every td.
+// every other VISIBLE combo column gets .top3-col-alt on its th and tds.
 var altRanking = [{ personId: 'a1', name: 'Alt', total: 6, combos: { 'Finfelt|A': 1, 'Grovfelt|B': 2, 'Militærfelt|C': 3 } }];
-var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { showOvelser: true });
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Grovfelt B') >= 0, 'odd-index combo header shaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Finfelt A') >= 0, 'first combo header unshaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Finfelt A') < 0, 'first combo header never shaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score">Militærfelt C') >= 0, 'third combo header unshaded');
-assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt">Militærfelt C') < 0, 'third combo header never shaded');
+var altHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: showAllCombos(altRanking) });
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Grovfelt|B">Grovfelt B') >= 0, 'odd-index combo header shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">Finfelt A') >= 0, 'first combo header unshaded');
+assert.ok(altHtml.indexOf('top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">') < 0, 'first combo header never shaded');
+assert.ok(altHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">Militærfelt C') >= 0, 'third combo header unshaded');
+assert.ok(altHtml.indexOf('top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">') < 0, 'third combo header never shaded');
 assert.ok(altHtml.indexOf('<td class="ranking-score top3-col-alt">2</td>') >= 0, 'shaded combo column body cells carry the class');
 assert.ok(altHtml.indexOf('<td class="ranking-score">1</td>') >= 0, 'unshaded combo body cells stay plain');
 assert.ok(altHtml.indexOf('<td class="ranking-score">3</td>') >= 0, 'unshaded combo body cells stay plain (2)');
 assert.strictEqual((altHtml.match(/top3-col-alt/g) || []).length, 2, 'exactly one th and one td shaded (single shooter, one odd combo)');
+// Picker subsets: shading re-flows over the VISIBLE combos — hiding the
+// shaded column shades the next visible one, so the every-other-column
+// accent survives any selection. (comboOrder is total-desc here:
+// Militærfelt C, Grovfelt B, Finfelt A.)
+var subsetHidden = showAllCombos(altRanking);
+subsetHidden['combo|Grovfelt|B'] = true;
+var subsetHtml = CS.renderTopThreeHtml(altRanking, 'K1', 2026, { hidden: subsetHidden });
+assert.ok(subsetHtml.indexOf('<th scope="col" class="ranking-score top3-col-alt"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Finfelt|A">Finfelt A') >= 0,
+    'hiding the shaded combo shades the next visible combo');
+assert.ok(subsetHtml.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="combo|Militærfelt|C">Militærfelt C') >= 0,
+    'first visible combo stays unshaded');
+assert.strictEqual((subsetHtml.match(/top3-col-alt/g) || []).length, 2,
+    'exactly one th + one td shaded in the subset render');
 assert.strictEqual(CS.renderTopThreeHtml(altRanking, 'K1', 2026, {}).indexOf('top3-col-alt'), -1, 'no shading when øvelser hidden');
-// Row paging: 10 shown, toggle appears beyond that
+// Row paging: all rows rendered, no toggle
 var manyRows = [];
 for (var ri = 0; ri < 14; ri++) {
     manyRows.push({ personId: 'r' + ri, name: 'Skytter ' + ri, total: 1, combos: { 'Finfelt|A': 1 } });
@@ -611,13 +652,15 @@ var pagedHtml = CS.renderTopThreeHtml(manyRows, 'K1', 2026, {});
 assert.ok(pagedHtml.indexOf('Skytter 13') >= 0, 'all rows rendered, no row paging');
 assert.ok(pagedHtml.indexOf('top3-row-toggle') < 0 && pagedHtml.indexOf('Vis alle (') < 0, 'no row paging toggle');
 assert.ok(pagedHtml.indexOf('club-stats-list-scroll') >= 0, 'table region gets the scroll cap');
-// No combo cap: 14 combos all rendered when øvelser shown (zero-padding makes
+// No combo cap: 14 combos all rendered when shown (zero-padding makes
 // the alphabetical tie order deterministic)
 var manyCombos = [{ personId: 'c1', name: 'C1', total: 14, combos: {} }];
+var allCombosHidden = {};
 for (var ci = 0; ci < 14; ci++) {
     manyCombos[0].combos['Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = 1;
+    allCombosHidden['combo|Øvelse ' + (ci < 10 ? '0' + ci : ci) + '|A'] = false;
 }
-var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { showOvelser: true });
+var allCombosHtml = CS.renderTopThreeHtml(manyCombos, 'K1', 2026, { hidden: allCombosHidden });
 for (var ai = 0; ai < 14; ai++) {
     assert.ok(allCombosHtml.indexOf('Øvelse ' + (ai < 10 ? '0' + ai : ai) + ' A') >= 0, 'all combo headers shown, no cap (' + ai + ')');
 }
@@ -625,61 +668,214 @@ assert.ok(allCombosHtml.indexOf('Vis alle øvelser') < 0 && allCombosHtml.indexO
 assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking -> no card');
 
 var evilTop3 = CS.renderTopThreeHtml(
-    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026, { showOvelser: true });
+    [{ personId: 'e', name: '<img src=x onerror=alert(1)>', total: 1, combos: { '<b>Finfelt</b>|A': 1 } }], 'K1', 2026,
+    { hidden: { 'combo|<b>Finfelt</b>|A': false } });
 assert.ok(evilTop3.indexOf('&lt;img') >= 0 && evilTop3.indexOf('<img') < 0, 'name escaped');
 assert.ok(evilTop3.indexOf('&lt;b&gt;Finfelt') >= 0, 'combo label escaped');
 
 // ── empty ranking in a non-default mode keeps the card shell ──────────
-// (mode buttons and øvelser toggle must stay reachable in-card)
-var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2', showOvelser: false });
+// (mode buttons must stay reachable in-card)
+var emptyP2Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p2' });
 assert.ok(emptyP2Html.indexOf('data-card="top3"') >= 0, 'empty p2 mode keeps card shell');
 assert.ok(emptyP2Html.indexOf('data-mode="p2" aria-pressed="true"') >= 0, 'shell keeps current mode pressed');
 assert.ok(emptyP2Html.indexOf('data-mode="top3" aria-pressed="false"') >= 0, 'shell keeps other modes unpressed');
-assert.ok(emptyP2Html.indexOf('Vis øvelser') >= 0, 'shell keeps øvelser toggle');
 assert.ok(emptyP2Html.indexOf('ranking-status-msg') >= 0, 'empty-state uses status msg class');
 assert.ok(emptyP2Html.indexOf('Ingen 2. plasser for denne klubben i 2026.') >= 0, 'empty-state line names mode and year');
-var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3', showOvelser: false });
+var emptyP3Html = CS.renderTopThreeHtml([], 'K1', 2026, { mode: 'p3' });
 assert.ok(emptyP3Html.indexOf('Ingen 3. plasser for denne klubben i 2026.') >= 0, 'p3 empty-state names 3. plasser');
 assert.ok(emptyP3Html.indexOf('data-mode="p3" aria-pressed="true"') >= 0, 'p3 shell keeps mode pressed');
-// Initial render (default mode, øvelser hidden) with no data: no card at all
-assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + øvelser hidden -> no card');
-// øvelser toggle carries a stable id so the delegated handler can refocus it
-assert.ok(top3Html.indexOf('id="top3-ovelser-btn"') >= 0, 'øvelser toggle has stable id for refocus');
+// Initial render (default mode, no column choices) with no data: no card at all
+assert.strictEqual(CS.renderTopThreeHtml([], 'K1', 2026, {}), '', 'empty ranking + default mode + no column choices -> no card');
+// A column choice made earlier keeps the shell reachable in-card
+assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': false } }).indexOf('data-card="top3"') >= 0,
+    'empty ranking + column choices -> card shell kept');
+
+// Sorting survives the state→render→wire round-trip (Review Focus #3):
+// the page persists the sort in top3State and passes the same state back.
+// The # column is each shooter's RANK (page-order placement) — it travels
+// with the row under sorting instead of renumbering.
+var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+    'asc sort: Bob leads but keeps his rank (2)');
+assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+    'asc sort: Alice is second but keeps her rank (1)');
+assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
+var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+    'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────
 // Every klubbstatistikk table renders all rows (no paging, no "Vis
 // alle") inside .club-stats-list-scroll, whose max-height comes from
-// the user's "Rader" setting.
+// the user's "Rader" setting. tableHtml is the only table source since
+// batch 1 — the old headHtml/renderRow path is deleted.
 var expRows = [];
 for (var ei = 0; ei < 14; ei++) { expRows.push({ club: 'Klubb ' + ei, value: 100 - ei }); }
-function expRenderRow(row, i) {
-    return '<tr><td class="ranking-rank">' + (i + 1) + '</td><td>' + row.club + '</td><td class="ranking-score">' + row.value + '</td></tr>';
-}
-var expHead = '<thead><tr><th scope="col" class="ranking-rank">#</th><th scope="col">Klubb</th><th scope="col" class="ranking-score">starter</th></tr></thead>';
+var expColumns = [
+    { key: 'rank', label: '#', align: 'center' },
+    { key: 'club', label: 'Klubb' },
+    { key: 'value', label: 'starter', align: 'right' }
+];
+var expSpec = {
+    columns: expColumns,
+    rows: expRows.map(function (r, i) { return { rank: i + 1, club: r.club, value: r.value }; }),
+    ariaLabel: 'Test toplist 2026'
+};
 var expCard = CS.buildTableCard({
-    id: 'test-list', title: 'Test toplist', ariaLabel: 'Test toplist 2026',
-    headHtml: expHead, rows: expRows, renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'test-list', title: 'Test toplist', rows: expSpec.rows,
+    tableHtml: StandplassDataTable.renderTable('test-list', expSpec, { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expCard.indexOf('Klubb 13') >= 0, 'table card: all rows rendered');
 assert.ok(expCard.indexOf('Vis alle') < 0 && expCard.indexOf('data-expand-list') < 0, 'table card: no expand toggle');
-assert.ok(expCard.indexOf('id="test-list-table"') >= 0, 'table card: table id present');
+assert.ok(expCard.indexOf('data-dt-id="test-list"') >= 0, 'table card: table carries data-dt-id');
 var expWrapIdx = expCard.indexOf('club-stats-list-scroll');
 var expTableIdx = expCard.indexOf('<table');
 assert.ok(expWrapIdx >= 0 && expWrapIdx < expTableIdx, 'table card: table wrapped in scroll region');
 var expShort = CS.buildTableCard({
-    id: 'short-list', title: 'Short', ariaLabel: 'Short', headHtml: expHead,
-    rows: expRows.slice(0, 4), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'short-list', title: 'Short', rows: expSpec.rows.slice(0, 4),
+    tableHtml: StandplassDataTable.renderTable('short-list',
+        { columns: expColumns, rows: expSpec.rows.slice(0, 4), ariaLabel: 'Short' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expShort.indexOf('Klubb 3') >= 0, 'table card: all short rows rendered');
 assert.strictEqual(CS.buildTableCard({
-    id: 'empty-list', title: 'Empty', ariaLabel: 'Empty', headHtml: expHead,
-    rows: [], renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'empty-list', title: 'Empty', rows: [],
+    tableHtml: StandplassDataTable.renderTable('empty-list',
+        { columns: expColumns, rows: [], ariaLabel: 'Empty' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 }), '', 'table card: empty rows -> no card');
 var expEvil = CS.buildTableCard({
-    id: 'evil-list', title: '<img src=x>', ariaLabel: 'XSS <script>', headHtml: expHead,
-    rows: expRows.slice(0, 2), renderRow: expRenderRow, cardClass: 'club-stats-toplist'
+    id: 'evil-list', title: '<img src=x>', rows: expSpec.rows.slice(0, 2),
+    tableHtml: StandplassDataTable.renderTable('evil-list',
+        { columns: expColumns, rows: expSpec.rows.slice(0, 2), ariaLabel: 'XSS <script>' },
+        { hidden: {}, runtimeHidden: [], widthTier: null }),
+    cardClass: 'club-stats-toplist'
 });
 assert.ok(expEvil.indexOf('&lt;img') >= 0 && expEvil.indexOf('&lt;script') >= 0, 'table card: title/ariaLabel escaped');
+
+// ── Drilldown tables through the shared base (batch 1) ─────────────────
+// Pure spec builders feeding renderTable: mostActiveTableSpec,
+// disciplineTableSpec, organizedCompsTableSpec, classDistTableSpec
+// (each takes clubName last, for the aria-label). Goldens pin today's
+// markup plus sort buttons on the opted-in columns.
+var ddState = { hidden: {}, runtimeHidden: [], widthTier: null };
+function ddSorted(spec, key, dir) {
+    return StandplassDataTable.renderTable('dd-sort', spec,
+        { sort: { key: key, dir: dir }, hidden: {}, runtimeHidden: [], widthTier: null });
+}
+
+// Mest aktive skyttere
+var maSpec = CS.mostActiveTableSpec([
+    { name: 'Alice', starts: 9 },
+    { name: 'Bob', starts: 4 }
+], 'Klubb X');
+assert.strictEqual(maSpec.ariaLabel, 'Mest aktive skyttere for Klubb X', 'mest aktive: aria-label');
+var maHtml = StandplassDataTable.renderTable('mest-aktive', maSpec, ddState);
+assert.ok(maHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'mest aktive: sortable Navn/Starter headers');
+assert.ok(maHtml.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td><td class="ranking-score">9</td></tr>') !== -1,
+    'mest aktive: row markup matches today');
+var maAsc = ddSorted(maSpec, 'starts', 'asc');
+assert.ok(maAsc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') !== -1
+    && maAsc.indexOf('<tr data-dt-row="1">') < maAsc.indexOf('<tr data-dt-row="0">'),
+    'mest aktive: rank travels under a Starter sort');
+
+// Øvelsesfordeling
+var discData = {
+    'Finfelt': { shooters: { a: 1, b: 1, c: 1 }, starts: 7 },
+    'Grovfelt': { shooters: { d: 1 }, starts: 3 }
+};
+var discSpec = CS.disciplineTableSpec(['Finfelt', 'Grovfelt'], discData, 'Klubb X');
+assert.strictEqual(discSpec.ariaLabel, 'Øvelsesfordeling for Klubb X', 'øvelsesfordeling: aria-label');
+var discHtml = StandplassDataTable.renderTable('ovelsesfordeling', discSpec, ddState);
+assert.ok(discHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'øvelsesfordeling: all three columns sortable');
+assert.ok(discHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td class="ranking-score">3</td><td class="ranking-score">7</td></tr>') !== -1,
+    'øvelsesfordeling: bare-name rows flattened with counts');
+var discAsc = ddSorted(discSpec, 'shooters', 'asc');
+assert.ok(discAsc.indexOf('<tr data-dt-row="1"><td>Grovfelt</td>') !== -1
+    && discAsc.indexOf('<tr data-dt-row="1">') < discAsc.indexOf('<tr data-dt-row="0">'),
+    'øvelsesfordeling: shooters asc reorders');
+
+// Arrangerte stevner
+var orgSpec = CS.organizedCompsTableSpec([
+    { title: 'Uten dato', startDate: null, facilityName: null },
+    { title: 'Høststevnet', startDate: '2026-10-03T10:00:00Z', facilityName: 'Bane A' },
+    { title: 'Vårfeltet', startDate: '2026-03-01T08:00:00Z', facilityName: null }
+], 'Klubb X');
+assert.strictEqual(orgSpec.ariaLabel, 'Arrangerte stevner for Klubb X', 'arrangerte: aria-label');
+var orgHtml = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec, ddState);
+assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td>Høststevnet</td><td>2026-10-03</td><td>Bane A</td></tr>') !== -1,
+    'arrangerte: ISO date sliced to YYYY-MM-DD');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td></tr>') !== -1,
+    'arrangerte: missing values render –');
+var orgAsc = ddSorted(orgSpec, 'startDate', 'asc');
+assert.ok(orgAsc.indexOf('Vårfeltet') < orgAsc.indexOf('Høststevnet') && orgAsc.indexOf('Høststevnet') < orgAsc.indexOf('Uten dato'),
+    'arrangerte: Dato asc sorts chronologically, nulls last');
+
+// Klassefordeling
+var cdSpec = CS.classDistTableSpec([
+    { discipline: 'Finfelt', class: 'Åpen', shooters: 2, starts: 5 },
+    { discipline: 'Finfelt', class: 'Ærlig', shooters: 3, starts: 7 }
+], 'Klubb X');
+assert.strictEqual(cdSpec.ariaLabel, 'Klassefordeling for Klubb X', 'klassefordeling: aria-label');
+var cdHtml = StandplassDataTable.renderTable('klassefordeling', cdSpec, ddState);
+assert.ok(cdHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="class">Klasse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'klassefordeling: all four columns sortable');
+assert.ok(cdHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td>Åpen</td><td class="ranking-score">2</td><td class="ranking-score">5</td></tr>') !== -1,
+    'klassefordeling: row markup matches today');
+var cdAsc = ddSorted(cdSpec, 'class', 'asc');
+assert.ok(cdAsc.indexOf('Ærlig') < cdAsc.indexOf('Åpen'),
+    'klassefordeling: Klasse sorts Norwegian-collated (Æ before Å)');
+// Øvelse ties resolve by Klasse (the column's secondary sort key):
+// within Finfelt, Ærlig sorts before Åpen — the default starts-desc
+// page order would otherwise carry into the tie group.
+var cdDisc = ddSorted(cdSpec, 'discipline', 'asc');
+assert.ok(cdDisc.indexOf('Ærlig') < cdDisc.indexOf('Åpen'),
+    'klassefordeling: Øvelse sort keeps each øvelse\'s classes alphabetical');
+
+// ── Chart details table spec (batch 1) ──────────────────────────────────
+var ctSpecStarts = CS.chartTableSpec('starts',
+    [{ year: 2025, value: 40 }, { year: 2026, value: 45 }],
+    [{ year: 2026, value: 12 }]);
+assert.strictEqual(ctSpecStarts.ariaLabel, 'Aktivitet per år', 'chart table: aria-label');
+var ctHtml = StandplassDataTable.renderTable('chart-data', ctSpecStarts, ddState);
+assert.ok(ctHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="year">År<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="felt">Felt starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="bane">Bane starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'chart table: starts labels + sortable columns');
+assert.ok(ctHtml.indexOf('<tr data-dt-row="0"><td>2025</td><td class="ranking-score">40</td><td class="ranking-score">–</td></tr>') !== -1
+    && ctHtml.indexOf('<tr data-dt-row="1"><td>2026</td><td class="ranking-score">45</td><td class="ranking-score">12</td></tr>') !== -1,
+    'chart table: year rows with – for missing series points');
+var ctDesc = ddSorted(ctSpecStarts, 'year', 'desc');
+assert.ok(ctDesc.indexOf('<td>2026</td>') < ctDesc.indexOf('<td>2025</td>'),
+    'chart table: År desc reverses year order');
+var ctNulls = ddSorted(ctSpecStarts, 'bane', 'desc');
+assert.ok(ctNulls.indexOf('<td>2026</td>') < ctNulls.indexOf('<td>2025</td>'),
+    'chart table: nulls sort last on a value column');
+var ctSpecAge = CS.chartTableSpec('avgAge', [{ year: 2026, value: 47.5 }], []);
+var ctAgeHtml = StandplassDataTable.renderTable('chart-data', ctSpecAge, ddState);
+assert.ok(ctAgeHtml.indexOf('Felt snittalder') >= 0 && ctAgeHtml.indexOf('Bane snittalder') >= 0,
+    'chart table: avgAge branch labels');
+assert.ok(ctAgeHtml.indexOf('<td class="ranking-score">47.5</td>') >= 0,
+    'chart table: age values formatted via formatAgeValue');
 
 // ── Age series computation ──────────────────────────────────────────────
 
@@ -832,6 +1028,95 @@ assert.strictEqual(CS.normalizeClubChartMetric(null), 'shooters');
     cached(null); cached('Klubb A'); cached(null);
     assert.strictEqual(calls.length, 2, 'same scope is served from cache');
     assert.deepStrictEqual(calls, [null, 'Klubb A']);
+})();
+
+// ── Toplists through the shared table base ──────────────────────────────
+// The migrated toplistCard builds its <table> via
+// StandplassDataTable.renderTable inside buildTableCard's tableHtml path.
+// This mirrors that composition and pins today's observable markup: same
+// thead cells, same row cells, club links escaped, all rows rendered.
+
+(function () {
+    function escT(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Same column spec the migrated toplistCard builds (klubbstatistikk).
+    // The # column is data-backed (row.rank) — each club's placement in
+    // the page order, traveling with the row under sorting.
+    function toplistColumns(valueKey, valueLabel) {
+        return [
+            { key: 'rank', label: '#', align: 'center' },
+            { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) { return '<a href="?klubb=' + encodeURIComponent(row.club) + '">' + escT(row.club) + '</a>'; } },
+            { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
+        ];
+    }
+
+    var ranked = [
+        { club: 'A & B', totalStarts: 30, rank: 1 },
+        { club: 'Klubb C', totalStarts: 25, rank: 2 }
+    ];
+
+    var tableHtml = StandplassDataTable.renderTable('toplist-starts', {
+        columns: toplistColumns('totalStarts', 'starter'),
+        rows: ranked,
+        ariaLabel: 'Flest starter 2026',
+        defaultSort: { key: 'totalStarts', dir: 'desc' }
+    }, { hidden: {}, runtimeHidden: [], widthTier: null });
+
+    var card = CS.buildTableCard({
+        title: 'Flest starter',
+        rows: ranked,
+        tableHtml: tableHtml,
+        cardClass: 'club-stats-toplist'
+    });
+
+    // Card wrapper unchanged; the table is the base's output, un-wrapped
+    // (buildTableCard's .club-stats-list-scroll already wraps it).
+    assert.strictEqual(card,
+        '<section class="ranking-card club-stats-toplist">'
+        + '<div class="ranking-card-header"><h2 class="ranking-card-title">Flest starter</h2></div>'
+        + '<div class="club-stats-list-scroll">' + tableHtml + '</div></section>',
+        'buildTableCard tableHtml path keeps the card wrapper, scroll wrap only once');
+
+    // data-dt-id present (replaces the old id="...-table").
+    assert.ok(card.indexOf('data-dt-id="toplist-starts"') !== -1, 'table carries data-dt-id');
+
+    // Full row count rendered — no paging (Review Focus #5).
+    assert.strictEqual((card.match(/<tr data-dt-row=/g) || []).length, ranked.length,
+        'all rows render as real DOM rows');
+
+    // Golden thead: today's cells with the new sort affordance on Klubb
+    // and the value column; the value column is the designated default
+    // sort (desc), so it carries the initial aria-sort.
+    assert.ok(card.indexOf(
+        '<thead><tr><th scope="col" class="ranking-rank">#</th>'
+        + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+        + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts">starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+        + '</tr></thead>') !== -1,
+        'sortable Klubb and value headers, value marked as default sort');
+
+    // Golden row cells: today's markup, & in the club name escaped.
+    assert.ok(card.indexOf(
+        '<tr data-dt-row="0"><td class="ranking-rank">1</td><td><a href="?klubb=A%20%26%20B">A &amp; B</a></td><td class="ranking-score">30</td></tr>'
+        + '<tr data-dt-row="1"><td class="ranking-rank">2</td><td><a href="?klubb=Klubb%20C">Klubb C</a></td><td class="ranking-score">25</td></tr>') !== -1,
+        'row cells match today\'s toplist markup with A & B escaped');
+
+    // Sorted by club (desc): Klubb C leads the table but keeps her rank
+    // (2) — # is a data-anchored rank that travels with the row, not a
+    // renumbering of the current order.
+    var byClubDesc = StandplassDataTable.renderTable('toplist-starts', {
+        columns: toplistColumns('totalStarts', 'starter'),
+        rows: ranked,
+        ariaLabel: 'Flest starter 2026',
+        defaultSort: { key: 'totalStarts', dir: 'desc' }
+    }, { sort: { key: 'club', dir: 'desc' }, hidden: {}, runtimeHidden: [], widthTier: null });
+    assert.ok(byClubDesc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><a href="?klubb=Klubb%20C">Klubb C</a></td>') >= 0,
+        'club sort: Klubb C keeps rank 2');
+    assert.ok(byClubDesc.indexOf('<tr data-dt-row="1">') < byClubDesc.indexOf('<tr data-dt-row="0">'),
+        'club sort desc: Klubb C renders first, A & B second');
 })();
 
 console.log('club-stats.test.js: all tests passed');

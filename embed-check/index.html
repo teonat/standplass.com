@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed-sjekk — oversikt</title>
+<!--
+  embed-check/index.html — the hub of the permanent local 3rd-party
+  consumer rig for <standplass-results> QA ("just embed-check",
+  port 8890). One page per embed case; they link to each other through
+  the nav at the top of every page.
+
+  What makes these pages a real embed test (the felt/bane pages on
+  :8800 only exercise the direct-mount adapter):
+  - they are a DIFFERENT origin, so embed.js, its /js/* dependencies
+    and the /data/* fetches all go cross-origin (CORS) to the embed's
+    own origin, resolved from where embed.js itself was loaded;
+  - they have none of standplass's styles — the element must bring
+    everything it needs into its Shadow DOM (:host, not :root);
+  - the consumer's URL bar belongs to the page, not the embed:
+    without sync-url nothing may touch it.
+
+  QA checklist:
+  1. The case page's instance renders and fetches data (network tab:
+     scripts and data all come from the embed origin, never :8890).
+  2. Shadow DOM styling holds against the serif host styling; test
+     light and dark (the embed follows prefers-color-scheme, or force
+     it on mode.html).
+  3. On felt.html (sync-url) the embed may write filter state to the
+     URL bar; on bane.html it must not. Escape closes modals without
+     leaking key handling to the page.
+  4. Console stays clean — the one expected exception is on
+     duplikat-id.html, where the duplicate-namespace warning is the
+     point of the case.
+  5. Resize to ~390px: the embed handles its own responsive layout.
+
+  Point every case page at another deployment with ?origin=...
+  (default: the local dev server on :8800, which must be running —
+  "just start"). ?origin=https://standplass.com runs the whole rig
+  against production.
+-->
+<link rel="stylesheet" href="rig.css">
+</head>
+<body>
+<h1>Embed-sjekk</h1>
+<p class="embed-note">
+    Simulerte klubbssider for embed-QA av
+    <code>&lt;standplass-results&gt;</code>. Én side per tilfelle;
+    naviger mellom dem fra lenkene ovenpå hver side.
+    Bruk <code>?origin=…</code> på hvilken som helst av dem for å peke
+    mot en annen utrulling (f.eks.
+    <code>?origin=https://standplass.com</code>; standard er
+    <code>http://localhost:8800</code>, som krever
+    <code>just start</code>).
+</p>
+
+<h2>Tilfeller</h2>
+<p class="embed-note">
+    <a href="felt.html">felt</a> — hovedtilfellet: feltskyting med
+    URL-sync og kss-tema.<br>
+    <a href="bane.html">bane</a> — kontrolltilfellet: baneskyting uten
+    sync-url og med standardtema; ingenting må røre URL-linjen.<br>
+    <a href="terminliste.html">terminliste</a> — den tredje visningen.<br>
+    <a href="klubb.html">klubb</a> — forhåndsfiltret klubb
+    (<code>klubb="…"</code>) med kss-temaet, slik en klubbside ville
+    bygget det inn.<br>
+    <a href="compact.html">compact</a> — terminliste i kompakt modus
+    (<code>compact</code> gjelder bare terminliste; felt/bane ignorerer
+    den).<br>
+    <a href="duplicate.html">duplikat-id</a> — to synkroniserte
+    forekomster av samme visning uten egne <code>id</code>-er: den
+    forventede duplikat-advarselen i konsollen er selve poenget.<br>
+    <a href="mode.html">mode</a> — eksplisitt
+    <code>mode="dark"</code>/<code>mode="light"</code> per forekomst,
+    uavhengig av sidens fargevalg.
+</p>
+</body>
+</html>

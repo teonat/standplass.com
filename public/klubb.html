@@ -70,12 +70,11 @@
       <!-- ponytail: klubb-page.js's loadAll() does gridWrapEl.innerHTML = ''
            on every reload, where gridWrapEl = id('-grid-wrap'). Filters and
            the felt/bane toggle live outside #klubb-grid-wrap (not nested
-           inside it, unlike the plan's literal markup) so they survive
-           those reloads instead of being wiped a few seconds after first
-           paint. #klubb-results has no hidden attribute of its own -- the
-           CSS :has() rule below mirrors #klubb-grid-wrap's hidden state so
-           show/hide still tracks the one element klubb-page.js actually
-           toggles. -->
+           inside it) so they survive those reloads instead of being wiped a
+           few seconds after first paint. #klubb-results has no hidden
+           attribute of its own -- the CSS :has() rule below mirrors
+           #klubb-grid-wrap's hidden state so show/hide still tracks the
+           one element klubb-page.js actually toggles. -->
       <div id="klubb-results">
         <div class="ranking-filters">
           <div class="filter-group">
@@ -112,6 +111,8 @@
   <script src="/js/nsf-orgs.js"></script>
   <script src="/js/klubb-discipline-groups.js"></script>
   <script src="/js/stevner-page.js"></script>
+  <script src="/js/table-renderer.js"></script>
+  <script src="/js/data-table.js"></script>
   <script src="/js/klubb-page.js"></script>
   <script>
     StandplassKlubbPage.init({

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed-sjekk — duplikat-id</title>
+<!-- The negative case: two synced instances of the same view WITHOUT
+     distinct id="" attributes. The duplicate-namespace console
+     warning this produces is EXPECTED — it is the point of the case;
+     verify it fires and that both instances still render and stay
+     usable independently. All other case pages must stay
+     console-clean. -->
+<link rel="stylesheet" href="rig.css">
+</head>
+<body>
+<nav class="rig-nav">
+    <a href="./">Alle tilfeller</a>
+    <a href="felt.html">felt</a>
+    <a href="bane.html">bane</a>
+    <a href="terminliste.html">terminliste</a>
+    <a href="klubb.html">klubb</a>
+    <a href="compact.html">compact</a>
+    <a href="duplicate.html" aria-current="page">duplikat-id</a>
+    <a href="mode.html">mode</a>
+</nav>
+<h1>Din Skytterklubb</h1>
+<p class="embed-note">
+    Simulert klubbside for embed-QA. Denne siden laster inn
+    <code>&lt;standplass-results&gt;</code> fra
+    <span id="embed-origin">(laster…)</span>.
+    Forventet: duplikat-advarsel i konsollen (se kommentar i kilden).
+</p>
+<p id="embed-status" class="embed-note"></p>
+
+<h2>Feltskyting ×2 (samme visning, ingen egne id-er)</h2>
+<standplass-results view="felt" sync-url></standplass-results>
+
+<h2>…og én til</h2>
+<standplass-results view="felt" sync-url></standplass-results>
+
+<script src="rig.js"></script>
+</body>
+</html>

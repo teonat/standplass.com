@@ -113,6 +113,15 @@
             <option value="10">10</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label for="nasjonalt-rows">Rader</label>
+          <select id="nasjonalt-rows">
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="50" selected>50</option>
+            <option value="all">Alle</option>
+          </select>
+        </div>
         <div class="filter-group filter-group--period">
           <div class="filter-period-header">
             <label>Periode</label>
@@ -145,6 +154,8 @@
   <script src="/js/klubb-discipline-groups.js"></script>
   <script src="/js/nasjonalt-class-sort.js"></script>
   <script src="/js/stevner-page.js"></script>
+  <script src="/js/table-renderer.js"></script>
+  <script src="/js/data-table.js"></script>
   <script src="/js/nasjonalt-page.js"></script>
   <script>
     StandplassNasjonaltPage.init({

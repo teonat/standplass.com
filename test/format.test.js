@@ -13,7 +13,14 @@ assert.strictEqual(
 );
 assert.strictEqual(
     StandplassFormat.formatDateRange('2026-08-30T00:00:00Z', '2026-09-02T00:00:00Z'),
-    '30. aug 2026–2. sep 2026'
+    '30. aug–2. sep 2026'
+);
+// same-year cross-month compresses the year to once (a duplicated year
+// made Dato cells the widest nowrap content in the terminliste table
+// and pushed it into horizontal scroll); cross-year keeps both years
+assert.strictEqual(
+    StandplassFormat.formatDateRange('2026-12-28T00:00:00Z', '2027-01-04T00:00:00Z'),
+    '28. des 2026–4. jan 2027'
 );
 
 // ── UTC-to-Oslo datetime conversion + time helpers ─────────────────────

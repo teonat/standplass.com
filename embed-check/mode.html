@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed-sjekk — mode</title>
+<!-- Explicit mode override per instance, on the COMPACT terminliste
+     (small widget — the felt views are large and slow to scroll even
+     folded): mode="dark" and mode="light" must each style their own
+     Shadow DOM regardless of the host page's (light, warm-paper)
+     scheme and the browser's prefers-color-scheme. Without the
+     attribute the embed follows prefers-color-scheme — that axis is
+     covered on every other page. The compact terminliste is
+     org-scoped, hence the klubb attribute. -->
+<link rel="stylesheet" href="rig.css">
+</head>
+<body>
+<nav class="rig-nav">
+    <a href="./">Alle tilfeller</a>
+    <a href="felt.html">felt</a>
+    <a href="bane.html">bane</a>
+    <a href="terminliste.html">terminliste</a>
+    <a href="klubb.html">klubb</a>
+    <a href="compact.html">compact</a>
+    <a href="duplicate.html">duplikat-id</a>
+    <a href="mode.html" aria-current="page">mode</a>
+</nav>
+<h1>Din Skytterklubb</h1>
+<p class="embed-note">
+    Simulert klubbside for embed-QA. Denne siden laster inn
+    <code>&lt;standplass-results&gt;</code> fra
+    <span id="embed-origin">(laster…)</span>.
+</p>
+<p id="embed-status" class="embed-note"></p>
+
+<h2>Terminliste, kompakt (mode="dark")</h2>
+<standplass-results view="terminliste" compact klubb="Kongsvinger Sportsskyttere" mode="dark"></standplass-results>
+
+<h2>Terminliste, kompakt (mode="light")</h2>
+<standplass-results view="terminliste" compact klubb="Kongsvinger Sportsskyttere" mode="light"></standplass-results>
+
+<script src="rig.js"></script>
+</body>
+</html>

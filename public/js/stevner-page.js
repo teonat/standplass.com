@@ -225,17 +225,50 @@ var StandplassStevnerPage = (function () {
 
     function num(v) { var n = Number(v); return isNaN(n) ? '–' : String(n); }
 
-    // Column order mirrors the sort order (discipline → class → position), so
-    // the "#" column is readable when several disciplines are in view.
-    var columns = [
-        { key: 'position', format: num },
-        { key: 'nameHtml', format: function (v) { return v; }, raw: true },
-        { key: 'club' },
-        { key: 'discipline' },
-        { key: 'class' },
-        { key: 'score', format: num },
-        { key: 'rankingScore', format: function (v) { return v != null ? Number(v).toFixed(2) : '–'; } }
+    // Competition card table spec (shared base). Øvelse is NOT sortable —
+    // it is the group key in every mode, so it never varies within a
+    // group; a sort button there would be a guaranteed no-op. Cells are
+    // deliberately UNCLASSED (no align/rank/score styling — owner ruling:
+    // the tables look exactly like today). The group row renders on
+    // EVERY card, single-group included (owner QA round 7: the label is
+    // where the discipline lives at phone width, where the Øvelse column
+    // is tier-hidden — single-group cards never showed it pre-migration
+    // either, same length > 1 condition there); the guard below is only
+    // against a genuinely empty groups array, which would render an
+    // empty body through the group path. The card's groups already
+    // carry the group mode (built by buildCompetitionCards); the spec
+    // takes the card as-is.
+    // The card tables' column definitions — identical for every card, so
+    // they live here once: competitionCardTableSpec hands every card
+    // this array, and the page-level shared picker lists the same
+    // columns (choices apply to every card at once).
+    var CARD_COLUMNS = [
+        { key: 'position', label: '#', sortable: true, defaultDir: 'asc', format: num },
+        { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+            cell: function (row) { return row.nameHtml; } },
+        { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },
+        // Øvelse, not Ranking, is the phone-width default sacrifice (owner
+        // ruling, post-QA): on multi-group cards the group row already
+        // names the discipline, so the column is the redundant one — and
+        // it stays re-enablable through the picker like any default.
+        { key: 'discipline', label: 'Øvelse', hideBelow: 700 },
+        { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
+        { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
+        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc',
+            cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
     ];
+
+    function competitionCardTableSpec(card) {
+        var flat = [];
+        (card.groups || []).forEach(function (g) {
+            (g.rows || []).forEach(function (r) { flat.push(r); });
+        });
+        var spec = { columns: CARD_COLUMNS, rows: flat };
+        if ((card.groups || []).length) {
+            spec.groupRows = function () { return card.groups; };
+        }
+        return spec;
+    }
 
     // Rounds for display only -- competitionStats keeps its raw numbers. The
     // extra Number() drops a trailing ".0" so whole numbers stay whole.
@@ -261,7 +294,22 @@ var StandplassStevnerPage = (function () {
     // shooters — person-stevne pairs, not people; Y is the deduplicated
     // count. Rows without personId count in Z (startere) only.
     function overallStatsBar(cards, lastUpdated, idPrefix) {
-        if (cards.length < 2) { return ''; }
+        // Shared column picker (owner QA: next to "Fold alle", same
+        // style). The anchor WRAPS the button — the dropdown panel is
+        // absolutely positioned against the anchor's box (its right
+        // edge to the anchor's right edge), so wrapping is what keeps
+        // the panel aligned with the button. data-dt-picker is the
+        // wiring hook, and the style comes from .stevner-picker-btn —
+        // deliberately NOT .stevner-collapse-all-btn: the bulk-collapse
+        // handler matches that class, and sharing it made one click
+        // both open the picker and fold every card.
+        var pickerHtml = ' <div class="dt-picker-anchor"><button type="button" class="stevner-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
+        // The FULL bar renders at ANY card count ≥ 1 (owner QA round 3):
+        // summary line, updated stamp, Kolonner and "Fold alle" — even a
+        // single competition result keeps them all. Zero cards never
+        // reaches this from render() (the empty state owns that path);
+        // guarded anyway for the export.
+        if (!cards.length) { return ''; }
         var totals = cards.reduce(function (acc, c) {
             acc.skyttere += c.stats.skyttere; acc.startere += c.stats.startere; return acc;
         }, { skyttere: 0, startere: 0 });
@@ -274,13 +322,19 @@ var StandplassStevnerPage = (function () {
             }
         });
         var unike = countUniqueShooters(allRows);
+        // The stamp is information, not an action: it ends the summary
+        // line instead of sitting with the buttons, so a wrapped narrow
+        // layout reads "summary + stamp" / "buttons" instead of dropping
+        // the stamp into the button row (owner QA round 6).
+        var stamp = esc(formatUpdated(lastUpdated));
         return '<div class="stevner-overall-stats"><span>'
             + cards.length + ' stevne' + (cards.length !== 1 ? 'r' : '') + ' · '
             + totals.skyttere + ' deltakelse' + (totals.skyttere !== 1 ? 'r' : '') + ' · '
             + unike + ' unik' + (unike !== 1 ? 'e' : '') + ' skytter' + (unike !== 1 ? 'e' : '') + ' · '
-            + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '') + '</span>'
-            + '<span class="stevner-stats-right">' + esc(formatUpdated(lastUpdated))
-            + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></span></div>';
+            + totals.startere + ' start' + (totals.startere !== 1 ? 'er' : '')
+            + (stamp ? ' · ' + stamp : '') + '</span>'
+            + '<div class="stevner-stats-right">' + pickerHtml
+            + ' <button type="button" class="stevner-collapse-all-btn" id="' + idPrefix + '-collapse-all">Fold alle</button></div></div>';
     }
 
     function statusBadge(applicableForClassification) {
@@ -289,18 +343,12 @@ var StandplassStevnerPage = (function () {
             : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>';
     }
 
-    function renderCard(card, showClassBadge) {
+    function renderCard(card, showClassBadge, spec, state) {
         var titleHtml = esc(card.title || 'Ukjent stevne') + (card.status === 3 ? ' (Avlyst)' : '');
         var links = (card.resultFileUrl ? '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> ' : '')
             + (card.deepLink ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>' : '');
         var meta = [card.startDate ? String(card.startDate).slice(0, 10) : '', card.facilityName, card.organizationName]
             .filter(Boolean).map(esc).join(' · ');
-        var groupsHtml = card.groups.map(function (g) {
-            var headerRow = card.groups.length > 1
-                ? '<tr class="stevner-disc-group"><th scope="colgroup" colspan="' + columns.length + '">' + esc(g.label) + '</th></tr>'
-                : '';
-            return headerRow + StandplassTable.renderRows(columns, g.rows);
-        }).join('');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
             + '<div class="ranking-card-header">'
             + '<div class="stevner-card-info">'
@@ -314,12 +362,13 @@ var StandplassStevnerPage = (function () {
             + '</div>'
             + '<button type="button" class="stevner-collapse-btn" data-comp-id="' + esc(card.id) + '" aria-expanded="true" aria-label="Fold sammen ' + esc(card.title || '') + '"><span class="stevner-collapse-icon">▾</span></button>'
             + '</div>'
-            + '<table class="ranking-table"><thead><tr>'
-            + '<th scope="col">#</th><th scope="col">Navn</th>'
-            + '<th scope="col">Klubb</th>'
-            + '<th scope="col">Øvelse</th><th scope="col">Klasse</th>'
-            + '<th scope="col">Poeng</th><th scope="col">Ranking</th>'
-            + '</tr></thead><tbody>' + groupsHtml + '</tbody></table>'
+            // Shared base: sortable headers within groups, responsive
+            // defaults, runtime club hiding — state from the page wiring.
+            // The wrap exists so a user forcing all columns visible on a
+            // narrow screen gets horizontal scroll, not a broken layout.
+            + '<div class="stevner-card-table-wrap">'
+            + StandplassDataTable.renderTable('stevner-card-' + card.id, spec, state)
+            + '</div>'
             + '</div>';
     }
 
@@ -396,18 +445,152 @@ var StandplassStevnerPage = (function () {
         var rowsEl = id('-rows');
         var loadMoreBtn = id('-load-more');
 
+        // ── Card table state (shared base) ────────────────────────────
+        // Width tier computed ONCE per init for the starting render; the
+        // page-level listener below keeps it current afterwards by
+        // re-rendering the card tables when the 700px line is crossed.
+        var currentWidthTier = window.matchMedia('(max-width: 700px)').matches ? 700 : null;
+        // Per-card sort, keyed by competition id. Session-only by owner
+        // ruling — view preferences are never persisted on standplass.
+        var cardSort = {};
+        // Rendered spec per competition id: render() rebuilds these
+        // (cards regroup when filters change); wireCardTable consumes.
+        var cardSpecs = {};
+        // Shared column choices, applied to every card table at once
+        // (session-only, same ruling). ONE map, and the wired picker
+        // captured it by reference — onColumnsChange therefore syncs it
+        // IN PLACE: replacing the object would leave the picker reading
+        // a stale map on its next open (the panel rebuilds its checkbox
+        // list from getSelected, which reads the captured state).
+        var pickerHidden = {};
+        var pickerWire = null;
+
+        function cardTableState(cardId) {
+            return {
+                sort: cardSort[cardId] || null,
+                hidden: pickerHidden,
+                // Exactly one club filtered: every row would show the
+                // same club, so the column is pure noise. Hidden at
+                // runtime (excluded from any picker) — reversible by
+                // widening the club filter.
+                runtimeHidden: activeClubs.length === 1 ? ['club'] : [],
+                widthTier: currentWidthTier
+            };
+        }
+
+        function wireCardTable(cardId) {
+            var tableId = 'stevner-card-' + cardId;
+            var spec = cardSpecs[cardId];
+            if (!spec) { return; }
+            StandplassDataTable.wireTable(rowsEl, tableId, spec, {
+                onSortChange: function (sort) {
+                    cardSort[cardId] = sort;
+                    // Surgical swap: replace only this card's table — a
+                    // full render() would also reset every other card's
+                    // collapsed/expanded state.
+                    var tableEl = rowsEl.querySelector('table[data-dt-id="' + tableId + '"]');
+                    if (tableEl) {
+                        tableEl.outerHTML = StandplassDataTable.renderTable(tableId, spec, cardTableState(cardId));
+                        // The swapped-in table has no listener yet —
+                        // the old one died with the replaced element.
+                        wireCardTable(cardId);
+                    }
+                    // The clicked sort button died with the swap; restore
+                    // focus to its replacement.
+                    var btn = rowsEl.querySelector('table[data-dt-id="' + tableId + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                    if (btn) { btn.focus(); }
+                }
+            }, cardTableState(cardId));
+        }
+
+        // Re-render every rendered card's bare table in place — surgical
+        // per card, so collapsed/expanded state and sort choices survive
+        // (a full render() would flatten every card and reset collapse).
+        // Driven by the page-level tier listener (and the shared column
+        // picker later in this batch).
+        function rerenderCardTables() {
+            pagination.state.items.forEach(function (card) {
+                var cardEl = rowsEl.querySelector('.ranking-card[data-comp-id="' + card.id + '"]');
+                if (!cardEl) { return; }
+                var tableId = 'stevner-card-' + card.id;
+                var tableEl = cardEl.querySelector('table[data-dt-id="' + tableId + '"]');
+                if (!tableEl) { return; }
+                tableEl.outerHTML = StandplassDataTable.renderTable(tableId, cardSpecs[card.id], cardTableState(card.id));
+                wireCardTable(card.id);
+                // The fresh table lost the collapsed state's hidden flag
+                // (the collapse handler only flips it on click) — re-apply.
+                if (cardEl.classList.contains('ranking-card--collapsed')) {
+                    cardEl.querySelector('table').hidden = true;
+                }
+            });
+        }
+
+        function wireSharedPicker() {
+            // destroy-before-rewire (top3Wire precedent): the dropdown's
+            // outside-click listener outlives its DOM, and the wiring
+            // must pick up the CURRENT runtimeHidden list (single-club
+            // filter) and width tier. The button lives in the stats bar
+            // (overallStatsBar output, inside rowsEl) — re-created per
+            // render and wired here right after. root is document for
+            // direct-mount and the shadow root for embeds; pages without
+            // the stats bar (< 2 cards, or klubb/nasjonalt which never
+            // run this init) get null and no picker.
+            if (pickerWire) { pickerWire.destroy(); pickerWire = null; }
+            pickerWire = StandplassDataTable.wirePicker(root, { columns: CARD_COLUMNS }, {
+                onColumnsChange: function (hidden) {
+                    Object.keys(pickerHidden).forEach(function (k) { delete pickerHidden[k]; });
+                    Object.keys(hidden).forEach(function (k) { pickerHidden[k] = hidden[k]; });
+                    rerenderCardTables();
+                }
+            }, {
+                hidden: pickerHidden,
+                runtimeHidden: activeClubs.length === 1 ? ['club'] : [],
+                widthTier: currentWidthTier
+            });
+        }
+
         function render() {
             if (!pagination.state.items.length) {
                 rowsEl.innerHTML = '<p class="ranking-empty">Ingen stevner for valgt filter.</p>';
             } else {
                 rowsEl.innerHTML = overallStatsBar(visibleCards, lastUpdated, config.idPrefix)
                     + pagination.state.items.map(function (card) {
-                        return renderCard(card, activeTab === 'alle');
+                        var spec = competitionCardTableSpec(card);
+                        cardSpecs[card.id] = spec;
+                        return renderCard(card, activeTab === 'alle', spec, cardTableState(card.id));
                     }).join('');
+                // Old table listeners die with the innerHTML replacement;
+                // no destroy() bookkeeping needed (neither the picker nor
+                // the tier listener lives on the card tables — both are
+                // page-level).
+                pagination.state.items.forEach(function (card) { wireCardTable(card.id); });
             }
-            rowsEl.classList.toggle('stevner-hide-club-col', activeClubs.length === 1);
             loadMoreBtn.textContent = 'Last flere (viser ' + pagination.state.items.length + ' av ' + visibleCards.length + ' stevner)';
             loadMoreBtn.hidden = pagination.state.done;
+            // Also on the empty-filter path: the picker is page chrome,
+            // independent of rendered cards — choices made while empty
+            // must hold when cards appear.
+            wireSharedPicker();
+        }
+
+        // ONE page-level tier listener: crossing the 700px line updates
+        // currentWidthTier and surgically re-renders the card tables
+        // (collapse-preserving). Fires on change only — the initial tier
+        // was computed at init. No per-card listeners, nothing to
+        // destroy: each swap's old table listener dies with its element.
+        var tierMql = window.matchMedia('(max-width: 700px)');
+        var onTierChange = function () {
+            currentWidthTier = tierMql.matches ? 700 : null;
+            rerenderCardTables();
+            // The picker's checkbox defaults are tier-dependent (a
+            // tier-hidden column shows unchecked so it can be re-enabled)
+            // — its captured state must carry the new tier.
+            wireSharedPicker();
+        };
+        if (typeof tierMql.addEventListener === 'function') {
+            tierMql.addEventListener('change', onTierChange);
+        } else if (typeof tierMql.addListener === 'function') {
+            tierMql.addListener(onTierChange);
         }
 
         function setStatus(msg, isError) {
@@ -980,7 +1163,8 @@ var StandplassStevnerPage = (function () {
         flattenRows: flattenRows,
         buildCompetitionCards: buildCompetitionCards, matchesCompetition: matchesCompetition,
         groupCompetitionRows: groupCompetitionRows,
-        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters, columns: columns,
+        competitionStats: competitionStats, countUniqueShooters: countUniqueShooters,
+        competitionCardTableSpec: competitionCardTableSpec, overallStatsBar: overallStatsBar,
         statsLine: statsLine, formatUpdated: formatUpdated };
 })();
 

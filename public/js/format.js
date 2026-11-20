@@ -81,6 +81,11 @@ var StandplassFormat = (function () {
         if (!s) { return ''; }
         if (!e || sameDay(s, e)) { return formatDate(startIso); }
         if (s.y === e.y && s.mo === e.mo) { return +s.d + '.–' + formatDate(endIso); }
+        // Same year across months: the year once, at the end — a
+        // duplicated year made this the widest nowrap string the
+        // terminliste table renders and pushed it into horizontal
+        // scroll. Cross-year keeps both years (they differ).
+        if (s.y === e.y) { return +s.d + '. ' + MONTHS[+s.mo - 1] + '–' + formatDate(endIso); }
         return formatDate(startIso) + '–' + formatDate(endIso);
     }
 
