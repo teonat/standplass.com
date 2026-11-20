@@ -220,18 +220,6 @@ h1, h2, h3 {
     background: var(--surface-base);
     border-bottom: 1px solid var(--border-faint);
 }
-/* A row header (scope="row") names its row — it is a DATA cell and
-   must read as row content, not carry the column-header treatment
-   above (the top-3 table's Navn column rendered uppercase, bold,
-   muted and tracked without this). */
-.ranking-table th[scope="row"] {
-    font-size: 0.875rem;
-    font-weight: 400;
-    letter-spacing: normal;
-    text-transform: none;
-    color: var(--text);
-    background: transparent;
-}
 .ranking-table th.ranking-score { text-align: right; }
 .ranking-table th.ranking-rank { text-align: center; }
 

@@ -587,7 +587,7 @@ assert.ok(top3Html.indexOf('ranking-card-table-wrap') >= 0, 'scroll wrapper pres
 assert.ok(top3Html.indexOf('Totalt') >= 0, 'Totalt column header');
 assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
 assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
-assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
+assert.ok(top3Html.indexOf('scope="row"') === -1, 'Navn is a plain data cell, not a row header');
 assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
 assert.ok(top3Html.indexOf('Vis øvelser') < 0, 'øvelser reveal toggle replaced by the column picker');
 assert.ok(top3Html.indexOf('data-dt-picker') >= 0, 'column picker button (Kolonner) present');
@@ -599,7 +599,7 @@ assert.ok(top3Html.indexOf('dt-toolbar') === -1, 'no separate toolbar row above 
 assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
 assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
 assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');
-assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td>') >= 0,
     'page order stands until a sort is set');
 // Placement-mode group: 4 buttons, aria-pressed only on the active one
 assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
@@ -694,13 +694,13 @@ assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': f
 // The # column is each shooter's RANK (page-order placement) — it travels
 // with the row under sorting instead of renumbering.
 var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') >= 0,
     'asc sort: Bob leads but keeps his rank (2)');
-assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td>') >= 0,
     'asc sort: Alice is second but keeps her rank (1)');
 assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
 var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') >= 0,
     'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────

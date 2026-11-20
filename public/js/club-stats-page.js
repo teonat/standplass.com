@@ -750,7 +750,7 @@ var StandplassClubStats = (function () {
 
         var columns = [
             { key: 'rank', label: '#', align: 'center' },
-            { key: 'name', label: 'Navn', asRowHeader: true, sortable: true, defaultDir: 'asc' }
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' }
         ];
         comboOrder.forEach(function (k) {
             var parts = k.split('|');
