@@ -393,18 +393,25 @@ var StandplassClubStats = (function () {
     }
 
     // One Arrangerte stevner row: the competition's own fields plus its
-    // unique participants, split into the club's members and everyone
-    // else. personId-keyed (results without one don't count). Totalt is
+    // unique participants AND its starts, each split into the club's
+    // members and everyone else. Deltakere are personId-keyed (results
+    // without one don't count); starter count every result row — a
+    // start happened even when the person can't be identified — so a
+    // personId-less result is a start but not a deltaker. Totalt is
     // the union of participants, not the sum of the splits — a person
     // with starts under both clubs (a data anomaly) counts in each
     // split but once in the total.
     function organizedCompRow(comp, clubName) {
         var target = StandplassStevnerPage.normalizeClub(clubName);
         var members = {}, external = {}, all = {};
+        var memberStarts = 0, externalStarts = 0, totalStarts = 0;
         (comp.results || []).forEach(function (r) {
+            totalStarts++;
+            var isMember = StandplassStevnerPage.normalizeClub(r.club) === target;
+            if (isMember) { memberStarts++; } else { externalStarts++; }
             if (!r.personId) { return; }
             all[r.personId] = true;
-            if (StandplassStevnerPage.normalizeClub(r.club) === target) {
+            if (isMember) {
                 members[r.personId] = true;
             } else {
                 external[r.personId] = true;
@@ -416,7 +423,10 @@ var StandplassClubStats = (function () {
             facilityName: comp.facilityName,
             memberParticipants: Object.keys(members).length,
             externalParticipants: Object.keys(external).length,
-            totalParticipants: Object.keys(all).length
+            totalParticipants: Object.keys(all).length,
+            memberStarts: memberStarts,
+            externalStarts: externalStarts,
+            totalStarts: totalStarts
         };
     }
 
@@ -484,7 +494,16 @@ var StandplassClubStats = (function () {
                     cell: function (row) { return row.facilityName || '–'; } },
                 { key: 'memberParticipants', label: 'Deltakere (medlemmer)', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
                 { key: 'externalParticipants', label: 'Deltakere (eksterne)', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
-                { key: 'totalParticipants', label: 'Deltakere (totalt)', align: 'right', sortable: true, defaultDir: 'desc' }
+                { key: 'totalParticipants', label: 'Deltakere (totalt)', align: 'right', sortable: true, defaultDir: 'desc' },
+                // Starter columns: off by default, pickable via the
+                // Kolonner picker (defaultHidden — an explicit user
+                // choice wins, per the base's visibility rules). No
+                // hideBelow: they're already hidden by default, and a
+                // picked column shows at any width (horizontal scroll
+                // covers the overflow).
+                { key: 'memberStarts', label: 'Starter (medlemmer)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' },
+                { key: 'externalStarts', label: 'Starter (eksterne)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' },
+                { key: 'totalStarts', label: 'Starter (totalt)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' }
             ],
             // Page order is date-desc (organizedComps sorted by
             // startDate desc upstream; the column sorts ISO date

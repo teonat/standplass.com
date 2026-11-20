@@ -865,8 +865,8 @@ var orgRows = [
     ] }, 'Klubb X'),
     CS.organizedCompRow({ title: 'Vårfeltet', startDate: '2026-03-01T08:00:00Z', facilityName: null, results: [] }, 'Klubb X')
 ];
-assert.deepEqual(orgRows[0], { title: 'Uten dato', startDate: null, facilityName: null, memberParticipants: 1, externalParticipants: 1, totalParticipants: 2 },
-    'arrangerte data: same person twice is one participant, personId-less results don\'t count');
+assert.deepEqual(orgRows[0], { title: 'Uten dato', startDate: null, facilityName: null, memberParticipants: 1, externalParticipants: 1, totalParticipants: 2, memberStarts: 3, externalStarts: 1, totalStarts: 4 },
+    'arrangerte data: same person twice is one participant, personId-less results don\'t count as deltakere — but every result row is a start (3 member starts, 1 member deltaker)');
 assert.strictEqual(orgRows[1].memberParticipants, 1,
     'arrangerte data: club matching is normalizeClub (case-insensitive)');
 var orgAnomaly = CS.organizedCompRow({ title: 'Anomali', results: [
@@ -877,6 +877,10 @@ assert.strictEqual(orgAnomaly.memberParticipants, 1);
 assert.strictEqual(orgAnomaly.externalParticipants, 1);
 assert.strictEqual(orgAnomaly.totalParticipants, 1,
     'arrangerte data: a person with starts under both clubs (data anomaly) counts once in the total');
+assert.strictEqual(orgAnomaly.memberStarts, 1);
+assert.strictEqual(orgAnomaly.externalStarts, 1);
+assert.strictEqual(orgAnomaly.totalStarts, 2,
+    'arrangerte data: start splits count result rows — the both-clubs anomaly is a start in each');
 
 var orgSpec = CS.organizedCompsTableSpec(orgRows, 'Klubb X');
 assert.strictEqual(orgSpec.ariaLabel, 'Arrangerte stevner for Klubb X', 'arrangerte: aria-label');
@@ -909,6 +913,24 @@ assert.ok(orgTier.indexOf('Deltakere (medlemmer)') === -1 && orgTier.indexOf('De
     'arrangerte: split columns hidden at tier 900');
 assert.ok(orgTier.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">2</td></tr>') !== -1,
     'arrangerte: tier 900 row keeps the total');
+// Starter columns: off by default, pickable via the Kolonner picker —
+// an explicit user choice (hidden[key] = false) shows them at any
+// width.
+var starterCols = orgSpec.columns.filter(function (c) { return /Starts$/.test(c.key); });
+assert.strictEqual(starterCols.length, 3, 'arrangerte spec: three starter columns');
+assert.ok(starterCols.every(function (c) { return c.defaultHidden === true; }),
+    'arrangerte spec: starter columns default-hidden');
+assert.ok(orgHtml.indexOf('Starter (medlemmer)') === -1 && orgHtml.indexOf('Starter (totalt)') === -1,
+    'arrangerte: starter columns absent from the default render');
+var orgPicked = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
+    { hidden: { memberStarts: false, externalStarts: false, totalStarts: false }, runtimeHidden: [], widthTier: null });
+assert.ok(orgPicked.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts">Starter (totalt)<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>') !== -1,
+    'arrangerte: a picked starter column renders with a sort button');
+assert.ok(orgPicked.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">3</td><td class="ranking-score">1</td><td class="ranking-score">4</td></tr>') !== -1,
+    'arrangerte: picked render carries start counts (3 member starts, 1 external, 4 total)');
+var orgStartsDesc = ddSorted(orgSpec, 'totalStarts', 'desc');
+assert.ok(orgStartsDesc.indexOf('Vårfeltet') > orgStartsDesc.indexOf('Høststevnet'),
+    'arrangerte: Starter (totalt) desc sinks the empty stevne last');
 
 // Klassefordeling
 var cdSpec = CS.classDistTableSpec([
