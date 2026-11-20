@@ -345,6 +345,13 @@ h1, h2, h3 {
    wraps exactly "28. feb–" / "4. mar 2026" and never mid-year. */
 .terminliste-date { white-space: normal; }
 .terminliste-result-cell { text-align: center; }
+/* ...and its header: cellClass lands on th too, but
+   .ranking-table th's text-align: left out-specifies a bare class —
+   the Resultater header stayed left while its cells centered (owner
+   QA 2026-11-20: the value sat far right of the header on the wide
+   compact card). th-scoped rule, same shape as the th.ranking-score
+   / th.ranking-rank precedents. */
+.ranking-table th.terminliste-result-cell { text-align: center; }
 
 /* Full page's capped scroll area (replaces the old "Last inn flere"
    button): the scroll region IS the table card — the scrollbar hugs
