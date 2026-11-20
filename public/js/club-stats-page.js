@@ -1264,6 +1264,13 @@ var StandplassClubStats = (function () {
         // never itself replaced (only its innerHTML), so the wiring
         // survives every drilldown re-render.
         var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
+        // The page's default person chart, read LIVE: the program filter
+        // can switch after init, and each table's person buttons reset
+        // the modal to its own default on every open (top-3 → Plassering,
+        // everything else → this).
+        function personDefaultMetric() {
+            return activeProgram === 'bane' ? 'score' : 'rankingScore';
+        }
         var personModal = StandplassPersonModalController.create({
             idPrefix: config.idPrefix,
             root: root,
@@ -1287,7 +1294,7 @@ var StandplassClubStats = (function () {
             defaultYear: activeYear,
             firstYear: FIRST_YEAR,
             currentYear: CURRENT_YEAR,
-            initialMetric: activeProgram === 'bane' ? 'score' : 'rankingScore'
+            initialMetric: personDefaultMetric()
         });
         contentEl.addEventListener('click', function (e) {
             var compBtn = e.target.closest('.stevner-comp-btn');
@@ -1301,10 +1308,12 @@ var StandplassClubStats = (function () {
                     personId: personBtn.dataset.personId,
                     personName: personBtn.dataset.personName,
                     initialDisc: personBtn.dataset.discipline || null,
-                    // The top-3 table's buttons carry data-metric
-                    // ("position"); the drilldown's don't, and a null
-                    // metric leaves the modal's last-active chart alone.
-                    metric: personBtn.dataset.metric || null
+                    // Each table resets the modal to its own chart on
+                    // every open: the top-3 buttons carry data-metric
+                    // ("position" — that table counts placements), every
+                    // other person button on this page opens the page
+                    // default. No stickiness between opens.
+                    metric: personBtn.dataset.metric || personDefaultMetric()
                 });
             }
         });
