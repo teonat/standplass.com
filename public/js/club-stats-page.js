@@ -630,7 +630,7 @@ var StandplassClubStats = (function () {
     // real DOM inside an overflow-y: auto region so browser find-in-page
     // (Ctrl+F) can scroll to matches — the reason paging was removed.
     // renderRow must return a complete '<tr>…</tr>' and escape any
-    // caller-supplied values itself (same raw contract as table-renderer).
+    // caller-supplied values itself.
     function buildTableCard(opts) {
         var rows = opts.rows || [];
         if (!rows.length) { return ''; }

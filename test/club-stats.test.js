@@ -4,7 +4,6 @@ var CS = require('../public/js/club-stats-page.js');
 global.StandplassStevnerPage = require('../public/js/stevner-page.js');
 // Cross-module globals the page modules reference at call time (same
 // pattern as every other page test in this repo).
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 
 // ── Test data ──────────────────────────────────────────────────────────

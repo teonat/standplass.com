@@ -3,9 +3,6 @@ var assert = require('node:assert');
 // resolveKlubbParam decodes ?klubb= via StandplassFormat.decodeIdList, a
 // browser global -- shim it here the same way comp-modal.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
-// Page-test convention: globals in HTML/dependency script order --
-// data-table.js calls into StandplassTable for numeric sorts.
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 var SP = require('../public/js/stevner-page.js');
 var PM = require('../public/js/person-modal.js');

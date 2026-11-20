@@ -11,8 +11,8 @@
 var StandplassStevnerPage = (function () {
     'use strict';
 
-    // table-renderer.js's esc() isn't exported, so we keep a tiny local copy
-    // for the HTML we build ourselves (person-link cell, person modal).
+    // A tiny local esc() for the HTML we build ourselves (person-link
+    // cell, person modal).
     function esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')

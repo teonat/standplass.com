@@ -1,8 +1,5 @@
 var assert = require('assert');
 global.StandplassKlubbDisciplineGroups = require('../public/js/klubb-discipline-groups.js');
-// Page-test convention: globals in HTML script order — data-table.js
-// calls into StandplassTable for sort semantics.
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 var NP = require('../public/js/nasjonalt-page.js');
 

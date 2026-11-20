@@ -4,8 +4,6 @@ var assert = require('assert');
 // stevner-page.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
 // terminlisteTableSpec renders through the shared base -- same load order
-// as the page's script tags (table-renderer.js before data-table.js)
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 var TP = require('../public/js/terminliste-page.js');
 

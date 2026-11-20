@@ -3,9 +3,6 @@ var assert = require('assert');
 // shim the browser global before requiring, the same way
 // terminliste-page.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
-// Page-test convention: globals in HTML script order — data-table.js
-// calls into StandplassTable for sort semantics.
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 var NP = require('../public/js/norgesfelt-page.js');
 

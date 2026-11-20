@@ -23,9 +23,6 @@ assert.strictEqual(filtered.length, 1, 'zero and null totalScore entries are dro
 assert.strictEqual(filtered[0].fullName, 'A');
 
 // ── leaderboardCardSpec (batch 1: shared table base) ────────────────────
-// data-table.js calls into the StandplassTable global (table-renderer.js)
-// for sort semantics — same load order as the page's script tags.
-global.StandplassTable = require('../public/js/table-renderer.js');
 var SDT = require('../public/js/data-table.js');
 var lbState = { hidden: {}, runtimeHidden: [], widthTier: null };
 var lbEntries = [

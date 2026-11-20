@@ -44,25 +44,21 @@ var StandplassDataTable = (function () {
         for (var i = 0; i < input.length; i++) {
             if (input[i][key] == null) { nulls.push(input[i]); } else { withValue.push(input[i]); }
         }
-        // All-numeric columns sort through StandplassTable.sortRows (the
-        // proven primitive). Columns with any string value — club and
-        // shooter names — compare with Norwegian collation (Æ < Ø < Å),
-        // matching the site's own name-sort conventions; raw code-point
-        // comparison would put Å before Æ and Ø.
+        // Cells compare numbers numerically and everything else with
+        // Norwegian collation (Æ < Ø < Å), matching the site's own
+        // name-sort conventions; raw code-point comparison would put Å
+        // before Æ and Ø.
         var sign = dir === 'desc' ? -1 : 1;
-        var allNumbers = withValue.every(function (r) { return typeof r[key] === 'number'; });
-        var sorted = allNumbers
-            ? StandplassTable.sortRows(withValue, key, dir)
-            : withValue.slice().sort(function (a, b) {
-                var av = a[key];
-                var bv = b[key];
-                if (typeof av === 'number' && typeof bv === 'number') {
-                    if (av === bv) { return 0; }
-                    return av > bv ? sign : -sign;
-                }
-                var cmp = String(av).localeCompare(String(bv), 'no');
-                return cmp !== 0 ? (cmp > 0 ? sign : -sign) : 0;
-            });
+        var sorted = withValue.slice().sort(function (a, b) {
+            var av = a[key];
+            var bv = b[key];
+            if (typeof av === 'number' && typeof bv === 'number') {
+                if (av === bv) { return 0; }
+                return av > bv ? sign : -sign;
+            }
+            var cmp = String(av).localeCompare(String(bv), 'no');
+            return cmp !== 0 ? (cmp > 0 ? sign : -sign) : 0;
+        });
         return sorted.concat(nulls);
     }
 

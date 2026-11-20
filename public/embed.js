@@ -130,9 +130,9 @@ var StandplassEmbed = (function () {
         if (view === 'terminliste') { StandplassTerminlistePage.init(config); } else { StandplassStevnerPage.init(config); }
     }
 
-    // stevner-page.js's own local copy of this exact helper (table-renderer.js's
-    // esc() isn't exported) -- kept as its own small copy here too rather than
-    // shared, matching that file's existing precedent for this one function.
+    // stevner-page.js's own local copy of this exact helper -- kept as
+    // its own small copy here too rather than shared, matching that
+    // file's existing precedent for this one function.
     function esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -154,7 +154,7 @@ var StandplassEmbed = (function () {
     // script-evaluation time, only later, inside function bodies (init())
     // that don't run until every one of these has already loaded.
     var DEPENDENCY_PATHS = [
-        '/js/format.js', '/js/data-fetch-cache.js', '/js/table-renderer.js', '/js/data-table.js',
+        '/js/format.js', '/js/data-fetch-cache.js', '/js/data-table.js',
         '/js/pagination.js', '/js/person-modal.js', '/js/person-modal-controller.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
         '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',

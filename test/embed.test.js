@@ -39,19 +39,17 @@ assert.strictEqual(StandplassEmbed.safeIdPrefix('felt-widget-2', 'felt'), 'felt-
 assert.strictEqual(StandplassEmbed.safeIdPrefix('x" onmouseover="alert(1)', 'felt'), 'felt', 'an unsafe id falls back to the view name');
 assert.strictEqual(StandplassEmbed.safeIdPrefix('', 'bane'), 'bane', 'an empty id falls back to the view name');
 
-// The embed's dynamically loaded dependencies follow the same ordering
-// rule as every page's script tags: table-renderer.js BEFORE data-table.js
-// (the base calls the StandplassTable global for numeric sorts — loading
-// only the base makes every numeric sort throw, the /klubb lesson).
-// DEPENDENCY_PATHS is module-internal, so this reads the source text —
-// the html-script-order test's precedent.
+// The embed's dynamically loaded dependencies must include the shared
+// base — and since the base no longer depends on any other table
+// renderer, table-renderer.js must NOT be in the list (it was retired;
+// loading it would 404 inside host pages). DEPENDENCY_PATHS is
+// module-internal, so this reads the source text.
 var fs = require('fs');
 var path = require('path');
 var embedSource = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'embed.js'), 'utf8');
-var trIdx = embedSource.indexOf("'/js/table-renderer.js'");
 var dtIdx = embedSource.indexOf("'/js/data-table.js'");
-assert.ok(trIdx !== -1, 'embed.js loads table-renderer.js');
 assert.ok(dtIdx !== -1, 'embed.js loads data-table.js');
-assert.ok(trIdx < dtIdx, 'embed dependencies: table-renderer.js must load BEFORE data-table.js');
+assert.ok(embedSource.indexOf("'/js/table-renderer.js'") === -1,
+    'embed.js must not load the retired table-renderer.js');
 
 console.log('embed.test.js: all assertions passed');

@@ -6,9 +6,7 @@ var assert = require('node:assert');
 // just the warning channel to keep this file's output clean.
 process.removeAllListeners('warning');
 global.StandplassFormat = require('../public/js/format.js');
-// renderResultsBody renders through the shared base now -- same load
-// order as the pages' script tags (table-renderer.js before data-table.js)
-global.StandplassTable = require('../public/js/table-renderer.js');
+// renderResultsBody renders through the shared base now
 global.StandplassDataTable = require('../public/js/data-table.js');
 var CM = require('../public/js/comp-modal.js');
 
