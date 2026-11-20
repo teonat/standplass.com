@@ -6,9 +6,7 @@ var assert = require('node:assert');
 // just the warning channel to keep this file's output clean.
 process.removeAllListeners('warning');
 global.StandplassFormat = require('../public/js/format.js');
-// renderResultsBody renders through the shared base now -- same load
-// order as the pages' script tags (table-renderer.js before data-table.js)
-global.StandplassTable = require('../public/js/table-renderer.js');
+// renderResultsBody renders through the shared base now
 global.StandplassDataTable = require('../public/js/data-table.js');
 var CM = require('../public/js/comp-modal.js');
 
@@ -232,3 +230,29 @@ CM.fetchResults('env-test', mockFetch).then(function (results) {
     console.error(err);
     process.exitCode = 1;
 });
+
+// sanitizeDescription: everything is escaped first, then only the
+// allowed tags are re-opened -- links are rebuilt around a
+// scheme-checked href with this module's own target/rel.
+var san = CM.sanitizeDescription('<p>Hei <a href="https://kart.1881.no/?r=F8192783">kart</a> &amp; <script>x()</script></p>');
+assert.strictEqual(san,
+    '<p>Hei <a href="https://kart.1881.no/?r=F8192783" target="_blank" rel="noopener noreferrer">kart</a> &amp;amp; &lt;script&gt;x()&lt;/script&gt;</p>',
+    'an https link survives with a rebuilt safe opener; script text and raw ampersands stay escaped');
+assert.strictEqual(CM.sanitizeDescription('<a href="javascript:alert(1)">x</a>'),
+    '&lt;a href=&quot;javascript:alert(1)&quot;&gt;x</a>',
+    'a javascript: href is not re-opened');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://x.example/?a=1&b=2">x</a>'),
+    '<a href="https://x.example/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">x</a>',
+    'the href stays attribute-escaped (& -> &amp;) so it cannot break out');
+assert.strictEqual(CM.sanitizeDescription('<a class="btn" href="https://x.example/">x</a>'),
+    '&lt;a class=&quot;btn&quot; href=&quot;https://x.example/&quot;&gt;x</a>',
+    'anchors carrying other attributes stay literal');
+assert.strictEqual(CM.sanitizeDescription('<A HREF="mailto:post@example.no">epost</A>'),
+    '<a href="mailto:post@example.no" target="_blank" rel="noopener noreferrer">epost</a>',
+    'mailto and uppercase markup are handled');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://kart.1881.no/">kart</a>Avkjøringen fra E16'),
+    '<a href="https://kart.1881.no/" target="_blank" rel="noopener noreferrer">kart</a> Avkjøringen fra E16',
+    'a word crowded right after the closing anchor gets its space back (stevne 16681 quirk)');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://kart.1881.no/">url</a>. Avkjøringen er skiltet'),
+    '<a href="https://kart.1881.no/" target="_blank" rel="noopener noreferrer">url</a>. Avkjøringen er skiltet',
+    'punctuation directly after the link is left alone');

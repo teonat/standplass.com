@@ -155,6 +155,11 @@ var StandplassNorgesfeltPage = (function () {
         cols.push({ key: 'innertreff', label: 'Innertreff', align: 'right', hideBelow: 900, sortable: true, defaultDir: 'desc' });
         return {
             columns: cols,
+            // Page order is the ranking (every entry carries an
+            // ascending rank — verified against the full data set) —
+            // # asc is a true initial sort. The column hides below
+            // 700px, where the marking is invisible anyway.
+            defaultSort: { key: 'rank', dir: 'asc' },
             rows: filtered.map(entryRow)
         };
     }
@@ -183,6 +188,10 @@ var StandplassNorgesfeltPage = (function () {
         cols.push({ key: 'innertreff', label: 'Innertreff', hideBelow: 900, sortable: true, defaultDir: 'desc' });
         return {
             columns: cols,
+            // Page order is the ranking (rank asc = Poeng desc for
+            // ranked data; # itself is not sortable here) — Poeng desc
+            // is a true initial sort.
+            defaultSort: { key: 'points', dir: 'desc' },
             rows: filtered.map(entryRow)
         };
     }

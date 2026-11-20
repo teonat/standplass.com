@@ -1,6 +1,5 @@
 'use strict';
 var assert = require('node:assert');
-global.StandplassTable = require('../public/js/table-renderer.js');
 var StandplassDataTable = require('../public/js/data-table.js');
 
 // --- visibleColumns ---

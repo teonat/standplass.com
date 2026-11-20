@@ -23,9 +23,6 @@ assert.strictEqual(filtered.length, 1, 'zero and null totalScore entries are dro
 assert.strictEqual(filtered[0].fullName, 'A');
 
 // ── leaderboardCardSpec (batch 1: shared table base) ────────────────────
-// data-table.js calls into the StandplassTable global (table-renderer.js)
-// for sort semantics — same load order as the page's script tags.
-global.StandplassTable = require('../public/js/table-renderer.js');
 var SDT = require('../public/js/data-table.js');
 var lbState = { hidden: {}, runtimeHidden: [], widthTier: null };
 var lbEntries = [
@@ -39,9 +36,9 @@ assert.strictEqual(KP.leaderboardCardSpec([], 'Finfelt'), null, 'empty entries p
 var lbHtml = SDT.renderTable('klubb-card-d1', lbSpec, lbState);
 assert.ok(lbHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="fullName">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="totalScore">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'leaderboard: sortable Navn/Poeng headers');
+    'leaderboard: sortable Navn/Poeng headers, Poeng marked aria-sort descending (page order is the ranking)');
 // Person button markup, byte-exact vs the hand-rolled table — the
 // grid wrap's delegated person-modal listener depends on these classes
 // and data attributes.

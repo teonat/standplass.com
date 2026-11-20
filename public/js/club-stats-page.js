@@ -144,8 +144,14 @@ var StandplassClubStats = (function () {
     // Groups flattened rows by exact club name string. Each row comes from
     // StandplassStevnerPage.flattenRows — fields: personId, name, club,
     // discipline, class, position, score, rankingScore, competition, date.
+    // compOrganizerById (competitionId → normalized organizer, from
+    // buildCompOrganizerIndex) splits each club's starts and attended
+    // stevner into stevner the club hosted itself and external ones —
+    // the overview toplists' klubb/andre columns. A start without a
+    // competitionId is external by definition (a club's own comps always
+    // carry ids), so the splits always sum to the totals.
     // Returns { "ClubName": { uniqueShooters, totalStarts, ... }, ... }.
-    function computeClubStats(rows) {
+    function computeClubStats(rows, compOrganizerById) {
         var clubs = {};
         (rows || []).forEach(function (r) {
             var name = r.club || 'Ukjent';
@@ -154,6 +160,10 @@ var StandplassClubStats = (function () {
                     shooters: {},
                     starts: 0,
                     competitions: {},
+                    clubStarts: 0,
+                    otherStarts: 0,
+                    clubCompetitions: {},
+                    otherCompetitions: {},
                     topThree: 0,
                     disciplines: {},
                     classes: {}
@@ -161,6 +171,15 @@ var StandplassClubStats = (function () {
             }
             var c = clubs[name];
             c.starts++;
+            var hosted = !!(r.competitionId && compOrganizerById
+                && compOrganizerById[r.competitionId] === StandplassStevnerPage.normalizeClub(name));
+            if (hosted) {
+                c.clubStarts++;
+                c.clubCompetitions[r.competitionId] = true;
+            } else {
+                c.otherStarts++;
+                if (r.competitionId) { c.otherCompetitions[r.competitionId] = true; }
+            }
             if (r.personId) { c.shooters[r.personId] = true; }
             if (r.competitionId) { c.competitions[r.competitionId] = true; }
             var pos = Number(r.position);
@@ -175,11 +194,15 @@ var StandplassClubStats = (function () {
             c.uniqueShooters = Object.keys(c.shooters).length;
             c.totalStarts = c.starts;
             c.competitionsAttended = Object.keys(c.competitions).length;
+            c.clubStevner = Object.keys(c.clubCompetitions).length;
+            c.otherStevner = Object.keys(c.otherCompetitions).length;
             c.disciplinesRepresented = Object.keys(c.disciplines).length;
             c.classesRepresented = Object.keys(c.classes).length;
             delete c.shooters;
             delete c.starts;
             delete c.competitions;
+            delete c.clubCompetitions;
+            delete c.otherCompetitions;
             delete c.disciplines;
             delete c.classes;
         });
@@ -207,6 +230,10 @@ var StandplassClubStats = (function () {
                     uniqueShooters: s.uniqueShooters,
                     totalStarts: s.totalStarts,
                     competitionsAttended: s.competitionsAttended,
+                    clubStarts: s.clubStarts,
+                    otherStarts: s.otherStarts,
+                    clubStevner: s.clubStevner,
+                    otherStevner: s.otherStevner,
                     topThree: s.topThree,
                     disciplinesRepresented: s.disciplinesRepresented,
                     classesRepresented: s.classesRepresented
@@ -242,6 +269,36 @@ var StandplassClubStats = (function () {
                 isNew: prev === 0 && cur > 0
             };
         });
+    }
+
+    // competitionId → normalized organizer name for one year/program —
+    // the same yearData walk the drilldown's clubCompIds uses, kept as
+    // a lookup so computeClubStats can split each club's activity into
+    // stevner the club hosted itself and external ones. Competitions
+    // without an organizer are left out (they can never be a club's
+    // own).
+    function buildCompOrganizerIndex(yearData, year, program) {
+        var byId = {};
+        Object.keys(yearData || {}).forEach(function (key) {
+            if (key.indexOf('|' + year) === -1) { return; }
+            var base = key.split('|')[0];
+            if (program === 'felt' && base !== '/data/felt') { return; }
+            if (program === 'bane' && base !== '/data/bane') { return; }
+            (yearData[key].competitions || []).forEach(function (comp) {
+                if (comp && comp.id != null && comp.organizationName) {
+                    byId[comp.id] = StandplassStevnerPage.normalizeClub(comp.organizationName);
+                }
+            });
+        });
+        return byId;
+    }
+
+    // Signed display for the økning/endring values: positives carry an
+    // explicit +, zeros render bare (no prefix), negatives already carry
+    // their own minus. Display only — sorting stays on the raw number.
+    function formatSignedDelta(v) {
+        v = Number(v);
+        return v > 0 ? '+' + v : String(v);
     }
 
     // ── Klasse semantics (Klassefordeling / topp-3) ────────────────────
@@ -339,6 +396,99 @@ var StandplassClubStats = (function () {
         return out;
     }
 
+    // ── Drilldown activity data ─────────────────────────────────────
+    // Pure row builders for the mest aktive and arrangerte stevner
+    // tables' counting columns.
+
+    // Narrow-screen tier for the drilldown split columns (mest aktive's
+    // klubb/andre stevner and starter splits, arrangerte's member/
+    // external participant columns): hidden below 900px so the totals
+    // carry the story on small screens. The Kolonner picker can
+    // re-enable any of them — the card's scroll region then scrolls
+    // horizontally (.ranking-card-table-wrap) instead of crushing.
+    var DRILLDOWN_SPLIT_TIER = 900;
+
+    // Mest aktive skyttere rows: per shooter of ONE club — unique
+    // stevner and starts, each split into the club's own stevner
+    // (klubbstevner: ids present in clubCompIds, built from the same
+    // competitions the Arrangerte stevner table lists) and the rest
+    // (andre). The splits always sum to their totals. Rows without a
+    // personId don't count (site convention). Starts without a
+    // competitionId still count toward starter (but no stevne).
+    function computeShooterActivity(rows, clubName, clubCompIds) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var shooters = {};
+        (rows || []).forEach(function (r) {
+            if (StandplassStevnerPage.normalizeClub(r.club) !== target) { return; }
+            if (!r.personId) { return; }
+            var s = shooters[r.personId];
+            if (!s) {
+                s = shooters[r.personId] = { name: r.name || 'Ukjent', starts: 0, clubStarts: 0, comps: {}, clubComps: {} };
+            }
+            s.starts++;
+            var isClubComp = !!(r.competitionId && clubCompIds[r.competitionId]);
+            if (isClubComp) { s.clubStarts++; }
+            if (r.competitionId) {
+                s.comps[r.competitionId] = true;
+                if (isClubComp) { s.clubComps[r.competitionId] = true; }
+            }
+        });
+        return Object.keys(shooters).map(function (pid) {
+            var s = shooters[pid];
+            var stevner = Object.keys(s.comps).length;
+            var clubStevner = Object.keys(s.clubComps).length;
+            return {
+                personId: pid,
+                name: s.name,
+                stevner: stevner,
+                clubStevner: clubStevner,
+                otherStevner: stevner - clubStevner,
+                starts: s.starts,
+                clubStarts: s.clubStarts,
+                otherStarts: s.starts - s.clubStarts
+            };
+        }).sort(function (a, b) { return b.starts - a.starts; });
+    }
+
+    // One Arrangerte stevner row: the competition's own fields plus its
+    // unique participants AND its starts, each split into the club's
+    // members and everyone else. Deltakere are personId-keyed (results
+    // without one don't count); starter count every result row — a
+    // start happened even when the person can't be identified — so a
+    // personId-less result is a start but not a deltaker. Totalt is
+    // the union of participants, not the sum of the splits — a person
+    // with starts under both clubs (a data anomaly) counts in each
+    // split but once in the total.
+    function organizedCompRow(comp, clubName) {
+        var target = StandplassStevnerPage.normalizeClub(clubName);
+        var members = {}, external = {}, all = {};
+        var memberStarts = 0, externalStarts = 0, totalStarts = 0;
+        (comp.results || []).forEach(function (r) {
+            totalStarts++;
+            var isMember = StandplassStevnerPage.normalizeClub(r.club) === target;
+            if (isMember) { memberStarts++; } else { externalStarts++; }
+            if (!r.personId) { return; }
+            all[r.personId] = true;
+            if (isMember) {
+                members[r.personId] = true;
+            } else {
+                external[r.personId] = true;
+            }
+        });
+        return {
+            compId: comp.id,
+            title: comp.title,
+            startDate: comp.startDate,
+            facilityName: comp.facilityName,
+            memberParticipants: Object.keys(members).length,
+            externalParticipants: Object.keys(external).length,
+            totalParticipants: Object.keys(all).length,
+            memberStarts: memberStarts,
+            externalStarts: externalStarts,
+            totalStarts: totalStarts
+        };
+    }
+
     // ── Drilldown table specs (shared base) ──────────────────────────
     // Pure {columns, rows, ariaLabel} builders for the drilldown's four
     // non-top-3 tables. Rows are flattened so every sortable column is
@@ -349,13 +499,38 @@ var StandplassClubStats = (function () {
         return {
             columns: [
                 { key: 'rank', label: '#', align: 'center' },
-                { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
+                // Name opens the person modal (delegated on contentEl —
+                // the markup must stay byte-exact with klubb-page's
+                // leaderboard buttons). No data-discipline: a mest
+                // aktiv shooter spans disciplines, so the modal opens
+                // without an initial-disc context.
+                { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                            + '" data-person-name="' + esc(row.name) + '">' + esc(row.name) + '</button>';
+                    } },
+                { key: 'clubStevner', label: 'Klubbstevner', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
+                { key: 'otherStevner', label: 'Andre stevner', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
+                { key: 'stevner', label: 'Stevner', align: 'right', sortable: true, defaultDir: 'desc' },
+                { key: 'clubStarts', label: 'Klubbstarter', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
+                { key: 'otherStarts', label: 'Andre starter', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc (topShooters is sorted that way
+            // upstream) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: (topShooters || []).map(function (s, i) {
-                return { rank: i + 1, name: s.name, starts: s.starts };
+                return {
+                    rank: i + 1, personId: s.personId, name: s.name,
+                    stevner: s.stevner, clubStevner: s.clubStevner, otherStevner: s.otherStevner,
+                    starts: s.starts, clubStarts: s.clubStarts, otherStarts: s.otherStarts
+                };
             }),
-            ariaLabel: 'Mest aktive skyttere for ' + clubName
+            ariaLabel: 'Mest aktive skyttere for ' + clubName,
+            // The Kolonner button is hosted by buildTableCard in the
+            // card header (outside the scroll wrap) — renderTable must
+            // not emit its own toolbar.
+            picker: { buttonLabel: 'Kolonner', toolbar: false }
         };
     }
 
@@ -366,6 +541,9 @@ var StandplassClubStats = (function () {
                 { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc (discRows sorted that way
+            // upstream) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: (discRows || []).map(function (d) {
                 return { discipline: d, shooters: Object.keys(discData[d].shooters).length, starts: discData[d].starts };
             }),
@@ -373,18 +551,74 @@ var StandplassClubStats = (function () {
         };
     }
 
+    // Deterministic two-line header for a counting column: the
+    // parenthetical drops to its own line (labelRaw = pre-built HTML;
+    // pickerLabel keeps the Kolonner dropdown's plain-text name). The
+    // <br> inside ONE span pins the header cell's min-content to its
+    // widest line — a space-separated label leaves the cell's
+    // min-content at the whole phrase, so the table overflows its
+    // scroll wrap instead of wrapping (measured live; the sort
+    // button's flex-wrap can't lower the intrinsic width engines
+    // report for the flex line).
+    function twoLineHeader(plain) {
+        var words = String(plain).split(' ');
+        return {
+            label: '<span>' + words[0] + '<br>' + words.slice(1).join(' ') + '</span>',
+            labelRaw: true,
+            pickerLabel: plain
+        };
+    }
+
+    function countingCol(key, plain, extra) {
+        var col = twoLineHeader(plain);
+        col.key = key;
+        col.align = 'right';
+        col.sortable = true;
+        col.defaultDir = 'desc';
+        (extra ? Object.keys(extra) : []).forEach(function (k) { col[k] = extra[k]; });
+        return col;
+    }
+
     function organizedCompsTableSpec(organizedComps, clubName) {
         return {
             columns: [
-                { key: 'title', label: 'Stevne', sortable: true, defaultDir: 'asc',
-                    cell: function (row) { return row.title || '–'; } },
+                // Stevne opens the comp modal (delegated on contentEl;
+                // the button carries the competition id — the modal
+                // resolves everything else from its own detail fetch).
+                // Sorting stays row.title-backed; the button is
+                // invisible to it.
+                { key: 'title', label: 'Stevne', sortable: true, defaultDir: 'asc', raw: true,
+                    cell: function (row) {
+                        return row.compId
+                            ? '<button type="button" class="stevner-comp-btn" data-comp-id="' + esc(row.compId) + '">' + esc(row.title || '–') + '</button>'
+                            : (row.title || '–');
+                    } },
                 { key: 'startDate', label: 'Dato', sortable: true, defaultDir: 'asc',
                     cell: function (row) { return row.startDate ? String(row.startDate).slice(0, 10) : '–'; } },
                 { key: 'facilityName', label: 'Anlegg', sortable: true, defaultDir: 'asc',
-                    cell: function (row) { return row.facilityName || '–'; } }
+                    cell: function (row) { return row.facilityName || '–'; } },
+                // Counting columns: two-line headers keep the columns
+                // at their widest line; the splits hide below 900px and
+                // the totals stay. Starter columns behave exactly like
+                // the participant ones (shown by default).
+                countingCol('memberParticipants', 'Deltakere (medlemmer)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('externalParticipants', 'Deltakere (eksterne)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('totalParticipants', 'Deltakere (totalt)'),
+                countingCol('memberStarts', 'Starter (medlemmer)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('externalStarts', 'Starter (eksterne)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('totalStarts', 'Starter (totalt)')
             ],
+            // Page order is date-desc (organizedComps sorted by
+            // startDate desc upstream; the column sorts ISO date
+            // strings, which order chronologically) — Dato desc is a
+            // true initial sort.
+            defaultSort: { key: 'startDate', dir: 'desc' },
             rows: organizedComps || [],
-            ariaLabel: 'Arrangerte stevner for ' + clubName
+            ariaLabel: 'Arrangerte stevner for ' + clubName,
+            // The Kolonner button is hosted by buildTableCard in the
+            // card header (outside the scroll wrap) — renderTable must
+            // not emit its own toolbar.
+            picker: { buttonLabel: 'Kolonner', toolbar: false }
         };
     }
 
@@ -400,6 +634,9 @@ var StandplassClubStats = (function () {
                 { key: 'shooters', label: 'Skyttere', align: 'right', sortable: true, defaultDir: 'desc' },
                 { key: 'starts', label: 'Starter', align: 'right', sortable: true, defaultDir: 'desc' }
             ],
+            // Page order is starts-desc globally (computeClassDistribution
+            // sorts that way) — Starter desc is a true initial sort.
+            defaultSort: { key: 'starts', dir: 'desc' },
             rows: dist || [],
             ariaLabel: 'Klassefordeling for ' + clubName
         };
@@ -563,14 +800,23 @@ var StandplassClubStats = (function () {
         // empty (esc maps undefined to '') and sort last, matching the
         // hand-rolled table's zero-count cells.
         var rows = ranking.map(function (s, i) {
-            var r = { rank: i + 1, name: s.name, total: s.total };
+            var r = { rank: i + 1, name: s.name, total: s.total, personId: s.personId };
             Object.keys(s.combos).forEach(function (k) { r['combo|' + k] = s.combos[k]; });
             return r;
         });
 
         var columns = [
             { key: 'rank', label: '#', align: 'center' },
-            { key: 'name', label: 'Navn', asRowHeader: true, sortable: true, defaultDir: 'asc' }
+            // Byte-exact with the drilldown's mest-aktive buttons (klubb-
+            // page's leaderboard markup) plus data-metric: this table
+            // counts placements, so the person modal opens on its
+            // Plassering chart. computeTopThreeRanking skips rows
+            // without a personId, so every row can carry the button.
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) {
+                    return '<button type="button" class="stevner-person-btn link-btn" data-person-id="' + esc(row.personId)
+                        + '" data-person-name="' + esc(row.name) + '" data-metric="position">' + esc(row.name) + '</button>';
+                } }
         ];
         comboOrder.forEach(function (k) {
             var parts = k.split('|');
@@ -629,14 +875,24 @@ var StandplassClubStats = (function () {
     // the user's "Rader" setting (--club-stats-rows-max). All rows stay
     // real DOM inside an overflow-y: auto region so browser find-in-page
     // (Ctrl+F) can scroll to matches — the reason paging was removed.
-    // renderRow must return a complete '<tr>…</tr>' and escape any
-    // caller-supplied values itself (same raw contract as table-renderer).
+    // opts.tableHtml is the fully-built <table> (data-table base); empty
+    // rows render no card at all.
+    // opts.picker: the table has a column picker (spec carries
+    // picker: {toolbar: false}). The Kolonner button sits in the card
+    // header — OUTSIDE the scroll wrap, like the top-3 mode row — so it
+    // stays put while the table scrolls vertically and its dropdown
+    // panel overlays the table instead of being clipped by the wrap's
+    // overflow. The wrap also gains ranking-card-table-wrap
+    // (overflow-x: auto + a min-width floor): re-enabled columns scroll
+    // horizontally instead of crushing the table.
     function buildTableCard(opts) {
         var rows = opts.rows || [];
         if (!rows.length) { return ''; }
         return '<section class="ranking-card ' + esc(opts.cardClass || 'club-stats-section') + '">'
-            + '<div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(opts.title) + '</h2></div>'
-            + '<div class="club-stats-list-scroll">'
+            + '<div class="ranking-card-header"><h2 class="ranking-card-title">' + esc(opts.title) + '</h2>'
+            + (opts.picker ? StandplassDataTable.renderPickerButton({ buttonLabel: 'Kolonner' }) : '')
+            + '</div>'
+            + '<div class="club-stats-list-scroll' + (opts.picker ? ' ranking-card-table-wrap' : '') + '">'
             // tableHtml: the fully-built <table> (data-table base) — the
             // only table source since batch 1 (the old headHtml/renderRow
             // assembly is deleted); the scroll wrap stays exactly once.
@@ -1017,13 +1273,33 @@ var StandplassClubStats = (function () {
         var toplistSort = {};
         var toplistHidden = {};
         var toplistSpecs = {};
-        // Drilldown table interactivity (session-only): sort per table id
-        // plus the spec each table last rendered with (rebuilt every
-        // renderDrilldown, consumed by wiring). Reset when the club
-        // changes, kept across year/program re-renders — same policy as
-        // top3State.
+        // Drilldown table interactivity (session-only): sort and
+        // column-picker choices per table id plus the spec each table
+        // last rendered with (rebuilt every renderDrilldown, consumed by
+        // wiring). drilldownWires holds the live wireTable handles —
+        // their pickers attach listeners beyond the table DOM (the
+        // dropdown's outside-click), so full re-renders must destroy
+        // them. Reset when the club changes, kept across year/program
+        // re-renders — same policy as top3State.
         var drilldownSort = {};
+        var drilldownHidden = {};
+        var drilldownWires = {};
         var drilldownSpecs = {};
+        // The live state object per drilldown table. wirePicker captures
+        // the state OBJECT at wire time and reads it on every
+        // interaction (checkbox states, the onToggle merge base), so
+        // handlers must keep it current — drilldownState() refreshes
+        // this object's properties in place rather than building a
+        // fresh snapshot (top3State's pattern; a fresh object would
+        // leave an open panel toggling against stale values).
+        var drilldownLiveStates = {};
+        // Viewport tier for the drilldown split columns
+        // (DRILLDOWN_SPLIT_TIER): computed at first drilldown render,
+        // then kept current by one page-owned matchMedia listener — the
+        // norgesfelt/terminliste pattern (wireTable's tier support is
+        // opt-in via handlers, unused here).
+        var drilldownWidthTier = null;
+        var drilldownTierWired = false;
         // Chart details table ("Vis data som tabell"): sort state + the
         // spec the section last rendered with. Survives the metric
         // toggle's section re-renders; reset only with the club (below).
@@ -1035,6 +1311,70 @@ var StandplassClubStats = (function () {
         var statusEl = id('-status');
         var titleEl = id('-title');
         var leadEl = id('-lead');
+
+        // ── Modals ─────────────────────────────────────────────────────
+        // Competition detail: the shared dialog host (same one stevner
+        // and terminliste use). Person: the shared controller — its
+        // entries come from the year files of the ACTIVE program (alle
+        // spans both), so a shooter's modal matches the drilldown's own
+        // scope. Both open via delegated clicks on contentEl, which is
+        // never itself replaced (only its innerHTML), so the wiring
+        // survives every drilldown re-render.
+        var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
+        // The page's default person chart, read LIVE: the program filter
+        // can switch after init, and each table's person buttons reset
+        // the modal to its own default on every open (top-3 → Plassering,
+        // everything else → this).
+        function personDefaultMetric() {
+            return activeProgram === 'bane' ? 'score' : 'rankingScore';
+        }
+        var personModal = StandplassPersonModalController.create({
+            idPrefix: config.idPrefix,
+            root: root,
+            urlState: urlState,
+            fetchEntriesForYear: function (personId, year) {
+                var bases = activeProgram === 'alle' ? ['/data/felt', '/data/bane']
+                    : activeProgram === 'felt' ? ['/data/felt'] : ['/data/bane'];
+                return Promise.all(bases.map(function (base) {
+                    return fetcher.fetchYear(base, year).then(function (yd) {
+                        return StandplassStevnerPage.flattenRows(yd);
+                    });
+                })).then(function (rowSets) {
+                    var rows = [];
+                    rowSets.forEach(function (set) { rows = rows.concat(set); });
+                    return rows.filter(function (r) { return r.personId === personId; }).map(function (r) {
+                        return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                            competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                    });
+                });
+            },
+            defaultYear: activeYear,
+            firstYear: FIRST_YEAR,
+            currentYear: CURRENT_YEAR,
+            initialMetric: personDefaultMetric()
+        });
+        contentEl.addEventListener('click', function (e) {
+            var compBtn = e.target.closest('.stevner-comp-btn');
+            if (compBtn) {
+                compModalHost.open(compBtn.dataset.compId, compBtn.textContent);
+                return;
+            }
+            var personBtn = e.target.closest('.stevner-person-btn');
+            if (personBtn) {
+                personModal.open(personBtn, {
+                    personId: personBtn.dataset.personId,
+                    personName: personBtn.dataset.personName,
+                    initialDisc: personBtn.dataset.discipline || null,
+                    // Each table resets the modal to its own chart on
+                    // every open: the top-3 buttons carry data-metric
+                    // ("position" — that table counts placements), every
+                    // other person button on this page opens the page
+                    // default. No stickiness between opens.
+                    metric: personBtn.dataset.metric || personDefaultMetric()
+                });
+            }
+        });
+        personModal.openFromUrl();
 
         function setUrlParam(key, value) {
             var qs = new URLSearchParams(urlState.getSearch());
@@ -1195,7 +1535,10 @@ var StandplassClubStats = (function () {
             var cacheKey = program + '|' + year;
             if (statsCache[cacheKey]) { return statsCache[cacheKey]; }
             var rows = getRowsForYear(year, program);
-            var stats = computeClubStats(rows);
+            // The organizer index is built once per cache entry — the
+            // toplists' split columns come straight from the cached
+            // stats, so a sort's full re-render never re-walks the data.
+            var stats = computeClubStats(rows, buildCompOrganizerIndex(yearData, year, program));
             statsCache[cacheKey] = stats;
             return stats;
         }
@@ -1208,22 +1551,32 @@ var StandplassClubStats = (function () {
         // breaking rendering (the old title-string dispatch was one
         // rename away from silently rendering one toplist's data under
         // another's header).
-        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel) {
+        function toplistCard(id, title, ranked, valueKey, valueLabel, ariaLabel, extraColumns, valueFormat) {
+            extraColumns = extraColumns || [];
             // Flattened rows: rank is each club's placement in the page
             // order, data-backed so # travels with the row under sorting
             // instead of renumbering (a Klubb sort must not relabel the
             // ranks). The value column reads the metric key directly.
             var rows = ranked.map(function (entry, i) {
                 var r = { club: entry.club, rank: i + 1 };
+                extraColumns.forEach(function (col) { r[col.key] = entry[col.key]; });
                 r[valueKey] = entry[valueKey];
                 return r;
             });
+            // extraColumns sit between Klubb and the value column — the
+            // drilldown's splits-before-total order — so every toplist
+            // keeps its ranking value at the right edge. format (e.g.
+            // formatSignedDelta for økning/endring columns) is display
+            // only; sorting reads the raw row value.
             var columns = [
                 { key: 'rank', label: '#', align: 'center' },
                 { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', raw: true,
-                    cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } },
-                { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc' }
-            ];
+                    cell: function (entry) { return '<a href="' + esc(clubHref(entry.club)) + '">' + esc(entry.club) + '</a>'; } }
+            ].concat(extraColumns.map(function (col) {
+                return { key: col.key, label: col.label, align: 'right', sortable: true, defaultDir: 'desc', format: col.format };
+            })).concat([
+                { key: valueKey, label: valueLabel, align: 'right', sortable: true, defaultDir: 'desc', format: valueFormat }
+            ]);
             toplistSpecs[id] = { columns: columns, defaultSort: { key: valueKey, dir: 'desc' } };
             return buildTableCard({
                 title: title,
@@ -1356,6 +1709,10 @@ var StandplassClubStats = (function () {
             // Leaving the drilldown: the top-3 wire (if any) dies with its
             // DOM except the picker's outside-click listener — destroy it.
             if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
+            Object.keys(drilldownWires).forEach(function (wid) {
+                drilldownWires[wid].destroy();
+                drilldownWires[wid] = null;
+            });
             titleEl.textContent = 'Klubbstatistikk';
             leadEl.innerHTML = 'Topplister og statistikk for skytteklubber. '
                 + 'Data fra skyting.no – kun pistol og revolver (feltskyting og baneskyting).';
@@ -1364,8 +1721,21 @@ var StandplassClubStats = (function () {
             var stats = getStatsForYear(activeYear, activeProgram);
             var prevYear = activeYear - 1;
             var prevStats = getStatsForYear(prevYear, activeProgram);
+            // Same guard as the yoy card: no previous-year data (the
+            // first data year) means no change column at all.
+            var hasPrevStats = !!(prevStats && Object.keys(prevStats).length);
 
             var byShooters = rankClubs(stats, 'uniqueShooters', { minShooters: 0, minStarts: 0 });
+            if (hasPrevStats) {
+                byShooters.forEach(function (e) {
+                    var prev = prevStats[e.club];
+                    // A club absent from the previous year changed by its
+                    // full count (all its shooters are new); the yoy card
+                    // filters such clubs out for ranking fairness, this
+                    // indicator column just reports the arithmetic.
+                    e.shooterDelta = e.uniqueShooters - (prev ? prev.uniqueShooters : 0);
+                });
+            }
             var byStarts = rankClubs(stats, 'totalStarts', { minShooters: 0, minStarts: 0 });
             var byCompetitions = rankClubs(stats, 'competitionsAttended', { minShooters: 0, minStarts: 0 });
             var byTopThree = rankClubs(stats, 'topThree', { minShooters: 0, minStarts: 0 });
@@ -1378,8 +1748,8 @@ var StandplassClubStats = (function () {
                 var yoy = computeYearOverYear(stats, prevStats)
                     .filter(function (c) { return c.previous >= 5 && !c.isNew; })
                     .sort(function (a, b) { return b.delta - a.delta; });
-                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', '+ skyttere',
-                    'Størst økning av aktive skyttere siden ' + prevYear);
+                yoyHtml = toplistCard('toplist-yoy', 'Størst økning av skyttere', yoy, 'delta', 'Skyttere',
+                    'Størst økning av aktive skyttere siden ' + prevYear, null, formatSignedDelta);
             }
 
             // Flest stevner arrangert (competition-level organizationName)
@@ -1400,7 +1770,7 @@ var StandplassClubStats = (function () {
                 .map(function (name) { return { club: name, delta: organizerCounts[name] }; })
                 .sort(function (a, b) { return b.delta - a.delta; });
             var organizerHtml = rankedOrganizers.length
-                ? toplistCard('toplist-arranged', 'Flest stevner arrangert', rankedOrganizers, 'delta', 'stevner')
+                ? toplistCard('toplist-arranged', 'Flest stevner arrangert', rankedOrganizers, 'delta', 'Stevner')
                 : '';
 
             var yearNote = activeYear === CURRENT_YEAR
@@ -1431,10 +1801,13 @@ var StandplassClubStats = (function () {
 
             contentEl.innerHTML = summaryHtml + overviewHtml
                 + '<div class="club-stats-grid">'
-                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'skyttere')
-                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'starter')
-                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'stevner')
-                + toplistCard('toplist-top3', 'Flest topp-3 plasseringer', byTopThree, 'topThree', 'plasseringer')
+                + toplistCard('toplist-shooters', 'Flest aktive skyttere', byShooters, 'uniqueShooters', 'Skyttere', null,
+                    hasPrevStats ? [{ key: 'shooterDelta', label: 'Endring', format: formatSignedDelta }] : null)
+                + toplistCard('toplist-starts', 'Flest starter', byStarts, 'totalStarts', 'Starter', null,
+                    [{ key: 'clubStarts', label: 'Klubbstarter' }, { key: 'otherStarts', label: 'Andre starter' }])
+                + toplistCard('toplist-attended', 'Flest stevnedeltakelser', byCompetitions, 'competitionsAttended', 'Stevner', null,
+                    [{ key: 'clubStevner', label: 'Klubbstevner' }, { key: 'otherStevner', label: 'Andre stevner' }])
+                + toplistCard('toplist-top3', 'Flest topp-3 plasseringer', byTopThree, 'topThree', 'Plasseringer')
                 + yoyHtml
                 + organizerHtml
                 + '</div>'
@@ -1508,18 +1881,37 @@ var StandplassClubStats = (function () {
 
             var chartHtml = renderDrilldownChartSection(resolved);
 
+            // Viewport tier for the split columns — before any
+            // drilldownState() read below.
+            ensureDrilldownTierWatcher();
+
+            // The club's own stevner: organizationName match over the
+            // active year/program's competitions (the same data
+            // getRowsForYear flattens). clubCompIds feeds mest aktive's
+            // klubb/andre split; the enriched rows become the Arrangerte
+            // stevner table (with unique-participant counts).
+            var clubCompIds = {};
+            var organizedComps = [];
+            Object.keys(yearData).forEach(function (key) {
+                if (key.indexOf('|' + activeYear) === -1) { return; }
+                var base = key.split('|')[0];
+                if (activeProgram === 'felt' && base !== '/data/felt') { return; }
+                if (activeProgram === 'bane' && base !== '/data/bane') { return; }
+                var comps = yearData[key].competitions || [];
+                comps.forEach(function (comp) {
+                    if (StandplassStevnerPage.normalizeClub(comp.organizationName) === StandplassStevnerPage.normalizeClub(resolved)) {
+                        clubCompIds[comp.id] = true;
+                        organizedComps.push(organizedCompRow(comp, resolved));
+                    }
+                });
+            });
+            organizedComps.sort(function (a, b) {
+                return (b.startDate || '').localeCompare(a.startDate || '');
+            });
+
             // Mest aktive skyttere (per club, from raw rows)
             var rows = getRowsForYear(activeYear, activeProgram);
-            var shooterCounts = {};
-            rows.forEach(function (r) {
-                if (StandplassStevnerPage.normalizeClub(r.club) !== StandplassStevnerPage.normalizeClub(resolved)) { return; }
-                if (!r.personId) { return; }
-                if (!shooterCounts[r.personId]) { shooterCounts[r.personId] = { name: r.name || 'Ukjent', starts: 0 }; }
-                shooterCounts[r.personId].starts++;
-            });
-            var topShooters = Object.keys(shooterCounts)
-                .map(function (pid) { return shooterCounts[pid]; })
-                .sort(function (a, b) { return b.starts - a.starts; });
+            var topShooters = computeShooterActivity(rows, resolved, clubCompIds);
 
             // Øvelsesfordeling — track starts AND unique shooters per discipline
             var discData = {};
@@ -1531,24 +1923,6 @@ var StandplassClubStats = (function () {
                 if (r.personId) { discData[r.discipline].shooters[r.personId] = true; }
             });
             var discRows = Object.keys(discData).sort(function (a, b) { return discData[b].starts - discData[a].starts; });
-
-            // Arrangerte stevner
-            var organizedComps = [];
-            Object.keys(yearData).forEach(function (key) {
-                if (key.indexOf('|' + activeYear) === -1) { return; }
-                var base = key.split('|')[0];
-                if (activeProgram === 'felt' && base !== '/data/felt') { return; }
-                if (activeProgram === 'bane' && base !== '/data/bane') { return; }
-                var comps = yearData[key].competitions || [];
-                comps.forEach(function (comp) {
-                    if (StandplassStevnerPage.normalizeClub(comp.organizationName) === StandplassStevnerPage.normalizeClub(resolved)) {
-                        organizedComps.push(comp);
-                    }
-                });
-            });
-            organizedComps.sort(function (a, b) {
-                return (b.startDate || '').localeCompare(a.startDate || '');
-            });
 
             // Build HTML
             var summaryHtml = clubStat
@@ -1563,7 +1937,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['mest-aktive'] = mostActiveTableSpec(topShooters, resolved);
             var topShootersHtml = topShooters.length
                 ? buildTableCard({
-                    id: 'mest-aktive', title: 'Mest aktive skyttere', rows: topShooters,
+                    title: 'Mest aktive skyttere', rows: topShooters, picker: true,
                     tableHtml: StandplassDataTable.renderTable('mest-aktive',
                         drilldownSpecs['mest-aktive'], drilldownState('mest-aktive'))
                 })
@@ -1572,7 +1946,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['ovelsesfordeling'] = disciplineTableSpec(discRows, discData, resolved);
             var discHtml = discRows.length
                 ? buildTableCard({
-                    id: 'ovelsesfordeling', title: 'Øvelsesfordeling', rows: discRows,
+                    title: 'Øvelsesfordeling', rows: discRows,
                     tableHtml: StandplassDataTable.renderTable('ovelsesfordeling',
                         drilldownSpecs['ovelsesfordeling'], drilldownState('ovelsesfordeling'))
                 })
@@ -1590,6 +1964,7 @@ var StandplassClubStats = (function () {
             if (resolved !== top3Club) {
                 top3State = { mode: 'top3', hidden: {} };
                 drilldownSort = {};
+                drilldownHidden = {};
                 chartSort = null;
             }
             top3Club = resolved;
@@ -1599,7 +1974,7 @@ var StandplassClubStats = (function () {
             drilldownSpecs['arrangerte-stevner'] = organizedCompsTableSpec(organizedComps, resolved);
             var orgHtml = organizedComps.length
                 ? buildTableCard({
-                    id: 'arrangerte-stevner', title: 'Arrangerte stevner', rows: organizedComps,
+                    title: 'Arrangerte stevner', rows: organizedComps, picker: true,
                     tableHtml: StandplassDataTable.renderTable('arrangerte-stevner',
                         drilldownSpecs['arrangerte-stevner'], drilldownState('arrangerte-stevner'))
                 })
@@ -1609,6 +1984,14 @@ var StandplassClubStats = (function () {
                 ? '<p class="club-stats-note">' + activeYear + ': foreløpig, oppdateres jevnlig.</p>'
                 : '';
 
+            // The old wires' pickers attached listeners beyond their DOM
+            // (outside-click) — destroy them before the swap, exactly as
+            // renderToplists does for top3Wire. wireDrilldownTables then
+            // re-wires from scratch.
+            Object.keys(drilldownWires).forEach(function (wid) {
+                drilldownWires[wid].destroy();
+                drilldownWires[wid] = null;
+            });
             contentEl.innerHTML = summaryHtml + chartHtml + topShootersHtml + discHtml + classHtml + bestHtml + orgHtml + yearNote;
             wireTop3();
             wireDrilldownTables();
@@ -1618,21 +2001,78 @@ var StandplassClubStats = (function () {
         // ── Drilldown table wiring ─────────────────────────────────────
 
         function drilldownState(id) {
-            return { sort: drilldownSort[id] || null, hidden: {}, runtimeHidden: [], widthTier: null };
+            var s = drilldownLiveStates[id];
+            if (!s) {
+                s = drilldownLiveStates[id] = { sort: null, hidden: {}, runtimeHidden: [], widthTier: null };
+            }
+            s.sort = drilldownSort[id] || null;
+            s.hidden = drilldownHidden[id] || {};
+            s.runtimeHidden = [];
+            s.widthTier = drilldownWidthTier;
+            return s;
+        }
+
+        function ensureDrilldownTierWatcher() {
+            if (drilldownTierWired) { return; }
+            drilldownTierWired = true;
+            var mql = window.matchMedia('(max-width: ' + DRILLDOWN_SPLIT_TIER + 'px)');
+            drilldownWidthTier = mql.matches ? DRILLDOWN_SPLIT_TIER : null;
+            var onTierChange = function () {
+                var next = mql.matches ? DRILLDOWN_SPLIT_TIER : null;
+                if (next === drilldownWidthTier) { return; }
+                drilldownWidthTier = next;
+                // Split-column markup is tier-dependent: surgically
+                // re-render the two split-carrying tables. The reduced
+                // re-wire is enough for the picker too — its checkbox
+                // list rebuilds on every open, reading the live state
+                // object drilldownState() just refreshed.
+                rerenderDrilldownTable('mest-aktive');
+                rerenderDrilldownTable('arrangerte-stevner');
+            };
+            if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', onTierChange); }
+            else if (typeof mql.addListener === 'function') { mql.addListener(onTierChange); }
         }
 
         function rerenderDrilldownTable(id) {
             // Surgical: replace only the table element with a BARE table
-            // (no wrapClass) — re-wrapping would nest scroll regions
-            // (rung-1 lesson). The old table's listeners die with it.
+            // (columns/rows/ariaLabel/defaultSort only — no picker, no
+            // wrapClass) — re-wrapping would nest scroll regions
+            // (rung-1 lesson) and re-emitting a toolbar would duplicate
+            // the card header's Kolonner button. The reduced re-wire
+            // leaves the header button's live wiring (and an open
+            // dropdown panel) untouched — rerenderTop3Table's pattern;
+            // the panel stays correct because drilldownState() refreshes
+            // the state object that wiring captured.
             var tableEl = contentEl.querySelector('table[data-dt-id="' + id + '"]');
             if (!tableEl || !drilldownSpecs[id]) { return; }
-            tableEl.outerHTML = StandplassDataTable.renderTable(id, drilldownSpecs[id], drilldownState(id));
-            wireDrilldownTable(id);
+            var spec = drilldownSpecs[id];
+            tableEl.outerHTML = StandplassDataTable.renderTable(id, {
+                columns: spec.columns,
+                rows: spec.rows,
+                ariaLabel: spec.ariaLabel,
+                defaultSort: spec.defaultSort
+            }, drilldownState(id));
+            wireDrilldownTable(id, false);
         }
 
-        function wireDrilldownTable(id) {
-            StandplassDataTable.wireTable(contentEl, id, drilldownSpecs[id], {
+        function wireDrilldownTable(id, initialWire) {
+            var tableEl = contentEl.querySelector('table[data-dt-id="' + id + '"]');
+            if (!tableEl || !drilldownSpecs[id]) { return; }
+            var spec = drilldownSpecs[id];
+            // The reduced re-wire carries only what the sort path reads
+            // (columns for defaultDir, defaultSort for flip state) — no
+            // picker, so the header button's existing wiring stays
+            // untouched. Root is the table's own card: wirePicker finds
+            // button + anchor via querySelector on the root, and with
+            // several pickered cards under contentEl only the card
+            // scope keeps each table on its own button.
+            var wireSpec = initialWire ? spec : { columns: spec.columns, defaultSort: spec.defaultSort };
+            var root = tableEl.closest('.ranking-card') || contentEl;
+            if (initialWire && drilldownWires[id]) {
+                drilldownWires[id].destroy();
+                drilldownWires[id] = null;
+            }
+            var wire = StandplassDataTable.wireTable(root, id, wireSpec, {
                 onSortChange: function (sort) {
                     drilldownSort[id] = sort;
                     rerenderDrilldownTable(id);
@@ -1640,14 +2080,19 @@ var StandplassClubStats = (function () {
                     // the clicked button was destroyed with the re-render.
                     var btn = contentEl.querySelector('table[data-dt-id="' + id + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
                     if (btn) { btn.focus(); }
+                },
+                onColumnsChange: function (hidden) {
+                    drilldownHidden[id] = hidden;
+                    rerenderDrilldownTable(id);
                 }
             }, drilldownState(id));
+            if (initialWire) { drilldownWires[id] = wire; }
         }
 
         function wireDrilldownTables() {
             Object.keys(drilldownSpecs).forEach(function (id) {
                 if (!contentEl.querySelector('table[data-dt-id="' + id + '"]')) { return; }
-                wireDrilldownTable(id);
+                wireDrilldownTable(id, true);
             });
         }
 
@@ -1771,8 +2216,18 @@ var StandplassClubStats = (function () {
             // it outlives its DOM.
             if (top3Wire) { top3Wire.destroy(); top3Wire = null; }
             if (!top3Spec) { return; }
-            if (!contentEl.querySelector('table[data-dt-id="top3"]')) { return; }
-            top3Wire = StandplassDataTable.wireTable(contentEl, 'top3', top3Spec, top3Handlers(), top3State);
+            var tableEl = contentEl.querySelector('table[data-dt-id="top3"]');
+            if (!tableEl) { return; }
+            // Root is the table's own card, matching wireDrilldownTable:
+            // wirePicker finds button + anchor via querySelector on the
+            // root, and the drilldown's pickered cards render before this
+            // card in the content element — a contentEl root would bind
+            // this table's picker to the first drilldown button and leave
+            // this card's own Kolonner button dead (it also re-hijacked
+            // that drilldown button after every mode change, which
+            // re-runs this wire).
+            var root = tableEl.closest('.ranking-card') || contentEl;
+            top3Wire = StandplassDataTable.wireTable(root, 'top3', top3Spec, top3Handlers(), top3State);
         }
 
         function rerenderTop3Table() {
@@ -1837,9 +2292,13 @@ var StandplassClubStats = (function () {
         computeClubStats: computeClubStats,
         rankClubs: rankClubs,
         computeYearOverYear: computeYearOverYear,
+        buildCompOrganizerIndex: buildCompOrganizerIndex,
+        formatSignedDelta: formatSignedDelta,
         ALWAYS_OPEN_DISCIPLINES: ALWAYS_OPEN_DISCIPLINES,
         effectiveClass: effectiveClass,
         computeClassDistribution: computeClassDistribution,
+        computeShooterActivity: computeShooterActivity,
+        organizedCompRow: organizedCompRow,
         mostActiveTableSpec: mostActiveTableSpec,
         disciplineTableSpec: disciplineTableSpec,
         organizedCompsTableSpec: organizedCompsTableSpec,

@@ -4,7 +4,6 @@ var CS = require('../public/js/club-stats-page.js');
 global.StandplassStevnerPage = require('../public/js/stevner-page.js');
 // Cross-module globals the page modules reference at call time (same
 // pattern as every other page test in this repo).
-global.StandplassTable = require('../public/js/table-renderer.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
@@ -76,6 +75,69 @@ var noClubRows = [{ personId: 'p1', club: '', discipline: 'Finfelt', class: 'A',
 var noClubStats = CS.computeClubStats(noClubRows);
 assert.strictEqual(Object.keys(noClubStats).length, 1, 'empty club name → "Ukjent" bucket');
 assert.strictEqual(noClubStats['Ukjent'].uniqueShooters, 1, 'Ukjent bucket has 1 shooter');
+
+// ── hosted/external splits (the toplists' klubb/andre columns) ─────────
+
+// buildCompOrganizerIndex: competitionId → normalized organizer, with
+// year + program filtering and no-organizer comps left out.
+var orgYearData = {
+    '/data/felt|2026': { competitions: [
+        { id: 'c1', organizationName: 'Klubb A' },
+        { id: 'c2', organizationName: 'Andre SK' },
+        { id: 'c3', organizationName: 'KLUBB B' },
+        { id: 'c-no-org', startDate: '2026-05-01' }
+    ] },
+    '/data/bane|2026': { competitions: [
+        { id: 'b1', organizationName: 'Bane KLubb' }
+    ] },
+    '/data/felt|2025': { competitions: [
+        { id: 'old1', organizationName: 'Klubb A' }
+    ] }
+};
+var orgIdx = CS.buildCompOrganizerIndex(orgYearData, 2026, 'alle');
+assert.strictEqual(orgIdx.c1, 'klubba', 'organizer names are normalized');
+assert.strictEqual(orgIdx.b1, 'baneklubb', 'alle spans both programs');
+assert.ok(!('c-no-org' in orgIdx), 'competitions without an organizer are not in the index');
+assert.ok(!('old1' in orgIdx), 'other years are filtered out');
+var feltOnlyIdx = CS.buildCompOrganizerIndex(orgYearData, 2026, 'felt');
+assert.ok(!('b1' in feltOnlyIdx), 'felt program excludes bane competitions');
+assert.strictEqual(feltOnlyIdx.c3, 'klubbb', 'uppercase organizers normalize (c3 → Klubb B)');
+
+// computeClubStats with the index: a club's starts and attended stevner
+// split into its own hosted stevner and external ones. A start without a
+// competitionId is external by definition; a club's shooter at ANOTHER
+// club's stevne is external too.
+var splitRows = [
+    { personId: 's1', club: 'Klubb A', competitionId: 'c1', position: 1 },
+    { personId: 's2', club: 'Klubb A', competitionId: 'c1', position: 2 },
+    { personId: 's1', club: 'Klubb A', competitionId: 'c2', position: 3 },
+    { personId: 's3', club: 'Klubb A', position: 4 },
+    { personId: 's4', club: 'Klubb B', competitionId: 'c1', position: 5 },
+    { personId: 's5', club: 'Klubb B', competitionId: 'c3', position: 1 }
+];
+var splitStats = CS.computeClubStats(splitRows, orgIdx);
+assert.strictEqual(splitStats['Klubb A'].clubStarts, 2, 'Klubb A: 2 starts at its own stevne (c1)');
+assert.strictEqual(splitStats['Klubb A'].otherStarts, 2, 'Klubb A: c2 start + one without a compId are external');
+assert.strictEqual(splitStats['Klubb A'].clubStevner, 1, 'Klubb A attended its own c1');
+assert.strictEqual(splitStats['Klubb A'].otherStevner, 1, 'Klubb A attended external c2');
+assert.strictEqual(splitStats['Klubb A'].clubStarts + splitStats['Klubb A'].otherStarts,
+    splitStats['Klubb A'].totalStarts, 'start splits sum to the total');
+assert.strictEqual(splitStats['Klubb A'].clubStevner + splitStats['Klubb A'].otherStevner,
+    splitStats['Klubb A'].competitionsAttended, 'stevne splits sum to the total');
+assert.strictEqual(splitStats['Klubb B'].clubStarts, 1, 'Klubb B: its shooter at KLUBB B\'s c3 is hosted (case-insensitive organizer)');
+assert.strictEqual(splitStats['Klubb B'].otherStarts, 1, 'Klubb B: its shooter at Klubb A\'s c1 is external');
+assert.strictEqual(splitStats['Klubb B'].clubStevner, 1, 'Klubb B attended its own c3');
+assert.strictEqual(splitStats['Klubb B'].otherStevner, 1, 'Klubb B attended external c1');
+
+// Without an organizer index nothing is a club comp — splits still sum.
+var noIdxStats = CS.computeClubStats(splitRows);
+assert.strictEqual(noIdxStats['Klubb A'].clubStarts, 0, 'no organizer index → nothing hosted');
+assert.strictEqual(noIdxStats['Klubb A'].otherStarts, noIdxStats['Klubb A'].totalStarts, 'every start lands in andre');
+
+// rankClubs passes the split keys through for the toplist columns.
+var splitRanked = CS.rankClubs(splitStats, 'totalStarts', { minShooters: 0, minStarts: 0 });
+assert.strictEqual(splitRanked[0].clubStarts, 2, 'rankClubs carries clubStarts through');
+assert.strictEqual(splitRanked[0].otherStevner, 1, 'rankClubs carries otherStevner through');
 
 // ── rankClubs ──────────────────────────────────────────────────────────
 
@@ -176,6 +238,15 @@ assert.strictEqual(findClub(yoy, 'Klubb A').delta, 3, 'absolute delta (10-7=3), 
 
 // Empty inputs
 assert.strictEqual(CS.computeYearOverYear(null, null).length, 0, 'null inputs → empty');
+
+// ── formatSignedDelta ──────────────────────────────────────────────────
+
+// Signed display for økning/endring values: positives carry +, zeros
+// and negatives render bare (a negative already carries its own minus).
+assert.strictEqual(CS.formatSignedDelta(12), '+12', 'positive → +12');
+assert.strictEqual(CS.formatSignedDelta(1), '+1', 'positive one → +1');
+assert.strictEqual(CS.formatSignedDelta(0), '0', 'zero → bare 0, no prefix');
+assert.strictEqual(CS.formatSignedDelta(-3), '-3', 'negative keeps its own minus');
 assert.strictEqual(CS.computeYearOverYear({}, {}).length, 0, 'empty inputs → empty');
 assert.strictEqual(CS.computeYearOverYear(currentStats, null).length, 3, 'null previous → all current clubs are new');
 
@@ -588,7 +659,7 @@ assert.ok(top3Html.indexOf('ranking-card-table-wrap') >= 0, 'scroll wrapper pres
 assert.ok(top3Html.indexOf('Totalt') >= 0, 'Totalt column header');
 assert.ok(top3Html.indexOf('Finfelt A') < 0, 'combo headers hidden by default');
 assert.ok(top3Html.indexOf('Spesialpistol Åpen') < 0, 'no combo headers by default (2)');
-assert.ok(top3Html.indexOf('scope="row"') >= 0, 'Navn is a row header');
+assert.ok(top3Html.indexOf('scope="row"') === -1, 'Navn is a plain data cell, not a row header');
 assert.ok(top3Html.indexOf('Vis alle øvelser') < 0, 'old combo cap toggle removed');
 assert.ok(top3Html.indexOf('Vis øvelser') < 0, 'øvelser reveal toggle replaced by the column picker');
 assert.ok(top3Html.indexOf('data-dt-picker') >= 0, 'column picker button (Kolonner) present');
@@ -600,8 +671,10 @@ assert.ok(top3Html.indexOf('dt-toolbar') === -1, 'no separate toolbar row above 
 assert.ok(top3Html.indexOf('data-dt-sort="name"') >= 0, 'Navn column sortable');
 assert.ok(top3Html.indexOf('data-dt-sort="total"') >= 0, 'Totalt column sortable');
 assert.ok(top3Html.indexOf('aria-sort="descending"') >= 0, 'Totalt marked as the designated default sort (desc)');
-assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+assert.ok(top3Html.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice" data-metric="position">Alice</button></td>') >= 0,
     'page order stands until a sort is set');
+assert.ok(top3Html.indexOf('data-person-id="p1" data-person-name="Alice" data-metric="position"') >= 0,
+    'top-3 names are person buttons that open the modal on the Plassering chart');
 // Placement-mode group: 4 buttons, aria-pressed only on the active one
 assert.ok(top3Html.indexOf('top3-mode-btn') >= 0, 'mode group rendered');
 assert.strictEqual((top3Html.match(/data-mode="/g) || []).length, 4, 'four mode buttons');
@@ -695,13 +768,13 @@ assert.ok(CS.renderTopThreeHtml([], 'K1', 2026, { hidden: { 'combo|Finfelt|A': f
 // The # column is each shooter's RANK (page-order placement) — it travels
 // with the row under sorting instead of renumbering.
 var ascTop3 = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p2" data-person-name="Bob" data-metric="position">Bob</button></td>') >= 0,
     'asc sort: Bob leads but keeps his rank (2)');
-assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><th scope="row">Alice</th>') >= 0,
+assert.ok(ascTop3.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice" data-metric="position">Alice</button></td>') >= 0,
     'asc sort: Alice is second but keeps her rank (1)');
 assert.ok(ascTop3.indexOf('aria-sort="ascending"') >= 0, 'active sort marked ascending');
 var ascAgain = CS.renderTopThreeHtml(top3Ranking, 'K1', 2026, { sort: { key: 'total', dir: 'asc' } });
-assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><th scope="row">Bob</th>') >= 0,
+assert.ok(ascAgain.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p2" data-person-name="Bob" data-metric="position">Bob</button></td>') >= 0,
     'sort survives a re-render with the same state');
 
 // ── scroll-confined table cards (toplists + per-club lists) ──────────
@@ -768,23 +841,64 @@ function ddSorted(spec, key, dir) {
 }
 
 // Mest aktive skyttere
-var maSpec = CS.mostActiveTableSpec([
-    { name: 'Alice', starts: 9 },
-    { name: 'Bob', starts: 4 }
-], 'Klubb X');
+// Activity data through the real path (computeShooterActivity): rows
+// from other clubs and rows without personId don't count; a shooter's
+// stevner are unique competitionIds, klubbstevner the ones the club
+// itself organized (clubCompIds); starts split on the same membership.
+// A start without a competitionId still counts toward starter.
+var maActivity = CS.computeShooterActivity([
+    { personId: 'p1', name: 'Alice', club: 'Klubb X', competitionId: 'c1' },
+    { personId: 'p1', name: 'Alice', club: 'Klubb X', competitionId: 'c1' },
+    { personId: 'p1', name: 'Alice', club: 'Klubb X', competitionId: 'c2' },
+    { personId: 'p2', name: 'Bob', club: 'Klubb X', competitionId: 'c2' },
+    { personId: 'p2', name: 'Bob', club: 'Klubb X' },
+    { personId: 'p3', name: 'Eve', club: 'Annen klubb', competitionId: 'c1' },
+    { name: 'Uten id', club: 'Klubb X', competitionId: 'c1' }
+], 'Klubb X', { c1: true });
+assert.strictEqual(maActivity.length, 2, 'mest aktive data: other-club shooters and personId-less rows excluded');
+assert.deepEqual(maActivity[0], { personId: 'p1', name: 'Alice', stevner: 2, clubStevner: 1, otherStevner: 1, starts: 3, clubStarts: 2, otherStarts: 1 },
+    'mest aktive data: Alice — unique stevner, club split, start-without-competitionId counted only as a start');
+assert.deepEqual(maActivity[1], { personId: 'p2', name: 'Bob', stevner: 1, clubStevner: 0, otherStevner: 1, starts: 2, clubStarts: 0, otherStarts: 2 },
+    'mest aktive data: Bob — competitionId-less start is an andre start, no stevne');
+
+var maSpec = CS.mostActiveTableSpec(maActivity, 'Klubb X');
 assert.strictEqual(maSpec.ariaLabel, 'Mest aktive skyttere for Klubb X', 'mest aktive: aria-label');
+assert.deepEqual(maSpec.picker, { buttonLabel: 'Kolonner', toolbar: false },
+    'mest aktive: column picker declared, button hosted by the card header');
 var maHtml = StandplassDataTable.renderTable('mest-aktive', maSpec, ddState);
 assert.ok(maHtml.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="clubStevner">Klubbstevner<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="otherStevner">Andre stevner<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="stevner">Stevner<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="clubStarts">Klubbstarter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="otherStarts">Andre starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'mest aktive: sortable Navn/Starter headers');
-assert.ok(maHtml.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Alice</td><td class="ranking-score">9</td></tr>') !== -1,
-    'mest aktive: row markup matches today');
+    'mest aktive: eight sortable columns in the owner order, Starter marked aria-sort descending (page order is starts-desc)');
+assert.ok(maHtml.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice">Alice</button></td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">2</td><td class="ranking-score">1</td><td class="ranking-score">3</td></tr>') !== -1,
+    'mest aktive: row markup — name opens the person modal, splits sum to their totals');
 var maAsc = ddSorted(maSpec, 'starts', 'asc');
-assert.ok(maAsc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td>Bob</td>') !== -1
+assert.ok(maAsc.indexOf('<tr data-dt-row="1"><td class="ranking-rank">2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p2" data-person-name="Bob">Bob</button></td>') !== -1
     && maAsc.indexOf('<tr data-dt-row="1">') < maAsc.indexOf('<tr data-dt-row="0">'),
     'mest aktive: rank travels under a Starter sort');
+var maClubSort = ddSorted(maSpec, 'clubStevner', 'desc');
+assert.ok(maClubSort.indexOf('<tr data-dt-row="0">') < maClubSort.indexOf('<tr data-dt-row="1">'),
+    'mest aktive: Klubbstevner desc keeps Alice (1) above Bob (0)');
+// Width tier 900: the four split columns hide, the totals stay — the
+// Kolonner picker can re-enable them (user choice overrides the tier).
+var maTier = StandplassDataTable.renderTable('mest-aktive', maSpec,
+    { hidden: {}, runtimeHidden: [], widthTier: 900 });
+assert.ok(maTier.indexOf('Klubbstevner') === -1 && maTier.indexOf('Andre starter') === -1,
+    'mest aktive: split columns hidden at tier 900');
+assert.ok(maTier.indexOf('<thead><tr><th scope="col" class="ranking-rank">#</th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="stevner">Stevner<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'mest aktive: tier 900 keeps #, Navn, Stevner, Starter');
+assert.ok(maTier.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="p1" data-person-name="Alice">Alice</button></td><td class="ranking-score">2</td><td class="ranking-score">3</td></tr>') !== -1,
+    'mest aktive: tier 900 row markup carries the totals');
 
 // Øvelsesfordeling
 var discData = {
@@ -797,9 +911,9 @@ var discHtml = StandplassDataTable.renderTable('ovelsesfordeling', discSpec, ddS
 assert.ok(discHtml.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'øvelsesfordeling: all three columns sortable');
+    'øvelsesfordeling: all three columns sortable, Starter marked aria-sort descending (page order is starts-desc)');
 assert.ok(discHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td class="ranking-score">3</td><td class="ranking-score">7</td></tr>') !== -1,
     'øvelsesfordeling: bare-name rows flattened with counts');
 var discAsc = ddSorted(discSpec, 'shooters', 'asc');
@@ -808,20 +922,96 @@ assert.ok(discAsc.indexOf('<tr data-dt-row="1"><td>Grovfelt</td>') !== -1
     'øvelsesfordeling: shooters asc reorders');
 
 // Arrangerte stevner
-var orgSpec = CS.organizedCompsTableSpec([
-    { title: 'Uten dato', startDate: null, facilityName: null },
-    { title: 'Høststevnet', startDate: '2026-10-03T10:00:00Z', facilityName: 'Bane A' },
-    { title: 'Vårfeltet', startDate: '2026-03-01T08:00:00Z', facilityName: null }
-], 'Klubb X');
+// Participant counts through the real path (organizedCompRow):
+// personId-keyed uniques — results without one don't count — split
+// into the club's members and everyone else. Total is the union, not
+// the sum of the splits.
+var orgRows = [
+    CS.organizedCompRow({ id: 'c-uten', title: 'Uten dato', startDate: null, facilityName: null, results: [
+        { personId: 'p1', club: 'Klubb X' },
+        { personId: 'p1', club: 'Klubb X' },
+        { personId: 'p2', club: 'Annen klubb' },
+        { name: 'Ingen id', club: 'Klubb X' }
+    ] }, 'Klubb X'),
+    CS.organizedCompRow({ id: 'c-host', title: 'Høststevnet', startDate: '2026-10-03T10:00:00Z', facilityName: 'Bane A', results: [
+        { personId: 'p3', club: 'KLUBB X' },
+        { personId: 'p4', club: 'Ekstern PK' }
+    ] }, 'Klubb X'),
+    CS.organizedCompRow({ id: 'c-var', title: 'Vårfeltet', startDate: '2026-03-01T08:00:00Z', facilityName: null, results: [] }, 'Klubb X')
+];
+assert.deepEqual(orgRows[0], { compId: 'c-uten', title: 'Uten dato', startDate: null, facilityName: null, memberParticipants: 1, externalParticipants: 1, totalParticipants: 2, memberStarts: 3, externalStarts: 1, totalStarts: 4 },
+    'arrangerte data: same person twice is one participant, personId-less results don\'t count as deltakere — but every result row is a start (3 member starts, 1 member deltaker)');
+assert.strictEqual(orgRows[1].memberParticipants, 1,
+    'arrangerte data: club matching is normalizeClub (case-insensitive)');
+var orgAnomaly = CS.organizedCompRow({ id: 'c-anomali', title: 'Anomali', results: [
+    { personId: 'p9', club: 'Klubb X' },
+    { personId: 'p9', club: 'Annen klubb' }
+] }, 'Klubb X');
+assert.strictEqual(orgAnomaly.memberParticipants, 1);
+assert.strictEqual(orgAnomaly.externalParticipants, 1);
+assert.strictEqual(orgAnomaly.totalParticipants, 1,
+    'arrangerte data: a person with starts under both clubs (data anomaly) counts once in the total');
+assert.strictEqual(orgAnomaly.memberStarts, 1);
+assert.strictEqual(orgAnomaly.externalStarts, 1);
+assert.strictEqual(orgAnomaly.totalStarts, 2,
+    'arrangerte data: start splits count result rows — the both-clubs anomaly is a start in each');
+
+var orgSpec = CS.organizedCompsTableSpec(orgRows, 'Klubb X');
 assert.strictEqual(orgSpec.ariaLabel, 'Arrangerte stevner for Klubb X', 'arrangerte: aria-label');
+assert.deepEqual(orgSpec.picker, { buttonLabel: 'Kolonner', toolbar: false },
+    'arrangerte: column picker declared, button hosted by the card header');
 var orgHtml = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec, ddState);
-assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td>Høststevnet</td><td>2026-10-03</td><td>Bane A</td></tr>') !== -1,
-    'arrangerte: ISO date sliced to YYYY-MM-DD');
-assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td></tr>') !== -1,
-    'arrangerte: missing values render –');
+assert.ok(orgHtml.indexOf('<thead><tr>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="title">Stevne<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="startDate">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="facilityName">Anlegg<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="memberParticipants"><span>Deltakere<br>(medlemmer)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="externalParticipants"><span>Deltakere<br>(eksterne)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalParticipants"><span>Deltakere<br>(totalt)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="memberStarts"><span>Starter<br>(medlemmer)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="externalStarts"><span>Starter<br>(eksterne)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts"><span>Starter<br>(totalt)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '</tr></thead>') !== -1,
+    'arrangerte: nine sortable columns — counting headers break onto two lines, Dato marked aria-sort descending (page order is date-desc)');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td><button type="button" class="stevner-comp-btn" data-comp-id="c-host">Høststevnet</button></td><td>2026-10-03</td><td>Bane A</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td></tr>') !== -1,
+    'arrangerte: ISO date sliced to YYYY-MM-DD, participant and start counts in the row');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td><button type="button" class="stevner-comp-btn" data-comp-id="c-uten">Uten dato</button></td><td>–</td><td>–</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">3</td><td class="ranking-score">1</td><td class="ranking-score">4</td></tr>') !== -1,
+    'arrangerte: stevne opens the comp modal, missing values render –, starter columns shown by default');
 var orgAsc = ddSorted(orgSpec, 'startDate', 'asc');
 assert.ok(orgAsc.indexOf('Vårfeltet') < orgAsc.indexOf('Høststevnet') && orgAsc.indexOf('Høststevnet') < orgAsc.indexOf('Uten dato'),
     'arrangerte: Dato asc sorts chronologically, nulls last');
+var orgTotalDesc = ddSorted(orgSpec, 'totalParticipants', 'desc');
+assert.ok(orgTotalDesc.indexOf('Vårfeltet') > orgTotalDesc.indexOf('Høststevnet'),
+    'arrangerte: Deltakere (totalt) desc sinks the empty stevne last');
+var orgStartsDesc = ddSorted(orgSpec, 'totalStarts', 'desc');
+assert.ok(orgStartsDesc.indexOf('Vårfeltet') > orgStartsDesc.indexOf('Høststevnet'),
+    'arrangerte: Starter (totalt) desc sinks the empty stevne last');
+// Counting columns carry the plain-text name for the Kolonner dropdown
+// (the header label is pre-built two-line HTML via labelRaw).
+var counting = orgSpec.columns.filter(function (c) { return c.pickerLabel; });
+assert.strictEqual(counting.length, 6, 'arrangerte spec: six counting columns with picker labels');
+assert.ok(counting.every(function (c) { return c.pickerLabel.indexOf('<') === -1 && c.pickerLabel.indexOf('(') !== -1; }),
+    'arrangerte spec: picker labels are the plain one-line phrases');
+// Starter columns follow the participant columns' tier split: splits
+// hide below 900px, totals stay — and the user's explicit Kolonner
+// choice overrides both (the base's visibility rules).
+assert.ok(orgSpec.columns.filter(function (c) { return /Starts$/.test(c.key) && c.hideBelow == null; }
+    ).every(function (c) { return c.key === 'totalStarts'; }),
+    'arrangerte spec: only Starter (totalt) lacks a tier');
+var orgTier = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
+    { hidden: {}, runtimeHidden: [], widthTier: 900 });
+assert.ok(orgTier.indexOf('data-dt-sort="memberParticipants"') === -1
+    && orgTier.indexOf('data-dt-sort="externalStarts"') === -1,
+    'arrangerte: split columns hidden at tier 900');
+assert.ok(orgTier.indexOf('data-dt-sort="totalStarts"') !== -1,
+    'arrangerte: Starter (totalt) survives tier 900');
+assert.ok(orgTier.indexOf('<tr data-dt-row="0"><td><button type="button" class="stevner-comp-btn" data-comp-id="c-uten">Uten dato</button></td><td>–</td><td>–</td><td class="ranking-score">2</td><td class="ranking-score">4</td></tr>') !== -1,
+    'arrangerte: tier 900 row keeps both totals');
+var orgHidden = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
+    { hidden: { totalStarts: true }, runtimeHidden: [], widthTier: null });
+assert.ok(orgHidden.indexOf('data-dt-sort="totalStarts"') === -1
+    && orgHidden.indexOf('data-dt-sort="memberStarts"') !== -1,
+    'arrangerte: a user-hidden starter column drops out, the others stay');
 
 // Klassefordeling
 var cdSpec = CS.classDistTableSpec([
@@ -834,9 +1024,9 @@ assert.ok(cdHtml.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Øvelse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="class">Klasse<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="shooters">Skyttere<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="starts">Starter<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'klassefordeling: all four columns sortable');
+    'klassefordeling: all four columns sortable, Starter marked aria-sort descending (page order is starts-desc)');
 assert.ok(cdHtml.indexOf('<tr data-dt-row="0"><td>Finfelt</td><td>Åpen</td><td class="ranking-score">2</td><td class="ranking-score">5</td></tr>') !== -1,
     'klassefordeling: row markup matches today');
 var cdAsc = ddSorted(cdSpec, 'class', 'asc');

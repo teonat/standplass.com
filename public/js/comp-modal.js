@@ -13,11 +13,34 @@ var StandplassCompModal = (function () {
     // un-escaping these exact fixed strings (no attributes, ever) means no
     // attacker-controlled text can become a tag: only the six literal
     // allowed-tag strings can ever appear as real markup in the output.
-    var ALLOWED_TAGS = /&lt;(\/?)(p|br|strong|em|b|i)\s*\/?&gt;/gi;
+    // Links are the one exception that needs an attribute: descriptions
+    // from skyting.no carry real <a href="..."> anchors (e.g. kart.1881.no
+    // map links), and without them the modal displays the tag as text.
+    // The opener is REBUILT from scratch around a scheme-checked href --
+    // the captured value is already escaped, so it cannot break out of
+    // the attribute -- and always carries this module's own
+    // target/rel, never the source's attributes. Anything else about
+    // the anchor (class, style, event handlers) stays escaped text.
+    var ALLOWED_TAGS = /&lt;(\/?)(p|br|strong|em|b|i|a)\s*\/?&gt;/gi;
+    var ALLOWED_LINK = /&lt;a\s+href=&quot;(.*?)&quot;\s*&gt;/gi;
+    // Source-data quirk: some skyting.no descriptions carry the next
+    // word right after the closing anchor with no space at all
+    // ("...</a>Avkjøringen..." — stevne 16681 et al.), which renders as
+    // "linkAvkjøringen". Punctuation directly after the link is
+    // legitimate typography ("...</a>. Av..."), so a space is only
+    // inserted before a following letter or digit.
+    var CROWDED_LINK_END = /<\/a>(?=[A-Za-z0-9À-ÿ])/g;
     function sanitizeDescription(html) {
-        return esc(html).replace(ALLOWED_TAGS, function (m, closing, tag) {
-            return '<' + closing + tag.toLowerCase() + '>';
-        });
+        return esc(html)
+            .replace(ALLOWED_LINK, function (m, href) {
+                var scheme = href.replace(/&amp;/g, '&');
+                if (!/^(https?:\/\/|mailto:)/i.test(scheme)) { return m; }
+                return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">';
+            })
+            .replace(ALLOWED_TAGS, function (m, closing, tag) {
+                return '<' + closing + tag.toLowerCase() + '>';
+            })
+            .replace(CROWDED_LINK_END, '</a> ');
     }
 
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };
@@ -460,6 +483,143 @@ var StandplassCompModal = (function () {
         ].filter(Boolean).join(' · ');
     }
 
+    // ── Page dialog host ────────────────────────────────────────────
+    // The per-page wiring around this module's render functions: the
+    // <dialog> scaffold (use it if the page already rendered one,
+    // otherwise make it), the Detaljer/Resultater tab toggle, the Gren
+    // filter, and the open-sequence guards against stale fetches.
+    // Extracted verbatim from stevner-page.js and terminliste-page.js,
+    // where it lived as two line-identical copies. Pages wire their own
+    // triggers (delegated clicks on whatever they render) and call
+    // open(compId, title) — names shown by the modal resolve from the
+    // detail fetch plus the reference data, not from the trigger.
+    function createDialogHost(cfg) {
+        cfg = cfg || {};
+        var root = cfg.root || document;
+        var idPrefix = cfg.idPrefix || '';
+        var fetchImpl = cfg.fetchImpl
+            || (typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : null);
+        // Fire-and-forget, module-singleton (see ensureReferenceData's
+        // own guard) -- discipline/class names for the events list and
+        // the Resultater tab.
+        ensureReferenceData(fetchImpl);
+        // Same idea as the pages' personOpenSeq: guards the async
+        // fetchDetail/fetchResults writes into the dialog's body
+        // elements against a race where a stale response resolves after
+        // the modal was reopened for a different competition, or the
+        // tab was switched away and back.
+        var openSeq = 0;
+        // Last-fetched Resultater rows, so the Gren filter can re-filter
+        // and re-render client-side instead of re-fetching on every
+        // change.
+        var lastResults = [];
+        var compDialog = (root.getElementById ? root.getElementById(idPrefix + '-comp-dialog') : null);
+        if (!compDialog) {
+            compDialog = document.createElement('dialog');
+            compDialog.id = idPrefix + '-comp-dialog';
+            compDialog.className = 'comp-modal-dialog';
+            // Two persistent body containers, toggled via `hidden` --
+            // not a single shared body replaced by innerHTML on every
+            // tab switch. (Matches the source's own NSFUI.CompModal,
+            // which never destroys the Detaljer render when Resultater
+            // is shown; a single-body-replace design loses the Detaljer
+            // content the moment Resultater is viewed, with no way back
+            // short of a cache-and-restore patch -- the real fix is to
+            // never destroy it in the first place.)
+            compDialog.innerHTML = '<div class="comp-modal-header"><h2 class="comp-modal-title"></h2>'
+                + '<button type="button" class="comp-modal-close" aria-label="Lukk">×</button></div>'
+                + '<p class="comp-modal-meta"></p>'
+                + '<div class="program-toggle" role="group" aria-label="Vis"><button type="button" class="program-btn program-btn--active" data-comp-tab="detaljer" aria-pressed="true">Detaljer</button>'
+                + '<button type="button" class="program-btn" data-comp-tab="resultater" aria-pressed="false">Resultater</button></div>'
+                + '<div class="comp-modal-body" data-comp-view="detaljer"></div>'
+                + '<div class="comp-modal-body" data-comp-view="resultater" hidden></div>';
+            (root === document ? document.body : root).appendChild(compDialog);
+        }
+        compDialog.querySelector('.comp-modal-close').addEventListener('click', function () { compDialog.close(); });
+        // A native <dialog>'s ::backdrop delivers its click with the
+        // dialog itself as e.target (no separate backdrop node).
+        compDialog.addEventListener('click', function (e) { if (e.target === compDialog) { compDialog.close(); } });
+
+        function open(compId, title) {
+            var mySeq = ++openSeq;
+            compDialog.dataset.compId = compId;
+            compDialog.querySelector('.comp-modal-title').textContent = title || '';
+            compDialog.querySelector('.comp-modal-meta').textContent = '';
+            var detailViewEl = compDialog.querySelector('[data-comp-view="detaljer"]');
+            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
+            detailViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            resultsViewEl.innerHTML = '';
+            detailViewEl.hidden = false;
+            resultsViewEl.hidden = true;
+            // Reset to the Detaljer tab every time the modal opens for
+            // a new competition, so a previous open's Resultater
+            // selection doesn't leak into the next.
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isDetaljer = b.getAttribute('data-comp-tab') === 'detaljer';
+                b.classList.toggle('program-btn--active', isDetaljer);
+                b.setAttribute('aria-pressed', String(isDetaljer));
+            });
+            compDialog.showModal();
+            fetchDetailWithFacility(compId, fetchImpl).then(function (result) {
+                if (mySeq !== openSeq) { return; } // a newer competition was opened since this fetch started
+                compDialog.querySelector('.comp-modal-meta').textContent =
+                    formatMetaLine(result.comp, result.facility);
+                detailViewEl.innerHTML = renderDetailBody(result.comp, result.facility);
+            }, function () {
+                if (mySeq !== openSeq) { return; }
+                detailViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste stevneinformasjon.</p>';
+            });
+        }
+
+        compDialog.querySelector('.program-toggle').addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-comp-tab]');
+            if (!btn) { return; }
+            var isDetaljer = btn.getAttribute('data-comp-tab') === 'detaljer';
+            Array.prototype.forEach.call(compDialog.querySelectorAll('.program-toggle button'), function (b) {
+                var isActive = b === btn;
+                b.classList.toggle('program-btn--active', isActive);
+                b.setAttribute('aria-pressed', String(isActive));
+            });
+            compDialog.querySelector('[data-comp-view="detaljer"]').hidden = !isDetaljer;
+            compDialog.querySelector('[data-comp-view="resultater"]').hidden = isDetaljer;
+            if (isDetaljer) { return; }
+            var mySeq = openSeq;
+            var resultsViewEl = compDialog.querySelector('[data-comp-view="resultater"]');
+            var compId = compDialog.dataset.compId;
+            resultsViewEl.innerHTML = '<p class="ranking-status-msg">Laster…</p>';
+            // openSeq alone catches "a different competition opened
+            // since this fetch started"; it doesn't change on a
+            // same-competition tab click, so also re-check that
+            // Resultater is still the active tab when the fetch
+            // resolves (covers switching back to Detaljer before this
+            // fetch settles).
+            function stillCurrent() {
+                return mySeq === openSeq
+                    && compDialog.querySelector('.program-toggle button[aria-pressed="true"]').getAttribute('data-comp-tab') === 'resultater';
+            }
+            fetchResults(compId, fetchImpl).then(function (results) {
+                if (!stillCurrent()) { return; }
+                lastResults = results;
+                resultsViewEl.innerHTML = renderResultsBody(lastResults, '', idPrefix);
+            }, function () {
+                if (!stillCurrent()) { return; }
+                resultsViewEl.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste resultater.</p>';
+            });
+        });
+
+        // Delegated on the dialog (not the filter select itself) since
+        // the Resultater body -- select included -- is torn down and
+        // rebuilt by innerHTML on every filter change.
+        compDialog.addEventListener('change', function (e) {
+            var select = e.target.closest('.comp-results-disc-filter');
+            if (!select) { return; }
+            compDialog.querySelector('[data-comp-view="resultater"]').innerHTML =
+                renderResultsBody(lastResults, select.value, idPrefix);
+        });
+
+        return { open: open, dialog: compDialog };
+    }
+
     return {
         groupEventsByDiscipline: groupEventsByDiscipline,
         sanitizeDescription: sanitizeDescription,
@@ -471,7 +631,8 @@ var StandplassCompModal = (function () {
         renderDetailBody: renderDetailBody,
         renderResultsBody: renderResultsBody,
         competitionResultsTableSpec: competitionResultsTableSpec,
-        formatMetaLine: formatMetaLine
+        formatMetaLine: formatMetaLine,
+        createDialogHost: createDialogHost
     };
 })();
 
