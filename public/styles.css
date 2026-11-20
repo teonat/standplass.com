@@ -211,7 +211,7 @@ h1, h2, h3 {
 
 .ranking-table th {
     text-align: left;
-    padding: 0.5rem 0.875rem;
+    padding: 0.5rem;
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -224,7 +224,7 @@ h1, h2, h3 {
 .ranking-table th.ranking-rank { text-align: center; }
 
 .ranking-table td {
-    padding: 0.4375rem 0.875rem;
+    padding: 0.4375rem 0.5rem;
     border-bottom: 1px solid var(--border-faint);
     color: var(--text-muted);
     font-size: 0.875rem;
@@ -627,7 +627,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
-    padding: 0.5rem 0.875rem 0.2rem;
+    padding: 0.5rem 0.5rem 0.2rem;
     background: var(--surface-base);
     text-align: left;
 }
