@@ -483,6 +483,34 @@ var StandplassClubStats = (function () {
         };
     }
 
+    // Deterministic two-line header for a counting column: the
+    // parenthetical drops to its own line (labelRaw = pre-built HTML;
+    // pickerLabel keeps the Kolonner dropdown's plain-text name). The
+    // <br> inside ONE span pins the header cell's min-content to its
+    // widest line — a space-separated label leaves the cell's
+    // min-content at the whole phrase, so the table overflows its
+    // scroll wrap instead of wrapping (measured live; the sort
+    // button's flex-wrap can't lower the intrinsic width engines
+    // report for the flex line).
+    function twoLineHeader(plain) {
+        var words = String(plain).split(' ');
+        return {
+            label: '<span>' + words[0] + '<br>' + words.slice(1).join(' ') + '</span>',
+            labelRaw: true,
+            pickerLabel: plain
+        };
+    }
+
+    function countingCol(key, plain, extra) {
+        var col = twoLineHeader(plain);
+        col.key = key;
+        col.align = 'right';
+        col.sortable = true;
+        col.defaultDir = 'desc';
+        (extra ? Object.keys(extra) : []).forEach(function (k) { col[k] = extra[k]; });
+        return col;
+    }
+
     function organizedCompsTableSpec(organizedComps, clubName) {
         return {
             columns: [
@@ -492,18 +520,16 @@ var StandplassClubStats = (function () {
                     cell: function (row) { return row.startDate ? String(row.startDate).slice(0, 10) : '–'; } },
                 { key: 'facilityName', label: 'Anlegg', sortable: true, defaultDir: 'asc',
                     cell: function (row) { return row.facilityName || '–'; } },
-                { key: 'memberParticipants', label: 'Deltakere (medlemmer)', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
-                { key: 'externalParticipants', label: 'Deltakere (eksterne)', align: 'right', hideBelow: DRILLDOWN_SPLIT_TIER, sortable: true, defaultDir: 'desc' },
-                { key: 'totalParticipants', label: 'Deltakere (totalt)', align: 'right', sortable: true, defaultDir: 'desc' },
-                // Starter columns: off by default, pickable via the
-                // Kolonner picker (defaultHidden — an explicit user
-                // choice wins, per the base's visibility rules). No
-                // hideBelow: they're already hidden by default, and a
-                // picked column shows at any width (horizontal scroll
-                // covers the overflow).
-                { key: 'memberStarts', label: 'Starter (medlemmer)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' },
-                { key: 'externalStarts', label: 'Starter (eksterne)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' },
-                { key: 'totalStarts', label: 'Starter (totalt)', align: 'right', defaultHidden: true, sortable: true, defaultDir: 'desc' }
+                // Counting columns: two-line headers keep the columns
+                // at their widest line; the splits hide below 900px and
+                // the totals stay. Starter columns behave exactly like
+                // the participant ones (shown by default).
+                countingCol('memberParticipants', 'Deltakere (medlemmer)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('externalParticipants', 'Deltakere (eksterne)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('totalParticipants', 'Deltakere (totalt)'),
+                countingCol('memberStarts', 'Starter (medlemmer)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('externalStarts', 'Starter (eksterne)', { hideBelow: DRILLDOWN_SPLIT_TIER }),
+                countingCol('totalStarts', 'Starter (totalt)')
             ],
             // Page order is date-desc (organizedComps sorted by
             // startDate desc upstream; the column sorts ISO date

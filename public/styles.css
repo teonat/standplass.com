@@ -1604,6 +1604,15 @@ tr[data-idx] { cursor: pointer; }
   align-items: center;
   gap: 0.3rem;
 }
+/* Header wrapping on the klubbstatistikk scroll tables: the sort
+   button's nowrap flex line makes a header cell's min-content the
+   whole phrase, so a squeezed table overflows instead of wrapping
+   (measured: the 9-column Arrangerte stevner overflowed its 804px
+   card with one-line headers). flex-wrap lets the line break under
+   constraint — the header then wraps at its word boundary and the
+   column sits at its widest word. Unconstrained headers are
+   unchanged (both items fit one line). */
+.club-stats-list-scroll .dt-sort-btn { flex-wrap: wrap; }
 .dt-sort-btn:focus-visible {
   outline: 2px solid var(--brand-accent);
   outline-offset: 1px;

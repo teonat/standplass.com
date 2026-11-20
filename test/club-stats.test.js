@@ -891,46 +891,53 @@ assert.ok(orgHtml.indexOf('<thead><tr>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="title">Stevne<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" aria-sort="descending"><button type="button" class="dt-sort-btn" data-dt-sort="startDate">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="facilityName">Anlegg<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="memberParticipants">Deltakere (medlemmer)<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="externalParticipants">Deltakere (eksterne)<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalParticipants">Deltakere (totalt)<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="memberParticipants"><span>Deltakere<br>(medlemmer)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="externalParticipants"><span>Deltakere<br>(eksterne)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalParticipants"><span>Deltakere<br>(totalt)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="memberStarts"><span>Starter<br>(medlemmer)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="externalStarts"><span>Starter<br>(eksterne)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts"><span>Starter<br>(totalt)</span><span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'arrangerte: six sortable columns, Dato marked aria-sort descending (page order is date-desc)');
-assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td>Høststevnet</td><td>2026-10-03</td><td>Bane A</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td></tr>') !== -1,
-    'arrangerte: ISO date sliced to YYYY-MM-DD, participant counts in the row');
-assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td></tr>') !== -1,
-    'arrangerte: missing values render –');
+    'arrangerte: nine sortable columns — counting headers break onto two lines, Dato marked aria-sort descending (page order is date-desc)');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="1"><td>Høststevnet</td><td>2026-10-03</td><td>Bane A</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td></tr>') !== -1,
+    'arrangerte: ISO date sliced to YYYY-MM-DD, participant and start counts in the row');
+assert.ok(orgHtml.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">3</td><td class="ranking-score">1</td><td class="ranking-score">4</td></tr>') !== -1,
+    'arrangerte: missing values render –, starter columns shown by default');
 var orgAsc = ddSorted(orgSpec, 'startDate', 'asc');
 assert.ok(orgAsc.indexOf('Vårfeltet') < orgAsc.indexOf('Høststevnet') && orgAsc.indexOf('Høststevnet') < orgAsc.indexOf('Uten dato'),
     'arrangerte: Dato asc sorts chronologically, nulls last');
 var orgTotalDesc = ddSorted(orgSpec, 'totalParticipants', 'desc');
 assert.ok(orgTotalDesc.indexOf('Vårfeltet') > orgTotalDesc.indexOf('Høststevnet'),
     'arrangerte: Deltakere (totalt) desc sinks the empty stevne last');
-// Width tier 900: member/external hide, the total stays.
-var orgTier = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
-    { hidden: {}, runtimeHidden: [], widthTier: 900 });
-assert.ok(orgTier.indexOf('Deltakere (medlemmer)') === -1 && orgTier.indexOf('Deltakere (eksterne)') === -1,
-    'arrangerte: split columns hidden at tier 900');
-assert.ok(orgTier.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">2</td></tr>') !== -1,
-    'arrangerte: tier 900 row keeps the total');
-// Starter columns: off by default, pickable via the Kolonner picker —
-// an explicit user choice (hidden[key] = false) shows them at any
-// width.
-var starterCols = orgSpec.columns.filter(function (c) { return /Starts$/.test(c.key); });
-assert.strictEqual(starterCols.length, 3, 'arrangerte spec: three starter columns');
-assert.ok(starterCols.every(function (c) { return c.defaultHidden === true; }),
-    'arrangerte spec: starter columns default-hidden');
-assert.ok(orgHtml.indexOf('Starter (medlemmer)') === -1 && orgHtml.indexOf('Starter (totalt)') === -1,
-    'arrangerte: starter columns absent from the default render');
-var orgPicked = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
-    { hidden: { memberStarts: false, externalStarts: false, totalStarts: false }, runtimeHidden: [], widthTier: null });
-assert.ok(orgPicked.indexOf('<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="totalStarts">Starter (totalt)<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>') !== -1,
-    'arrangerte: a picked starter column renders with a sort button');
-assert.ok(orgPicked.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">1</td><td class="ranking-score">1</td><td class="ranking-score">2</td><td class="ranking-score">3</td><td class="ranking-score">1</td><td class="ranking-score">4</td></tr>') !== -1,
-    'arrangerte: picked render carries start counts (3 member starts, 1 external, 4 total)');
 var orgStartsDesc = ddSorted(orgSpec, 'totalStarts', 'desc');
 assert.ok(orgStartsDesc.indexOf('Vårfeltet') > orgStartsDesc.indexOf('Høststevnet'),
     'arrangerte: Starter (totalt) desc sinks the empty stevne last');
+// Counting columns carry the plain-text name for the Kolonner dropdown
+// (the header label is pre-built two-line HTML via labelRaw).
+var counting = orgSpec.columns.filter(function (c) { return c.pickerLabel; });
+assert.strictEqual(counting.length, 6, 'arrangerte spec: six counting columns with picker labels');
+assert.ok(counting.every(function (c) { return c.pickerLabel.indexOf('<') === -1 && c.pickerLabel.indexOf('(') !== -1; }),
+    'arrangerte spec: picker labels are the plain one-line phrases');
+// Starter columns follow the participant columns' tier split: splits
+// hide below 900px, totals stay — and the user's explicit Kolonner
+// choice overrides both (the base's visibility rules).
+assert.ok(orgSpec.columns.filter(function (c) { return /Starts$/.test(c.key) && c.hideBelow == null; }
+    ).every(function (c) { return c.key === 'totalStarts'; }),
+    'arrangerte spec: only Starter (totalt) lacks a tier');
+var orgTier = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
+    { hidden: {}, runtimeHidden: [], widthTier: 900 });
+assert.ok(orgTier.indexOf('data-dt-sort="memberParticipants"') === -1
+    && orgTier.indexOf('data-dt-sort="externalStarts"') === -1,
+    'arrangerte: split columns hidden at tier 900');
+assert.ok(orgTier.indexOf('data-dt-sort="totalStarts"') !== -1,
+    'arrangerte: Starter (totalt) survives tier 900');
+assert.ok(orgTier.indexOf('<tr data-dt-row="0"><td>Uten dato</td><td>–</td><td>–</td><td class="ranking-score">2</td><td class="ranking-score">4</td></tr>') !== -1,
+    'arrangerte: tier 900 row keeps both totals');
+var orgHidden = StandplassDataTable.renderTable('arrangerte-stevner', orgSpec,
+    { hidden: { totalStarts: true }, runtimeHidden: [], widthTier: null });
+assert.ok(orgHidden.indexOf('data-dt-sort="totalStarts"') === -1
+    && orgHidden.indexOf('data-dt-sort="memberStarts"') !== -1,
+    'arrangerte: a user-hidden starter column drops out, the others stay');
 
 // Klassefordeling
 var cdSpec = CS.classDistTableSpec([
