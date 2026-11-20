@@ -337,6 +337,10 @@ h1, h2, h3 {
    reason as .club-stats-list-scroll). */
 .terminliste-scroll-wrap { overflow-y: auto; max-height: 54.5rem; }
 .terminliste-picker-row { display: flex; justify-content: flex-end; }
+/* Compact widget's own scroll cap: 10 typical rows (rows * 2.1rem +
+   2rem head). overflow-y: auto, never hidden -- same find-in-page rule
+   as the full page's cap. */
+.terminliste-widget-scroll { overflow-y: auto; max-height: 23rem; }
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
    [data-mode="dark"] overrides from the start (not a later fix round) --

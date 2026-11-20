@@ -224,4 +224,29 @@ assert.ok(fullMarkup.indexOf('dt-picker-anchor') >= 0, 'picker anchor emitted');
 // the new columns stay hidden at tier 700 too
 assert.ok(tier700.indexOf('>Krets</th>') < 0 && tier700.indexOf('>Starttid</th>') < 0, 'new columns stay hidden at tier 700');
 
+// ── compactTableSpec: the widget's table through the base ─────────────
+assert.strictEqual(typeof TP.compactTableSpec, 'function', 'compactTableSpec is exported');
+var compactSpec = TP.compactTableSpec(resolvedRows);
+var compactHtml = StandplassDataTable.renderTable('tl-widget-table', compactSpec, pageState(null));
+// byte-exact compact row: plain-text title (NO link -- the widget's rows
+// open the modal on title clicks, a link would hijack that)
+assert.ok(compactHtml.indexOf('<table class="ranking-table" data-dt-id="tl-widget-table" aria-label="Stevner">') >= 0,
+    'no ranking-full-table wrap, Stevner aria-label');
+assert.ok(compactHtml.indexOf('<tr data-dt-row="0" class="terminliste-row--clickable" data-id="c-1" data-status="1" data-title="Høststevne">') >= 0,
+    'the clickable-row attributes carry over');
+assert.ok(compactHtml.indexOf('<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="c-1" aria-label="Se detaljer for Høststevne">ⓘ</button></td>') >= 0,
+    'the ⓘ cell never appends status text in the widget');
+assert.ok(compactHtml.indexOf('<td class="terminliste-date">16.–17. nov 2026</td>') >= 0, 'Dato cell');
+assert.ok(compactHtml.indexOf('<td>Høststevne</td>') >= 0, 'Stevne cell is plain text, no link');
+assert.ok(compactHtml.indexOf('<td>Åpent stevne</td>') >= 0, 'Stevnetype cell');
+assert.ok(compactHtml.indexOf('<td class="terminliste-result-cell"><a href="https://example.com/r.pdf" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a></td>') >= 0,
+    'PDF result cell');
+// tiers: Stevnetype hides at 700, everything else stays
+var compact700 = StandplassDataTable.renderTable('tl-widget-table', compactSpec, pageState(700));
+assert.ok(compact700.indexOf('>Stevnetype</th>') < 0, 'tier 700 hides Stevnetype');
+assert.ok(compactHtml.indexOf('>Stevnetype</th>') >= 0, 'no tier keeps Stevnetype');
+// the widget wrap is a 10-row capped scroll area
+var compactMarkup = TP.buildMarkup('tl', true);
+assert.ok(compactMarkup.indexOf('terminliste-widget-scroll') >= 0, 'widget wrap gets the 10-row scroll-cap class');
+
 console.log('terminliste-page.test.js: all assertions passed');

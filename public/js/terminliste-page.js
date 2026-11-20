@@ -81,7 +81,7 @@ var StandplassTerminlistePage = (function () {
     function buildCompactMarkup(idPrefix) {
         return '<div class="terminliste-widget">'
             + '<div class="terminliste-widget-years" id="' + idPrefix + '-year-nav"></div>'
-            + '<div id="' + idPrefix + '-table-wrap"><p class="ranking-status-msg">Laster…</p></div>'
+            + '<div id="' + idPrefix + '-table-wrap" class="terminliste-widget-scroll"><p class="ranking-status-msg">Laster…</p></div>'
             + '<p class="terminliste-widget-link" id="' + idPrefix + '-more-link"></p>'
             + '</div>';
     }
@@ -103,6 +103,22 @@ var StandplassTerminlistePage = (function () {
         var selectedYear = CURRENT_YEAR;
         var orgId = null;
         var currentAbort = null;
+        // The year's fetched rows, kept so a responsive-tier flip can
+        // re-render (same two-breakpoint pattern as the full page; no
+        // picker, no auto-load -- one fixed request per year).
+        var widgetRows = [];
+        var currentWidthTier = computeWidthTier();
+        [700, 900].forEach(function (w) {
+            var mql = window.matchMedia('(max-width:' + w + 'px)');
+            var onChange = function () {
+                var next = computeWidthTier();
+                if (next === currentWidthTier) { return; }
+                currentWidthTier = next;
+                if (widgetRows.length) { renderWidgetTable(); }
+            };
+            if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', onChange); }
+            else if (typeof mql.addListener === 'function') { mql.addListener(onChange); }
+        });
 
         for (var y = CURRENT_YEAR; y >= CURRENT_YEAR - 4; y--) {
             var btn = document.createElement('button');
@@ -120,6 +136,27 @@ var StandplassTerminlistePage = (function () {
             });
             fetchYear();
         });
+
+        // The widget resolves only what its five columns read -- no
+        // branchlist/org reference data is ever loaded here.
+        function resolveCompactRow(c) {
+            return {
+                id: c.id,
+                status: c.status,
+                dateRange: StandplassFormat.formatDateRange(c.startDate, c.endDate),
+                title: c.title,
+                competitionTypeName: c.competitionTypeName || '',
+                hasResult: !!(c.hasResult && c.resultFileUrl),
+                resultFileUrl: c.resultFileUrl || ''
+            };
+        }
+
+        function renderWidgetTable() {
+            tableWrapEl.innerHTML = StandplassDataTable.renderTable(
+                config.idPrefix + '-table',
+                compactTableSpec(widgetRows.map(resolveCompactRow)),
+                { hidden: {}, runtimeHidden: [], widthTier: currentWidthTier });
+        }
 
         function fetchYear() {
             if (!orgId) { return; }
@@ -144,30 +181,18 @@ var StandplassTerminlistePage = (function () {
                 // (always same-origin), so '' is the correct fallback there.
                 var linkUrl = (config.origin || '') + '/terminliste?t_fra=' + selectedYear + '-01-01&t_til=' + selectedYear + '-12-31&t_org=' + encodeURIComponent(orgId);
                 if (!items.length) {
+                    widgetRows = [];
                     tableWrapEl.innerHTML = '<p>Ingen stevner registrert for ' + selectedYear + '.</p>';
                 } else {
-                    tableWrapEl.innerHTML = '<table class="ranking-table" aria-label="Stevner">'
-                        + '<thead><tr><th class="terminliste-detail-col"><span class="visually-hidden">Detaljer</span></th>'
-                        + '<th>Dato</th><th>Stevne</th><th class="terminliste-mobile-hide">Stevnetype</th><th>Resultater</th></tr></thead>'
-                        + '<tbody>' + items.map(renderCompactRow).join('') + '</tbody></table>';
+                    widgetRows = items;
+                    renderWidgetTable();
                 }
                 moreLinkEl.innerHTML = '<a href="' + linkUrl + '">Se terminliste →</a>';
             }, function (err) {
                 if (err.name === 'AbortError' || thisAbort !== currentAbort) { return; }
+                widgetRows = [];
                 tableWrapEl.innerHTML = '<p>Kunne ikke laste stevneoversikt.</p>';
             });
-        }
-
-        function renderCompactRow(c) {
-            var resultCell = (c.hasResult && c.resultFileUrl)
-                ? '<a href="' + esc(c.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
-                : '–';
-            return '<tr class="terminliste-row--clickable" data-id="' + esc(c.id) + '" data-status="' + esc(String(c.status != null ? c.status : 1)) + '">'
-                + '<td class="terminliste-detail-col"><button type="button" class="comp-detail-btn" data-id="' + esc(c.id) + '" aria-label="Se detaljer for ' + esc(c.title || '–') + '">ⓘ</button></td>'
-                + '<td class="terminliste-date">' + esc(StandplassFormat.formatDateRange(c.startDate, c.endDate)) + '</td>'
-                + '<td>' + esc(c.title || '–') + '</td>'
-                + '<td class="terminliste-mobile-hide">' + esc(c.competitionTypeName || '–') + '</td>'
-                + '<td class="terminliste-result-cell">' + resultCell + '</td></tr>';
         }
 
         // Modal wiring (Task 7's openCompModal is defined only inside the
@@ -441,12 +466,6 @@ var StandplassTerminlistePage = (function () {
         // from the old .terminliste-mobile-hide/.terminliste-tablet-hide
         // CSS rules at identical widths.
         var hidden = {};
-        function computeWidthTier() {
-            var crossed = [700, 900].filter(function (w) {
-                return window.matchMedia('(max-width:' + w + 'px)').matches;
-            });
-            return crossed.length ? crossed[0] : null;
-        }
         var currentWidthTier = computeWidthTier();
 
         // Shared column picker: wired once (the button lives outside the
@@ -796,6 +815,16 @@ var StandplassTerminlistePage = (function () {
         };
     }
 
+    // Smallest crossed responsive breakpoint (700 mobile / 900 tablet) --
+    // the tier the base's hideBelow semantics consume. Shared by the
+    // full page and the compact widget.
+    function computeWidthTier() {
+        var crossed = [700, 900].filter(function (w) {
+            return window.matchMedia('(max-width:' + w + 'px)').matches;
+        });
+        return crossed.length ? crossed[0] : null;
+    }
+
     // Pure predicate for the scroll auto-load: is the wrap near enough
     // to its bottom (60px of slack) to fetch the next page? Takes a
     // plain { scrollTop, clientHeight, scrollHeight } -- no DOM -- so
@@ -804,6 +833,36 @@ var StandplassTerminlistePage = (function () {
     function shouldLoadMore(wrap) {
         if (!wrap.clientHeight) { return false; }
         return wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 60;
+    }
+
+    // The compact widget's table: five columns, no filter resolution
+    // (the widget never loads branchlist/org reference data), no picker,
+    // no wrap class -- byte-identical to the hand-rolled markup it
+    // replaces. The Stevne cell stays PLAIN TEXT: the widget's rows open
+    // the modal on title clicks, a link would hijack that.
+    function compactTableSpec(rows) {
+        return {
+            columns: [
+                { key: 'detaljer', label: '<span class="visually-hidden">Detaljer</span>', labelRaw: true, cellClass: 'terminliste-detail-col', raw: true,
+                    cell: function (r) { return '<button type="button" class="comp-detail-btn" data-id="' + esc(r.id) + '" aria-label="Se detaljer for ' + esc(r.title || '–') + '">ⓘ</button>'; } },
+                { key: 'dateRange', label: 'Dato', cellClass: 'terminliste-date', cell: function (r) { return r.dateRange; } },
+                { key: 'title', label: 'Stevne', cell: function (r) { return r.title || '–'; } },
+                { key: 'competitionTypeName', label: 'Stevnetype', hideBelow: 700, cell: function (r) { return r.competitionTypeName || '–'; } },
+                { key: 'resultat', label: 'Resultater', cellClass: 'terminliste-result-cell', raw: true, cell: function (r) {
+                    return (r.hasResult && r.resultFileUrl)
+                        ? '<a href="' + esc(r.resultFileUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Last ned resultater (PDF, åpnes i ny fane)">PDF</a>'
+                        : '–';
+                } }
+            ],
+            rows: rows,
+            rowAttrs: function (r) {
+                return 'class="terminliste-row--clickable" data-id="' + esc(r.id)
+                    + '" data-status="' + esc(String(r.status != null ? r.status : 1))
+                    + '" data-title="' + esc(r.title || '–') + '"';
+            },
+            tableClass: 'ranking-table',
+            ariaLabel: 'Stevner'
+        };
     }
 
     function buildMarkup(idPrefix, compact) {
@@ -882,6 +941,7 @@ var StandplassTerminlistePage = (function () {
         groupsForBranches: groupsForBranches,
         buildMarkup: buildMarkup,
         terminlisteTableSpec: terminlisteTableSpec,
+        compactTableSpec: compactTableSpec,
         shouldLoadMore: shouldLoadMore,
         init: init
     };
