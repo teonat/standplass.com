@@ -344,9 +344,18 @@ h1, h2, h3 {
 /* With the cap, the header pins to the top of the scroll region so
    column meanings survive a 25-row scroll. border-collapse: collapse
    does not move a sticky th's borders with it — separate + spacing 0
-   renders identically for this table's simple bottom borders. */
+   renders identically for this table's simple bottom borders.
+   --surface-base is a 3%-opacity TINT, not a surface: rows scrolling
+   under a sticky header would bleed through it, so the tint is
+   composited over the card's opaque surface — identical resting look,
+   nothing shows through. */
 .terminliste-scroll-wrap .ranking-table { border-collapse: separate; border-spacing: 0; }
-.terminliste-scroll-wrap thead th { position: sticky; top: 0; z-index: 1; }
+.terminliste-scroll-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
 /* Toolbar right above the card: status left, Kolonner right (the
    stevner stats-bar pattern). min-height on the status keeps the row
    stable while empty. */
@@ -354,10 +363,10 @@ h1, h2, h3 {
 .terminliste-toolbar .ranking-status-msg { margin-top: 0; }
 /* Compact widget's own scroll cap: 10 typical rows (rows * 2.1rem +
    2rem head). overflow-y: auto, never hidden -- same find-in-page rule
-   as the full page's cap; header pins like the full page's. */
+   as the full page's cap. No sticky header here: the widget paints on
+   whatever the HOST page paints behind it, so no opaque header color
+   exists -- the header scrolls away, same as the source's own widget. */
 .terminliste-widget-scroll { overflow-y: auto; max-height: 23rem; }
-.terminliste-widget-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
-.terminliste-widget-scroll thead th { position: sticky; top: 0; z-index: 1; }
 /* Norgesfelt's per-tab Kolonner rows, injected after each panel's
    filter row (the page markup is static HTML). */
 .norgesfelt-picker-row { display: flex; justify-content: flex-end; }
