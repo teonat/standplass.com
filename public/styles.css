@@ -341,6 +341,9 @@ h1, h2, h3 {
    2rem head). overflow-y: auto, never hidden -- same find-in-page rule
    as the full page's cap. */
 .terminliste-widget-scroll { overflow-y: auto; max-height: 23rem; }
+/* Norgesfelt's per-tab Kolonner rows, injected after each panel's
+   filter row (the page markup is static HTML). */
+.norgesfelt-picker-row { display: flex; justify-content: flex-end; }
 
 /* Status row-tinting -- 1 (Godkjent) is the default, no tint. Written with
    [data-mode="dark"] overrides from the start (not a later fix round) --
@@ -357,27 +360,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 [data-mode="dark"] tr[data-status="0"] .comp-detail-btn { border-color: #fbbf24; color: #fbbf24; }
 [data-mode="dark"] tr[data-status="2"] .comp-detail-btn, [data-mode="dark"] tr[data-status="3"] .comp-detail-btn { border-color: #f87171; color: #f87171; }
 
-/* Column hiding: terminliste uses its OWN semantic classes
-   (.terminliste-mobile-hide/.terminliste-tablet-hide), never nth-child --
-   deliberately avoiding this session's own .ranking-card[data-comp-id]
-   nth-child collision class of bug (a positional rule that accidentally
-   also matched a differently-shaped table reusing the same base class). */
-@media (max-width: 700px) {
-    .terminliste-mobile-hide { display: none; }
-}
-@media (max-width: 900px) {
-    .terminliste-tablet-hide { display: none; }
-}
-
-/* Norgesfelt uses its own semantic hide classes for the same documented
-   reason terminliste does (see above) -- never nth-child on a shared
-   .ranking-card/.ranking-table class. */
-@media (max-width: 700px) {
-    .norgesfelt-mobile-hide { display: none; }
-}
-@media (max-width: 900px) {
-    .norgesfelt-tablet-hide { display: none; }
-}
+/* Column hiding on terminliste and norgesfelt now runs through the
+   table base's hideBelow tiers (page-level matchMedia, smallest crossed
+   of 700/900) — the old semantic hide-class media queries are gone.
+   The historical note stays relevant: never nth-child on a shared
+   .ranking-card/.ranking-table class (this codebase's own positional
+   collision bug). */
 
 /* Compact club widget (the embeddable stevner-widget.js replacement) --
    the year-nav button styling mirrors .filter-period-toggle's
@@ -444,12 +432,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* Same pattern as .ranking-full-table (overflow-x:auto + a floor on the
    table's own width) -- a 2-column card grid gives each card roughly half
    the viewport, which can be narrower than a 6-column table needs even on
-   a normal desktop width where .norgesfelt-tablet-hide/-mobile-hide's own
-   viewport-width breakpoints don't fire (they react to the *viewport*,
-   not the card, so they can't tell a 2-up desktop card apart from a
-   comfortably wide one). Scrolling avoids both silent clipping
-   (.ranking-card's own overflow:hidden) and forced column/header
-   wrapping when the card itself is the constraint, not the viewport. */
+   a normal desktop width where the hideBelow tiers' own viewport-width
+   breakpoints don't fire (they react to the *viewport*, not the card, so
+   they can't tell a 2-up desktop card apart from a comfortably wide one).
+   Scrolling avoids both silent clipping (.ranking-card's own
+   overflow:hidden) and forced column/header wrapping when the card itself
+   is the constraint, not the viewport. */
 .ranking-card-table-wrap { overflow-x: auto; }
 .ranking-card-table-wrap .ranking-table { min-width: 400px; }
 

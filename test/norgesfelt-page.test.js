@@ -96,18 +96,18 @@ var nfEntries = [
 var nfSpecFull = NP.searchTableSpec(nfEntries, true, 'individual');
 var nfFull = StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, NF_STATE);
 assert.ok(nfFull.indexOf('<thead><tr>'
-    + '<th scope="col" class="ranking-rank norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="rank">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-rank"><button type="button" class="dt-sort-btn" data-dt-sort="rank">#<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Forening<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="discipline">Gren<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="ranking-score norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
-    'norgesfelt search: full header — all columns sortable, responsive cellClasses on th');
-assert.ok(nfFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank norgesfelt-mobile-hide">1</td><td>Anne</td><td>Oslo PK</td><td>Finfelt</td><td class="norgesfelt-mobile-hide">01.11.2026</td><td class="ranking-score">289</td><td class="ranking-score norgesfelt-tablet-hide">41</td></tr>') !== -1,
-    'norgesfelt search: row markup with responsive cellClasses on td');
-assert.ok(nfFull.indexOf('<td class="norgesfelt-mobile-hide">–</td>') !== -1,
+    'norgesfelt search: full header — all columns sortable, tiers carry the old breakpoints');
+assert.ok(nfFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td>Oslo PK</td><td>Finfelt</td><td>01.11.2026</td><td class="ranking-score">289</td><td class="ranking-score">41</td></tr>') !== -1,
+    'norgesfelt search: row markup, hide classes replaced by tiers');
+assert.ok(nfFull.indexOf('<td>–</td>') !== -1,
     'norgesfelt search: missing date renders –');
 // Chronological Dato sort (lexicographic would put 01.11 first).
 var nfDate = nfSorted(nfSpecFull, 'dateSort', 'asc');
@@ -122,7 +122,7 @@ assert.ok(nfSlim.indexOf('data-dt-sort="discipline"') === -1 && nfSlim.indexOf('
     'norgesfelt search: Gren column absent when a discipline is filtered');
 assert.ok(nfSlim.indexOf('data-dt-sort="dateSort"') === -1,
     'norgesfelt search: Dato column absent for total type');
-assert.ok(nfSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank norgesfelt-mobile-hide">1</td><td>Anne</td><td>Oslo PK</td><td class="ranking-score">289</td><td class="ranking-score norgesfelt-tablet-hide">41</td></tr>') !== -1,
+assert.ok(nfSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td>Oslo PK</td><td class="ranking-score">289</td><td class="ranking-score">41</td></tr>') !== -1,
     'norgesfelt search: reduced row markup — #/Navn/Forening/Poeng/Innertreff only');
 var nfPoints = nfSorted(nfSpecFull, 'points', 'desc');
 assert.ok(nfPoints.indexOf('<td>Anne</td>') < nfPoints.indexOf('<td>Cecilie</td>'),
@@ -145,13 +145,13 @@ var tpFull = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecFu
 assert.ok(tpFull.indexOf('<thead><tr>'
     + '<th scope="col" class="ranking-rank">#</th>'
     + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="name">Navn<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="norgesfelt-mobile-hide"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="club">Klubb<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="dateSort">Dato<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '<th scope="col" class="ranking-score"><button type="button" class="dt-sort-btn" data-dt-sort="points">Poeng<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
-    + '<th scope="col" class="norgesfelt-tablet-hide"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
+    + '<th scope="col"><button type="button" class="dt-sort-btn" data-dt-sort="innertreff">Innertreff<span class="dt-sort-arrow" aria-hidden="true"></span></button></th>'
     + '</tr></thead>') !== -1,
     'topliste: full header — Navn/Klubb/Dato/Poeng/Innertreff sortable, # plain');
-assert.ok(tpFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td class="norgesfelt-tablet-hide">Oslo PK</td><td class="norgesfelt-mobile-hide">01.11.2026</td><td class="ranking-score">289</td><td class="norgesfelt-tablet-hide">41</td></tr>') !== -1,
+assert.ok(tpFull.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td>Oslo PK</td><td>01.11.2026</td><td class="ranking-score">289</td><td>41</td></tr>') !== -1,
     'topliste: full row markup matches today\'s card cells');
 var tpDate = nfSorted(tpSpecFull, 'dateSort', 'asc');
 assert.ok(tpDate.indexOf('08.03.2026') < tpDate.indexOf('01.11.2026') && tpDate.indexOf('–') > tpDate.indexOf('01.11.2026'),
@@ -161,9 +161,51 @@ var tpSpecSlim = NP.toplisteCardSpec(tpEntries, false, 'total');
 var tpSlim = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecSlim, NF_STATE);
 assert.ok(tpSlim.indexOf('data-dt-sort="club"') === -1 && tpSlim.indexOf('data-dt-sort="dateSort"') === -1,
     'topliste: Klubb and Dato columns absent in the slim variant');
-assert.ok(tpSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td class="ranking-score">289</td><td class="norgesfelt-tablet-hide">41</td></tr>') !== -1,
+assert.ok(tpSlim.indexOf('<tr data-dt-row="0"><td class="ranking-rank">1</td><td>Anne</td><td class="ranking-score">289</td><td>41</td></tr>') !== -1,
     'topliste: slim row markup — #/Navn/Poeng/Innertreff only');
 assert.ok(tpFull.indexOf('ranking-toggle') === -1 && tpFull.indexOf('Vis alle') === -1,
     'topliste: no toggle remains');
+
+// ── batch 3: hideBelow tiers replace the CSS hide classes ──────────────
+// Tier parity with the deleted media queries: at <=700 BOTH breakpoints
+// fire (mobile- and tablet-tier columns hide); at <=900 only the
+// tablet-tier columns (Innertreff, Klubb) hide — # and Dato have a 700
+// boundary, which a 750px-wide viewport has not crossed.
+var nfState = function (tier, hidden) {
+    return { hidden: hidden || {}, runtimeHidden: [], widthTier: tier };
+};
+var nfT700 = StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, nfState(700));
+assert.ok(nfT700.indexOf('data-dt-sort="rank"') < 0 && nfT700.indexOf('data-dt-sort="dateSort"') < 0 && nfT700.indexOf('data-dt-sort="innertreff"') < 0,
+    'tier 700 hides #, Dato and Innertreff (both media queries fired at <=700)');
+assert.ok(nfT700.indexOf('data-dt-sort="name"') >= 0 && nfT700.indexOf('data-dt-sort="club"') >= 0 && nfT700.indexOf('data-dt-sort="points"') >= 0,
+    'tier 700 keeps Navn, Forening, Poeng');
+var nfT900 = StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, nfState(900));
+assert.ok(nfT900.indexOf('data-dt-sort="innertreff"') < 0, 'tier 900 hides Innertreff');
+assert.ok(nfT900.indexOf('data-dt-sort="rank"') >= 0 && nfT900.indexOf('data-dt-sort="dateSort"') >= 0,
+    'tier 900 keeps # and Dato (their boundary is 700, not crossed at 750px)');
+var tpT700 = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecFull, nfState(700));
+assert.ok(tpT700.indexOf('data-dt-sort="dateSort"') < 0 && tpT700.indexOf('data-dt-sort="club"') < 0 && tpT700.indexOf('data-dt-sort="innertreff"') < 0,
+    'topliste tier 700 hides Dato, Klubb and Innertreff');
+var tpT900 = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecFull, nfState(900));
+assert.ok(tpT900.indexOf('data-dt-sort="club"') < 0 && tpT900.indexOf('data-dt-sort="innertreff"') < 0,
+    'topliste tier 900 hides Klubb and Innertreff');
+assert.ok(tpT900.indexOf('data-dt-sort="dateSort"') >= 0, 'topliste tier 900 keeps Dato');
+
+// tab independence: the two tabs keep SEPARATE hidden maps — hiding
+// Klubb on the cards leaves Forening on the search table alone
+var tpClubHidden = StandplassDataTable.renderTable('norgesfelt-card-Finfelt', tpSpecFull, nfState(null, { club: true }));
+assert.ok(tpClubHidden.indexOf('data-dt-sort="club"') < 0, 'topliste: hidden club removes the Klubb column');
+assert.ok(StandplassDataTable.renderTable('norgesfelt-search', nfSpecFull, nfState(null)).indexOf('data-dt-sort="club"') >= 0,
+    'search: Forening unaffected by the topliste tab\'s choice');
+
+// the CSS hide classes are gone for good — source pins
+var fs = require('fs');
+var nfSrc = fs.readFileSync(__dirname + '/../public/js/norgesfelt-page.js', 'utf8');
+assert.ok(nfSrc.indexOf('norgesfelt-mobile-hide') < 0 && nfSrc.indexOf('norgesfelt-tablet-hide') < 0,
+    'no norgesfelt hide classes remain in the page source');
+var cssSrc = fs.readFileSync(__dirname + '/../public/styles.css', 'utf8');
+assert.ok(cssSrc.indexOf('norgesfelt-mobile-hide') < 0 && cssSrc.indexOf('norgesfelt-tablet-hide') < 0
+    && cssSrc.indexOf('terminliste-mobile-hide') < 0 && cssSrc.indexOf('terminliste-tablet-hide') < 0,
+    'no hide-class rules remain in the stylesheet');
 
 console.log('norgesfelt-page.test.js: all assertions passed');

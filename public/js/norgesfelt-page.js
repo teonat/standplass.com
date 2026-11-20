@@ -122,14 +122,14 @@ var StandplassNorgesfeltPage = (function () {
 
     // "Alle resultater" table spec (shared base). Gren appears only when
     // no discipline is filtered, Dato only for enkeltresultater; the
-    // responsive cellClasses keep today's viewport breakpoints exactly
-    // (the base applies them to th and td alike). Rows carry the
-    // derived dateSort key; rank/name/club/points/innertreff come
-    // straight off the entry.
+    // hideBelow tiers keep today's viewport breakpoints exactly (700 =
+    // the old mobile-hide rule, 900 = the old tablet-hide one). Rows
+    // carry the derived dateSort key; rank/name/club/points/innertreff
+    // come straight off the entry.
     function searchTableSpec(filtered, showDiscCol, activeType) {
         filtered = filtered || [];
         var cols = [
-            { key: 'rank', label: '#', align: 'center', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc' },
+            { key: 'rank', label: '#', align: 'center', hideBelow: 700, sortable: true, defaultDir: 'asc' },
             { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' },
             { key: 'club', label: 'Forening', sortable: true, defaultDir: 'asc' }
         ];
@@ -137,11 +137,11 @@ var StandplassNorgesfeltPage = (function () {
             cols.push({ key: 'discipline', label: 'Gren', sortable: true, defaultDir: 'asc' });
         }
         if (activeType === 'individual') {
-            cols.push({ key: 'dateSort', label: 'Dato', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc',
+            cols.push({ key: 'dateSort', label: 'Dato', hideBelow: 700, sortable: true, defaultDir: 'asc',
                 cell: function (row) { return row.date || '–'; } });
         }
         cols.push({ key: 'points', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc' });
-        cols.push({ key: 'innertreff', label: 'Innertreff', align: 'right', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'desc' });
+        cols.push({ key: 'innertreff', label: 'Innertreff', align: 'right', hideBelow: 900, sortable: true, defaultDir: 'desc' });
         return {
             columns: cols,
             rows: filtered.map(entryRow)
@@ -152,8 +152,8 @@ var StandplassNorgesfeltPage = (function () {
     // flat table (incl. dateSort). # is NOT sortable here — it is the
     // entry's own rank, not a placement. Klubb appears only when
     // exactly-one-club isn't selected, Dato only for enkeltresultater;
-    // the responsive cellClasses keep today's card breakpoints exactly.
-    // Null for empty entries — the page renders a message-only card.
+    // the hideBelow tiers keep today's card breakpoints exactly (700 =
+    // old mobile-hide, 900 = old tablet-hide). Null for empty entries — the page renders a message-only card.
     function toplisteCardSpec(filtered, showClubCol, activeSubType) {
         filtered = filtered || [];
         if (!filtered.length) { return null; }
@@ -162,14 +162,14 @@ var StandplassNorgesfeltPage = (function () {
             { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc' }
         ];
         if (showClubCol) {
-            cols.push({ key: 'club', label: 'Klubb', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'asc' });
+            cols.push({ key: 'club', label: 'Klubb', hideBelow: 900, sortable: true, defaultDir: 'asc' });
         }
         if (activeSubType === 'individual') {
-            cols.push({ key: 'dateSort', label: 'Dato', cellClass: 'norgesfelt-mobile-hide', sortable: true, defaultDir: 'asc',
+            cols.push({ key: 'dateSort', label: 'Dato', hideBelow: 700, sortable: true, defaultDir: 'asc',
                 cell: function (row) { return row.date || '–'; } });
         }
         cols.push({ key: 'points', label: 'Poeng', align: 'right', sortable: true, defaultDir: 'desc' });
-        cols.push({ key: 'innertreff', label: 'Innertreff', cellClass: 'norgesfelt-tablet-hide', sortable: true, defaultDir: 'desc' });
+        cols.push({ key: 'innertreff', label: 'Innertreff', hideBelow: 900, sortable: true, defaultDir: 'desc' });
         return {
             columns: cols,
             rows: filtered.map(entryRow)
@@ -188,6 +188,16 @@ var StandplassNorgesfeltPage = (function () {
 
     function buildClubsParam(clubs) {
         return StandplassFormat.encodeIdList(clubs);
+    }
+
+    // Smallest crossed responsive breakpoint (700 mobile / 900 tablet) —
+    // the tier the base's hideBelow semantics consume. Same two-value
+    // scheme as terminliste's.
+    function computeWidthTier() {
+        var crossed = [700, 900].filter(function (w) {
+            return window.matchMedia('(max-width:' + w + 'px)').matches;
+        });
+        return crossed.length ? crossed[0] : null;
     }
 
     function init(config) {
@@ -224,6 +234,81 @@ var StandplassNorgesfeltPage = (function () {
         var subIndividualBtn = id('-sub-individual');
         var subTotalBtn = id('-sub-total');
         var cardsWrap = id('-cards-wrap');
+
+        // Session-only view state (never persisted — standing ruling):
+        // two INDEPENDENT picker maps, one per tab (owner ruling
+        // 2026-11-20: the tabs share column keys with different
+        // meanings — "Klubb" on the cards vs "Forening" on the search
+        // table — so hiding one must not hide the other), plus the
+        // smallest crossed responsive breakpoint (700/900), converted
+        // from the old CSS hide-class media queries at identical
+        // widths.
+        var sokHidden = {};
+        var topplisteHidden = {};
+        var currentWidthTier = computeWidthTier();
+        [700, 900].forEach(function (w) {
+            var mql = window.matchMedia('(max-width:' + w + 'px)');
+            var onTierChange = function () {
+                var next = computeWidthTier();
+                if (next === currentWidthTier) { return; }
+                currentWidthTier = next;
+                renderSearchTable();
+                renderCards();
+                wireSearchPicker();
+                wireTopplistePicker();
+            };
+            if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', onTierChange); }
+            else if (typeof mql.addListener === 'function') { mql.addListener(onTierChange); }
+        });
+
+        // Each tab panel's own Kolonner button, injected right after its
+        // filter row (the page markup is static HTML, so the button is
+        // injected here at init — post-dependencies, the base is
+        // available). renderPickerButton emits the button plus its
+        // anchor (the dropdown's positioning context).
+        [panelSok, panelTopp].forEach(function (panel) {
+            var filters = panel.querySelector('.ranking-filters');
+            if (!filters) { return; }
+            var row = document.createElement('div');
+            row.className = 'norgesfelt-picker-row';
+            row.innerHTML = StandplassDataTable.renderPickerButton();
+            filters.parentNode.insertBefore(row, filters.nextSibling);
+        });
+
+        function syncHiddenMap(map, next) {
+            Object.keys(map).forEach(function (k) { delete map[k]; });
+            Object.keys(next || {}).forEach(function (k) { map[k] = next[k]; });
+        }
+
+        // destroy-before-rewire per render: wirePicker snapshots the
+        // width tier AND the column list at wire time, and the specs'
+        // column sets vary with the active filters (Gren only unfiltered,
+        // Dato only enkeltresultater) — the picker must list only
+        // currently-applicable columns.
+        var searchPickerWire = null;
+        function wireSearchPicker() {
+            if (searchPickerWire) { searchPickerWire.destroy(); searchPickerWire = null; }
+            if (!searchSpec) { return; }
+            searchPickerWire = StandplassDataTable.wirePicker(panelSok, { columns: searchSpec.columns }, {
+                onColumnsChange: function (next) {
+                    syncHiddenMap(sokHidden, next);
+                    renderSearchTable();
+                }
+            }, searchTableState());
+        }
+
+        var toppPickerWire = null;
+        function wireTopplistePicker() {
+            if (toppPickerWire) { toppPickerWire.destroy(); toppPickerWire = null; }
+            var first = Object.keys(toplisteSpecs)[0];
+            if (!first) { return; }
+            toppPickerWire = StandplassDataTable.wirePicker(panelTopp, { columns: toplisteSpecs[first].columns }, {
+                onColumnsChange: function (next) {
+                    syncHiddenMap(topplisteHidden, next);
+                    renderCards();
+                }
+            }, cardTableState(first));
+        }
 
         // "Rader" — one select per tab panel (the page's precedent: the
         // individual/total choice is also per-panel), kept in sync via
@@ -284,7 +369,7 @@ var StandplassNorgesfeltPage = (function () {
         var searchSpec = null;
 
         function searchTableState() {
-            return { sort: searchSort, hidden: {}, runtimeHidden: [], widthTier: null };
+            return { sort: searchSort, hidden: sokHidden, runtimeHidden: [], widthTier: currentWidthTier };
         }
 
         function wireSearchTable() {
@@ -323,6 +408,7 @@ var StandplassNorgesfeltPage = (function () {
                 + StandplassDataTable.renderTable('norgesfelt-search', searchSpec, searchTableState())
                 + '</div>';
             wireSearchTable();
+            wireSearchPicker();
         }
 
         function populateDiscSelect() {
@@ -365,7 +451,7 @@ var StandplassNorgesfeltPage = (function () {
         var toplisteSpecs = {};
 
         function cardTableState(discName) {
-            return { sort: toplisteSort[discName] || null, hidden: {}, runtimeHidden: [], widthTier: null };
+            return { sort: toplisteSort[discName] || null, hidden: topplisteHidden, runtimeHidden: [], widthTier: currentWidthTier };
         }
 
         function wireCardTable(cell, discName) {
@@ -415,18 +501,24 @@ var StandplassNorgesfeltPage = (function () {
 
         function renderCards() {
             if (!data) { return; }
+            // Stale spec shapes from earlier renders (e.g. before a
+            // subtype switch) must not feed the picker — only the
+            // current pass's cards are listed.
+            toplisteSpecs = {};
             var discs = disciplineOrder(data).filter(function (discName) {
                 var rows = data.disciplines[discName][activeSubType] || [];
                 return getFilteredEntries(rows, activeClubs).length > 0;
             });
             if (!discs.length) {
                 cardsWrap.innerHTML = '<p class="ranking-status-msg">Ingen resultater for valgt klubb.</p>';
+                wireTopplistePicker(); // destroys the stale wiring; nothing to list
                 return;
             }
             cardsWrap.innerHTML = discs.map(function (discName) {
                 return '<div class="ranking-cell" data-disc-name="' + esc(discName) + '"></div>';
             }).join('');
             discs.forEach(function (discName) { renderCard(discName); });
+            wireTopplistePicker();
         }
 
         function setSubType(type) {
