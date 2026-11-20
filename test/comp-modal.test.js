@@ -250,3 +250,9 @@ assert.strictEqual(CM.sanitizeDescription('<a class="btn" href="https://x.exampl
 assert.strictEqual(CM.sanitizeDescription('<A HREF="mailto:post@example.no">epost</A>'),
     '<a href="mailto:post@example.no" target="_blank" rel="noopener noreferrer">epost</a>',
     'mailto and uppercase markup are handled');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://kart.1881.no/">kart</a>Avkjøringen fra E16'),
+    '<a href="https://kart.1881.no/" target="_blank" rel="noopener noreferrer">kart</a> Avkjøringen fra E16',
+    'a word crowded right after the closing anchor gets its space back (stevne 16681 quirk)');
+assert.strictEqual(CM.sanitizeDescription('<a href="https://kart.1881.no/">url</a>. Avkjøringen er skiltet'),
+    '<a href="https://kart.1881.no/" target="_blank" rel="noopener noreferrer">url</a>. Avkjøringen er skiltet',
+    'punctuation directly after the link is left alone');

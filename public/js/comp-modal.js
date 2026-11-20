@@ -23,6 +23,13 @@ var StandplassCompModal = (function () {
     // the anchor (class, style, event handlers) stays escaped text.
     var ALLOWED_TAGS = /&lt;(\/?)(p|br|strong|em|b|i|a)\s*\/?&gt;/gi;
     var ALLOWED_LINK = /&lt;a\s+href=&quot;(.*?)&quot;\s*&gt;/gi;
+    // Source-data quirk: some skyting.no descriptions carry the next
+    // word right after the closing anchor with no space at all
+    // ("...</a>Avkjøringen..." — stevne 16681 et al.), which renders as
+    // "linkAvkjøringen". Punctuation directly after the link is
+    // legitimate typography ("...</a>. Av..."), so a space is only
+    // inserted before a following letter or digit.
+    var CROWDED_LINK_END = /<\/a>(?=[A-Za-z0-9À-ÿ])/g;
     function sanitizeDescription(html) {
         return esc(html)
             .replace(ALLOWED_LINK, function (m, href) {
@@ -32,7 +39,8 @@ var StandplassCompModal = (function () {
             })
             .replace(ALLOWED_TAGS, function (m, closing, tag) {
                 return '<' + closing + tag.toLowerCase() + '>';
-            });
+            })
+            .replace(CROWDED_LINK_END, '</a> ');
     }
 
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };
