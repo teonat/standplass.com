@@ -1246,6 +1246,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     font-size: 0.9rem;
 }
 .comp-modal-infocard a { color: var(--brand-primary); }
+/* Description prose links (sanitizeDescription's rebuilt anchors): the
+   site's inline-link look, same as .ranking-table td a. */
+.comp-modal-description a {
+    color: var(--brand-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.comp-modal-description a:hover { color: var(--brand-accent-dark); }
 .comp-modal-infocard-row {
     display: flex;
     align-items: baseline;
@@ -1440,6 +1448,7 @@ tr[data-idx] { cursor: pointer; }
 [data-mode="dark"] .ranking-card-title,
 [data-mode="dark"] .ranking-full-table a,
 [data-mode="dark"] .ranking-table td a,
+[data-mode="dark"] .comp-modal-description a,
 [data-mode="dark"] .terminliste-widget-link a { color: var(--text); }
 /* :not(.btn-primary) — .btn-primary paints itself with --brand-accent, which
    is readable in both modes and must not be overridden here. */
