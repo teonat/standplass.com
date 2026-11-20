@@ -917,12 +917,15 @@ var StandplassTerminlistePage = (function () {
             // shared Kolonner picker right (the stevner stats-bar
             // pattern — no dead space between the button and the
             // table; the status p's min-height keeps the row stable
-            // when empty). renderPickerButton emits the button plus
-            // its anchor (the dropdown's positioning context);
-            // buildMarkup runs post-dependencies on both adapters.
+            // when empty). The anchor WRAPS the button (stevner
+            // pattern): the dropdown panel right-aligns against the
+            // anchor's box, so the button sits exactly where the
+            // panel opens. A bare renderPickerButton() emits button +
+            // anchor as siblings — space-between would center the
+            // button mid-row with the panel detached at the far right.
             + '<div class="terminliste-toolbar">'
             + '<p class="ranking-status-msg" id="' + idPrefix + '-status" aria-live="polite"></p>'
-            + StandplassDataTable.renderPickerButton()
+            + '<div class="dt-picker-anchor"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>'
             + '</div>'
             + '<div id="' + idPrefix + '-table-wrap"></div>'
             // Required by mountDirect's own embed-builder wiring in

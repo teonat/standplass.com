@@ -219,10 +219,14 @@ assert.ok(interplay.indexOf('<td><a href="https://app.skyting.no/p/c/c-1/details
 // the picker button sits in a toolbar with the status message, right
 // above the table card (status left, Kolonner right — the stevner
 // stats-bar pattern)
+// the picker button sits INSIDE its anchor at the toolbar's right end
+// (the stevner pattern) — a bare renderPickerButton() emits button +
+// anchor as siblings, and space-between centers the button mid-row
+// while the panel opens from the anchor at the far right
 assert.ok(fullMarkup.indexOf('terminliste-toolbar') >= 0, 'toolbar row emitted');
 assert.ok(fullMarkup.indexOf('terminliste-picker-row') < 0, 'no detached picker row above the status gap');
-assert.ok(fullMarkup.indexOf('data-dt-picker') >= 0, 'picker button carries the data-dt-picker hook');
-assert.ok(fullMarkup.indexOf('>Kolonner</button>') >= 0, 'picker button labelled Kolonner');
+assert.ok(fullMarkup.indexOf('<div class="dt-picker-anchor"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>') >= 0,
+    'anchor-wrapped Kolonner button emitted (button where the panel opens)');
 assert.ok(fullMarkup.indexOf('dt-picker-anchor') >= 0, 'picker anchor emitted');
 
 // the new columns stay hidden at tier 700 too

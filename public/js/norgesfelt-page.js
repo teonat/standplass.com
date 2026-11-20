@@ -264,14 +264,15 @@ var StandplassNorgesfeltPage = (function () {
         // Each tab panel's own Kolonner button, injected right after its
         // filter row (the page markup is static HTML, so the button is
         // injected here at init — post-dependencies, the base is
-        // available). renderPickerButton emits the button plus its
-        // anchor (the dropdown's positioning context).
+        // available). The anchor WRAPS the button (stevner pattern):
+        // the panel right-aligns against the anchor, so the button
+        // sits exactly where the panel opens.
         [panelSok, panelTopp].forEach(function (panel) {
             var filters = panel.querySelector('.ranking-filters');
             if (!filters) { return; }
             var row = document.createElement('div');
             row.className = 'norgesfelt-picker-row';
-            row.innerHTML = StandplassDataTable.renderPickerButton();
+            row.innerHTML = '<div class="dt-picker-anchor"><button type="button" class="dt-picker-btn" data-dt-picker aria-haspopup="true" aria-expanded="false">Kolonner</button></div>';
             filters.parentNode.insertBefore(row, filters.nextSibling);
         });
 
