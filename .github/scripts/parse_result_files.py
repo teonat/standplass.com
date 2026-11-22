@@ -247,8 +247,13 @@ def collect_targets(opts, root):
     filtered by the run's options.
 
     Without full_scan or a year filter only the current and previous
-    year are processed (the scrape window analog); full_scan widens to
-    every year for backfills.
+    year are processed. The scrapers re-queue comps within 28 days of
+    their startDate (crossing the year boundary in January) and add
+    new comps to the current year — the previous year's file changes
+    only during that tail, so current+previous covers the scrapers'
+    entire freshness surface; older year files are frozen. Settled
+    comps are fetch-free, so the superset costs nothing. full_scan
+    widens to every year for backfills.
     """
     branch = opts.get('branch')
     branches = [branch] if branch else ['felt', 'bane']
