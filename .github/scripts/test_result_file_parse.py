@@ -128,6 +128,108 @@ class ParseInrXBaneOpenSections(unittest.TestCase):
         self.assertTrue({'T96 Fin', 'T96 Militær', 'T96 Sp-Pistol'} <= navn)
 
 
+def find_champ_section(detail, key, navn, klasse):
+    for sec in detail[key]['sections']:
+        if sec['navn'] == navn and sec['klasse'] == klasse:
+            return sec
+    raise AssertionError(f'section not found: {key} / {navn} / {klasse}')
+
+
+def find_champ_lag(detail, key, navn):
+    for lag in detail[key]['lag']:
+        if lag['navn'] == navn:
+            return lag
+    raise AssertionError(f'lag not found: {key} / {navn}')
+
+
+class ParseInrXFeltDmSections(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-felt-km.pdf'))
+
+    def test_dm_felt_fin_klasse_m_medal_rows(self):
+        sec = find_champ_section(self.detail, 'dm', 'DM: Felt Fin', 'M')
+        rows = sec['rows']
+        self.assertEqual(rows[0]['medal'], 'Gull')
+        self.assertEqual(rows[0]['name'], 'Kjell Jomar Heltne')
+        self.assertEqual(rows[0]['ix'], 44)
+        self.assertEqual(rows[0]['sum'], 101)
+        self.assertEqual(rows[1]['medal'], 'Sølv')
+        self.assertEqual(rows[1]['name'], 'Geir Atle Bruvik')
+        self.assertEqual(rows[2]['medal'], 'Bronse')
+        self.assertEqual(rows[2]['name'], 'Per Atle Bjørkum')
+        self.assertEqual(rows[3]['pos'], 4)
+        self.assertEqual(rows[3]['name'], 'Svein Arne Hagen')
+
+    def test_dm_felt_fin_klasse_m_row_club_with_suffix(self):
+        sec = find_champ_section(self.detail, 'dm', 'DM: Felt Fin', 'M')
+        row = sec['rows'][3]
+        self.assertEqual(row['club'], 'Årdal Sportsskyttarlag - pistol')
+
+    def test_dm_classes_k_and_v55(self):
+        k = find_champ_section(self.detail, 'dm', 'DM: Felt Fin', 'K')
+        self.assertEqual(k['rows'][0]['medal'], 'Gull')
+        self.assertEqual(k['rows'][0]['name'], 'Andrine Hagheim')
+        v55 = find_champ_section(self.detail, 'dm', 'DM: Felt Fin', 'V55')
+        self.assertEqual(v55['rows'][0]['medal'], 'Gull')
+        self.assertEqual(v55['rows'][0]['name'], 'Tor Olav Sande')
+
+    def test_dm_rows_have_ten_stand_pairs(self):
+        for sec in self.detail['dm']['sections']:
+            for row in sec['rows']:
+                self.assertEqual(len(row['series']), 10, row['name'])
+                for cell in row['series']:
+                    self.assertIsInstance(cell[0], int)
+                    self.assertIsInstance(cell[1], int)
+
+    def test_no_km_key_when_only_dm(self):
+        self.assertNotIn('km', self.detail)
+
+
+class ParseInrXBaneKmLagSections(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-bane-km.pdf'))
+
+    def test_km_hurtig_sp_pistol_klasse_a_medals(self):
+        sec = find_champ_section(self.detail, 'km', 'KM: Hurtig Sp Pistol', 'Å')
+        rows = sec['rows']
+        self.assertEqual(rows[0]['medal'], 'Gull')
+        self.assertEqual(rows[0]['name'], 'Tore Vrålstad')
+        self.assertEqual(rows[0]['sum'], 574)
+        self.assertEqual(rows[1]['medal'], 'Sølv')
+        self.assertEqual(rows[1]['name'], 'Robert Ilievski')
+        self.assertEqual(rows[2]['medal'], 'Bronse')
+        self.assertEqual(rows[2]['name'], 'Stian Rustøen')
+
+    def test_km_lag_team_with_members(self):
+        lag = find_champ_lag(self.detail, 'km', 'KM Lag: Hurtig Sp Pistol')
+        team = lag['teams'][0]
+        self.assertEqual(team['team'], 'GPK 1')
+        self.assertEqual(team['medal'], 'Gull')
+        self.assertEqual(team['sum'], 1689)
+        self.assertEqual(team['ix'], 36)
+        self.assertEqual(team['series'][0], [284, None])
+        self.assertEqual(
+            [m['name'] for m in team['members']],
+            ['Tore Vrålstad', 'Stian Rustøen', 'Arne Landsverk'],
+        )
+        for member in team['members']:
+            self.assertEqual(member['klasse'], 'Å')
+
+    def test_lag_second_team_keeps_pos(self):
+        lag = find_champ_lag(self.detail, 'km', 'KM Lag: Hurtig Sp Pistol')
+        second = lag['teams'][1]
+        self.assertEqual(second['team'], 'GPK 2')
+        self.assertEqual(second['pos'], 2)
+        self.assertNotIn('medal', second)
+        self.assertEqual(len(second['members']), 3)
+
+    def test_open_sections_still_parsed_as_ovelser(self):
+        navn = {o['navn'] for o in self.detail['ovelser']}
+        self.assertIn('Hurtig Sp Pistol', navn)
+
+
 class ParseResultDispatch(unittest.TestCase):
     def test_dispatches_inrx_fixture(self):
         path = os.path.join(FIXTURES, 'inrx-bane.pdf')

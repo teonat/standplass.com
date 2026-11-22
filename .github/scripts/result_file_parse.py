@@ -23,6 +23,9 @@ _MAX_FELT = re.compile(r'Maks poeng felt gr\. (\d+): (\d+)')
 _TABLE_HEADER = re.compile(r'^(.+?) :: Klasse (.+)$')
 _SERIES_CELL = re.compile(r'^(\d+)(?:/(\d+))?$')
 _PREMIE_CELL = re.compile(r'^\*?(\d+)$')
+_LAG_MEMBER = re.compile(r'^(?P<name>.+) \((?P<klasse>[^)]+)\) (?P<ix>\d+) (?P<sum>\d+)$')
+
+_MEDALS = ('Gull', 'Sølv', 'Bronse')
 
 # inrX rows print name and club as one space-joined region with no
 # delimiter; the club is anchored by its suffix word.
@@ -63,16 +66,23 @@ def parse_result(pdf):
 def _split_name_club(tokens):
     """Split a row's pre-series region into (name, club).
 
-    The split only has to be reasonable: the person matcher joins rows
-    against the API results and canonicalizes both fields there, so
-    unmatched rows are the only consumers of this heuristic.
+    The club is anchored on its suffix word (…klubb, …lag, …selskap),
+    taking the word before it as the place part and anything after it
+    (e.g. ' - pistol' disambiguators) along. The split only has to be
+    reasonable: the person matcher joins rows against the API results
+    and canonicalizes both fields there, so unmatched rows are the
+    only consumers of this heuristic.
     """
     if not tokens:
         return '', None
-    last = tokens[-1].lower()
-    if last.endswith(_CLUB_ENDINGS) or last in _CLUB_ACRONYMS:
-        club_len = 2 if len(tokens) >= 3 else 1
-        return ' '.join(tokens[:-club_len]), ' '.join(tokens[-club_len:])
+    for i in range(len(tokens) - 1, -1, -1):
+        low = tokens[i].lower()
+        if low.endswith(_CLUB_ENDINGS) or low in _CLUB_ACRONYMS:
+            start = max(0, i - 1)
+            name = ' '.join(tokens[:start])
+            if name:
+                return name, ' '.join(tokens[start:])
+            break
     return ' '.join(tokens), None
 
 
@@ -147,13 +157,16 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
     return premie, oppr, int(ix_tok), int(sum_tok), cells, region
 
 
-def _parse_row(line, n_series, has_oppr, has_premie):
+def _parse_row(line, n_series, has_oppr, has_premie, allow_medal=False):
     """Parse one table row; returns None for lines that are not rows."""
     tokens = line.split()
     if len(tokens) < n_series + 3:
         return None
     row = {}
-    if tokens[0].isdigit():
+    if allow_medal and tokens[0] in _MEDALS:
+        row['medal'] = tokens[0]
+        tokens = tokens[1:]
+    elif tokens[0].isdigit():
         row['pos'] = int(tokens[0])
         tokens = tokens[1:]
     if tokens[-1] in ('DNF', 'DNS'):
@@ -183,6 +196,55 @@ def _parse_row(line, n_series, has_oppr, has_premie):
     return row
 
 
+def _parse_lag_line(line, n_series, entry):
+    """Parse a Lag-table line: a member line or a team-totals line."""
+    member = _LAG_MEMBER.match(line)
+    if member:
+        entry['teams'][-1]['members'].append({
+            'name': member.group('name').strip(),
+            'klasse': member.group('klasse'),
+            'ix': int(member.group('ix')),
+            'sum': int(member.group('sum')),
+        })
+        return
+    tokens = line.split()
+    team = {}
+    if tokens[0] in _MEDALS:
+        team['medal'] = tokens[0]
+        tokens = tokens[1:]
+    elif tokens[0].isdigit():
+        team['pos'] = int(tokens[0])
+        tokens = tokens[1:]
+    else:
+        return
+    need = n_series + 2
+    if len(tokens) < need + 1:
+        return
+    cells = [_SERIES_CELL.match(t) for t in tokens[-need:]]
+    if not all(cells):
+        return
+    if not (tokens[-1].isdigit() and tokens[-2].isdigit()):
+        return
+    team['team'] = ' '.join(tokens[:-need])
+    team['series'] = [
+        [int(c.group(1)), int(c.group(2)) if c.group(2) else None]
+        for c in cells[:-2]
+    ]
+    team['ix'] = int(tokens[-2])
+    team['sum'] = int(tokens[-1])
+    team['members'] = []
+    entry['teams'].append(team)
+
+
+def _champ_entry(entries, navn, klasse, rows_key):
+    """Reuse the last entry when a page break repeats the same table."""
+    if entries and entries[-1]['navn'] == navn and entries[-1]['klasse'] == klasse:
+        return entries[-1]
+    entry = {'navn': navn, 'klasse': klasse, rows_key: []}
+    entries.append(entry)
+    return entry
+
+
 def parse_inrx(text):
     """Parse inrX-generator text into the detail-file shape."""
     detail = {}
@@ -197,7 +259,11 @@ def parse_inrx(text):
 
     ovelser = []
     by_navn = {}
-    current = None  # (class dict to append rows to, n_series, has_oppr, has_premie)
+    champs = {
+        'km': {'sections': [], 'lag': []},
+        'dm': {'sections': [], 'lag': []},
+    }
+    current = None  # ('rows', entry, n, has_oppr, has_premie) | ('lag', entry, n)
     for line in text.split('\n'):
         line = line.strip()
         if not line:
@@ -205,29 +271,45 @@ def parse_inrx(text):
         header = _parse_table_header(line)
         if header:
             navn, klasse, n_series, trailing_cols = header
-            ovelse = by_navn.get(navn)
-            if ovelse is None:
-                ovelse = {'navn': navn, 'classes': []}
-                by_navn[navn] = ovelse
-                ovelser.append(ovelse)
-            classes = ovelse['classes']
-            if classes and classes[-1]['klasse'] == klasse:
-                # page-break repetition of the same table: continue it
-                class_dict = classes[-1]
+            has_oppr = 'Oppr' in trailing_cols
+            has_premie = 'Premie' in trailing_cols
+            if navn.startswith('KM Lag: ') or navn.startswith('DM Lag: '):
+                champ = champs['km' if navn.startswith('KM') else 'dm']
+                entry = _champ_entry(champ['lag'], navn, klasse, 'teams')
+                current = ('lag', entry, n_series)
+            elif navn.startswith('KM: ') or navn.startswith('DM: '):
+                champ = champs['km' if navn.startswith('KM') else 'dm']
+                entry = _champ_entry(champ['sections'], navn, klasse, 'rows')
+                current = ('rows', entry, n_series, has_oppr, has_premie, True)
             else:
-                class_dict = {'klasse': klasse, 'rows': []}
-                classes.append(class_dict)
-            current = (
-                class_dict,
-                n_series,
-                'Oppr' in trailing_cols,
-                'Premie' in trailing_cols,
-            )
+                ovelse = by_navn.get(navn)
+                if ovelse is None:
+                    ovelse = {'navn': navn, 'classes': []}
+                    by_navn[navn] = ovelse
+                    ovelser.append(ovelse)
+                classes = ovelse['classes']
+                if classes and classes[-1]['klasse'] == klasse:
+                    class_dict = classes[-1]
+                else:
+                    class_dict = {'klasse': klasse, 'rows': []}
+                    classes.append(class_dict)
+                current = (
+                    'rows', class_dict, n_series, has_oppr, has_premie, False,
+                )
             continue
         if current is None:
             continue
-        row = _parse_row(line, current[1], current[2], current[3])
-        if row is not None:
-            current[0]['rows'].append(row)
+        if current[0] == 'lag':
+            _parse_lag_line(line, current[2], current[1])
+        else:
+            _, sink, n_series, has_oppr, has_premie, allow_medal = current
+            row = _parse_row(line, n_series, has_oppr, has_premie, allow_medal)
+            if row is not None:
+                sink['rows'].append(row)
     detail['ovelser'] = ovelser
+    for key, champ in champs.items():
+        if champ['sections'] or champ['lag']:
+            detail[key] = {
+                k: v for k, v in champ.items() if v
+            }
     return detail
