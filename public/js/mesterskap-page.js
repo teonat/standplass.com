@@ -131,14 +131,19 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The Navn column: a person-modal button on person rows, escaped
-    // plain text otherwise (team rows carry the team as name — the
-    // house raw-cell person-link pattern).
+    // plain text otherwise. Team rows carry the team as name plus a
+    // visible lag tag — without it they read as club-less persons
+    // (owner QA) — the house raw-cell person-link pattern.
     function personCell(row) {
         if (row.personId && !row.isTeam) {
             return '<button type="button" class="stevner-person-btn link-btn"'
                 + ' data-person-id="' + esc(row.personId)
                 + '" data-person-name="' + esc(row.name) + '">'
                 + esc(row.name) + '</button>';
+        }
+        if (row.isTeam) {
+            return esc(row.name)
+                + ' <span class="mesterskap-lag-tag">lag</span>';
         }
         return esc(row.name);
     }
@@ -225,8 +230,17 @@ var StandplassMesterskapPage = (function () {
         };
     }
 
-    function tableState(sort) {
-        return { sort: sort || null, hidden: {}, runtimeHidden: [], widthTier: null };
+    // The surgical re-render shape: columns/rows/groupRows/ariaLabel
+    // only — no wrapClass (re-wrapping nests scroll regions) and no
+    // picker (the surviving toolbar button keeps its live wiring; a
+    // re-wire would stack handlers on it).
+    function bareSpec(spec) {
+        return {
+            columns: spec.columns,
+            rows: spec.rows,
+            groupRows: spec.groupRows,
+            ariaLabel: spec.ariaLabel
+        };
     }
 
     // The message-only empty card for a year that failed to load or
@@ -417,7 +431,6 @@ var StandplassMesterskapPage = (function () {
             if (barBuilt) { return; }
             barBuilt = true;
             filterbarEl.innerHTML = filterBarMarkup(scope);
-            filterbarEl.hidden = false;
 
             wireDropdown('ovelse', 'Alle øvelser', function () { return distinctSorted('ovelse'); }, 'ovelse');
             wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
@@ -556,14 +569,35 @@ var StandplassMesterskapPage = (function () {
             statsEl.textContent = parts.join(' · ');
         }
 
-        // One table per page; sort state survives filter and year/gren
-        // re-renders — the same session-state policy as the klubb
-        // leaderboard cards.
+        // One table per page. Sort state, column choices and the width
+        // tier survive filter and year/gren re-renders — the same
+        // session-state policy as the klubb leaderboard cards.
         var tableSort = null;
+        var hiddenMap = {};       // picker state, synced in place
+        var currentTier = computeWidthTier();
+        var tableWire = null;     // the full wiring (incl. the picker)
         var spec = null;
         var TABLE_ID = 'mesterskap-podium';
 
+        function syncHiddenMap(map, next) {
+            Object.keys(map).forEach(function (k) { delete map[k]; });
+            Object.keys(next || {}).forEach(function (k) { map[k] = next[k]; });
+        }
+
+        // norgesfelt's tier rule: the smallest crossed breakpoint wins
+        // (tier T hides every column with hideBelow >= T).
+        function computeWidthTier() {
+            if (window.matchMedia('(max-width: 700px)').matches) { return 700; }
+            if (window.matchMedia('(max-width: 900px)').matches) { return 900; }
+            return null;
+        }
+
+        function tableState() {
+            return { sort: tableSort, hidden: hiddenMap, runtimeHidden: [], widthTier: currentTier };
+        }
+
         function renderTable(rows) {
+            if (tableWire) { tableWire.destroy(); tableWire = null; }
             if (!rows.length) {
                 spec = null;
                 contentEl.innerHTML = '<p class="ranking-empty">Ingen rader matcher de valgte filtrene.</p>';
@@ -571,29 +605,62 @@ var StandplassMesterskapPage = (function () {
             }
             spec = tableSpecFor(rows, scope);
             contentEl.innerHTML = StandplassDataTable.renderTable(
-                TABLE_ID, spec, tableState(tableSort));
-            wire();
+                TABLE_ID, spec, tableState());
+            wire(true);
         }
 
-        function wire() {
-            if (!contentEl.querySelector('table[data-dt-id="' + TABLE_ID + '"]')) { return; }
-            StandplassDataTable.wireTable(contentEl, TABLE_ID, spec, {
+        function wire(initialWire) {
+            var tableEl = contentEl.querySelector('table[data-dt-id="' + TABLE_ID + '"]');
+            if (!tableEl || !spec) { return; }
+            // The reduced re-wire after surgical replaces carries only
+            // what the sort path reads — no picker, so the surviving
+            // toolbar button's wiring (and an open dropdown panel)
+            // stays untouched: the club-stats drilldown pattern.
+            var wireSpec = initialWire ? spec : bareSpec(spec);
+            if (initialWire && tableWire) { tableWire.destroy(); tableWire = null; }
+            var wired = StandplassDataTable.wireTable(contentEl, TABLE_ID, wireSpec, {
                 onSortChange: function (sort) {
                     tableSort = sort;
-                    // Surgical: replace only the table (bare table —
-                    // re-wrapping nests scroll regions).
-                    var tableEl = contentEl.querySelector('table[data-dt-id="' + TABLE_ID + '"]');
-                    if (tableEl) {
-                        tableEl.outerHTML = StandplassDataTable.renderTable(
-                            TABLE_ID, spec, tableState(tableSort));
-                        wire();
-                    }
+                    rerenderTable();
                     var btn = contentEl.querySelector(
                         'table[data-dt-id="' + TABLE_ID + '"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
                     if (btn) { btn.focus(); }
+                },
+                onColumnsChange: function (hidden) {
+                    syncHiddenMap(hiddenMap, hidden);
+                    rerenderTable();
                 }
-            }, tableState(tableSort));
+            }, tableState());
+            if (initialWire) { tableWire = wired; }
         }
+
+        function rerenderTable() {
+            // Surgical: replace only the table element with a BARE
+            // table — re-wrapping would nest scroll regions and
+            // re-emitting a toolbar would stack a second Kolonner
+            // button (the club-stats drilldown lesson).
+            var tableEl = contentEl.querySelector('table[data-dt-id="' + TABLE_ID + '"]');
+            if (!tableEl || !spec) { return; }
+            tableEl.outerHTML = StandplassDataTable.renderTable(
+                TABLE_ID, bareSpec(spec), tableState());
+            wire(false);
+        }
+
+        // Width tiers: re-render (surgically) when the viewport crosses
+        // a hideBelow breakpoint; the picker's checkbox list rebuilds
+        // on every open from the live state.
+        [700, 900].forEach(function (t) {
+            var mql = window.matchMedia('(max-width: ' + t + 'px)');
+            var listener = function () {
+                var next = computeWidthTier();
+                if (next !== currentTier) {
+                    currentTier = next;
+                    rerenderTable();
+                }
+            };
+            if (typeof mql.addEventListener === 'function') { mql.addEventListener('change', listener); }
+            else if (typeof mql.addListener === 'function') { mql.addListener(listener); }
+        });
 
         function load() {
             statusEl.textContent = 'Laster mesterskapsdata…';
@@ -609,6 +676,10 @@ var StandplassMesterskapPage = (function () {
                         return;
                     }
                     ensureFilterBar();
+                    // Unconditional: a later successful load after an
+                    // empty year or failed fetch must bring the bar
+                    // back (ensureFilterBar only runs once).
+                    filterbarEl.hidden = false;
                     statsEl.hidden = false;
                     rebuildWidgets();
                     applyFilters();
@@ -631,6 +702,7 @@ var StandplassMesterskapPage = (function () {
         filterParams: filterParams,
         filterBarMarkup: filterBarMarkup,
         tableSpecFor: tableSpecFor,
+        bareSpec: bareSpec,
         emptyYearCard: emptyYearCard,
         init: init
     };

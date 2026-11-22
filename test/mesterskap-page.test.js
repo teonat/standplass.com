@@ -33,7 +33,7 @@ var pageIndex = {
         comp('c3', {
             region: 'Buskerud',
             kmLag: [sec('Felt Fin', 'M', [
-                { medal: 'Sølv', team: 'Hurum SKL' }
+                { medal: 'Sølv', team: 'Hurum SKL', sum: 305 }
             ])]
         }),
         comp('c4', {
@@ -136,8 +136,13 @@ var link = spec.columns[3].cell(rows.filter(function (r) { return r.personId ===
 assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
     'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
 var teamRow = rows.filter(function (r) { return r.isTeam; })[0];
-assert.strictEqual(spec.columns[3].cell(teamRow), 'Hurum SKL',
+var teamCell = spec.columns[3].cell(teamRow);
+assert.ok(teamCell.indexOf('Hurum SKL') !== -1,
     'team rows render the team name, no link');
+assert.ok(teamCell.indexOf('mesterskap-lag-tag') !== -1,
+    'team rows are visibly marked as lag');
+assert.strictEqual(spec.columns[5].cell(teamRow), '305',
+    'team rows show their lag sum');
 assert.strictEqual(spec.columns[4].cell(teamRow), '–', 'team rows show – for club');
 assert.strictEqual(spec.columns[5].cell({ sum: null }), '–', 'missing sum renders –');
 var escRow = { medal: 'Gull', name: 'A <B>', klasse: 'U', medalRank: 1, ovelseRank: 1, ovelse: 'X', isTeam: false };
@@ -166,6 +171,16 @@ assert.ok(dmKeys.indexOf('distrikt') !== -1 && dmKeys.indexOf('region') === -1,
 var noSum = MP.tableSpecFor([{ medal: 'Gull', name: 'A', isTeam: false }], 'nm');
 assert.ok(noSum.columns.every(function (c) { return c.key !== 'sum'; }),
     'no Sum column when no row has one');
+
+// bareSpec: the surgical re-render shape — no wrapClass (re-wrapping
+// nests scroll regions), no picker (the surviving toolbar button keeps
+// its wiring), everything else shared by reference.
+var bare = MP.bareSpec(spec);
+assert.deepStrictEqual(Object.keys(bare).sort(),
+    ['ariaLabel', 'columns', 'groupRows', 'rows']);
+assert.strictEqual(bare.columns, spec.columns);
+assert.strictEqual(bare.rows, spec.rows);
+assert.strictEqual(bare.groupRows, spec.groupRows);
 
 // ── emptyYearCard: the fetch-rejection / no-data card ──────────────────
 
