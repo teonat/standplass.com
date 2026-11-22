@@ -351,7 +351,10 @@ class ParseInrXMedalRows(unittest.TestCase):
                                if o['navn'] == 'Felt Sp-Pistol')
                 for r in c['rows'] if r.get('name') == 'Kjetil Bromark']
         medal_row = next(r for r in rows if r.get('medal') == 'Bronse')
-        self.assertEqual(medal_row['club'], 'Nedre Eiker Pistolklubb 8/5')
+        # Clean since the omsk-count fix: this row's tail carries a bare
+        # count, and the pre-fix parse slid its first series cell into
+        # the club ('… Pistolklubb 8/5').
+        self.assertEqual(medal_row['club'], 'Nedre Eiker Pistolklubb')
         pos_row = find_row(self.detail, 'Felt Sp-Revolver', 'Å',
                            'Kjetil Bromark')
         self.assertEqual(pos_row['pos'], 43)
@@ -468,6 +471,59 @@ class ParseInrxOmskTail(unittest.TestCase):
                                    'M': 220, 'V55': 105, 'V65': 49,
                                    'V73': 25})
         self.assertEqual(sum(counts.values()), 473)
+
+
+class ParseInrxOmskCount(unittest.TestCase):
+    """inrX felt files can print a BARE NUMERIC omsk count after the
+    sum ('… iX Sum Omsk Premie' — e.g. '4 56 4 144'). The tail grammar
+    only knew the letter forms, so the whole tail slid by one: the
+    count read as sum, the real sum as ix, the real ix was absorbed as
+    a series cell, and the first series cell slid into the club
+    ('Stavanger Pistolklubb 6/0'). 97 rows corpus-wide carried the
+    corruption signature (club ending in a series cell).
+
+    Fixture: comp a56fe089 (felt 2026, NM Spesialfelt SP/SR),
+    inrX 1.9.1.0."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-omsk-count.pdf'))
+
+    def find(self, ovelse, klasse, name):
+        return find_row(self.detail, ovelse, klasse, name)
+
+    def test_omsk_count_row_parses_without_sliding(self):
+        row = self.find('Felt Sp-Revolver', 'U', 'Isabella Finnestad Brandsø')
+        self.assertEqual(row['medal'], 'Gull')
+        self.assertEqual(row['club'], 'Stavanger Pistolklubb',
+                         'the first series cell stays out of the club')
+        self.assertEqual(row['ix'], 4)
+        self.assertEqual(row['sum'], 56, 'the real sum, not the omsk count')
+        self.assertEqual(row['premie'], 144)
+        self.assertEqual(row['series'][0], [6, 0])
+        self.assertEqual(len(row['series']), 10)
+
+    def test_omsk_count_on_senior_rows(self):
+        ingar = self.find('Felt Sp-Revolver', 'Å', 'Ingar Solberg')
+        self.assertEqual(ingar['ix'], 13)
+        self.assertEqual(ingar['sum'], 90)
+        self.assertEqual(ingar['club'], 'Sunndal Sportsskytterklubb')
+        adrian = self.find('Felt Sp-Revolver', 'Å', 'Adrian Nørstebø Tollefsen')
+        self.assertEqual(adrian['ix'], 13)
+        self.assertEqual(adrian['sum'], 90)
+        bjorn = self.find('Felt Sp-Revolver', 'Å', 'Bjørn Johannessen')
+        self.assertEqual(bjorn['ix'], 16)
+        self.assertEqual(bjorn['sum'], 90)
+        self.assertEqual(bjorn['pos'], 4)
+
+    def test_rows_without_the_count_still_parse(self):
+        arne = self.find('Felt Sp-Revolver', 'Å', 'Arne Landsverk')
+        self.assertEqual(arne['ix'], 20)
+        self.assertEqual(arne['sum'], 92)
+        self.assertEqual(arne['premie'], 1478)
+        iver = self.find('Felt Sp-Revolver', 'U', 'Iver Aamold Olden')
+        self.assertEqual(iver['ix'], 9)
+        self.assertEqual(iver['sum'], 56)
 
 
 class ParsePlainNo(unittest.TestCase):
@@ -1257,8 +1313,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_13(self):
-        self.assertEqual(PARSER_VERSION, 13)
+    def test_parser_version_is_14(self):
+        self.assertEqual(PARSER_VERSION, 14)
 
 
 class ParseResultDispatch(unittest.TestCase):

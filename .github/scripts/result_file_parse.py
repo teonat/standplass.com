@@ -15,13 +15,14 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 13
+PARSER_VERSION = 14
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
 _MAX_FELT = re.compile(r'Maks poeng felt gr\. (\d+): (\d+)')
 _TABLE_HEADER = re.compile(r'^(.+?) :: Klasse (.+)$')
 _SERIES_CELL = re.compile(r'^(\d+)(?:/(\d+))?$')
+_SERIES_PAIR = re.compile(r'^\d+/\d+$')
 _PREMIE_CELL = re.compile(r'^\*?(\d+)$')
 _LAG_MEMBER = re.compile(r'^(?P<name>.+) \((?P<klasse>[^)]+)\) (?P<ix>\d+) (?P<sum>\d+)$')
 
@@ -266,9 +267,10 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
 
     Some inrX versions print an omsk column the header names 'Omsk' —
     or omits from the header entirely while rows still carry it — as a
-    single letter, sometimes followed by a count ('A 4'). The letter is
-    tolerated wherever the header declared it or not; the count has no
-    schema slot and is dropped.
+    single letter, sometimes followed by a count ('A 4'), or as a BARE
+    COUNT after the sum ('… iX Sum Omsk Premie'). Letters are
+    tolerated wherever the header declared them or not; counts have no
+    schema slot and are dropped.
     """
     rest = list(tokens)
     premie = None
@@ -278,6 +280,17 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
         if not match:
             return None
         premie = int(match.group(1))
+        rest.pop()
+    # A bare numeric omsk count after the sum shifts the whole tail:
+    # without the pop the count reads as sum, the real sum as ix, and
+    # the first series cell slides into the club ('… Pistolklubb
+    # 6/0'). The tell is the would-be region ending in a slash-shaped
+    # series token — names and clubs never do. Strictly slash-shaped:
+    # _SERIES_CELL also matches bare digits, and a bare digit here is
+    # the ordinary parse's own boundary, not this shape.
+    if (len(rest) >= n_series + 4
+            and rest[-1].isdigit() and rest[-2].isdigit()
+            and _SERIES_PAIR.match(rest[-(n_series + 3)])):
         rest.pop()
     if len(rest[-1]) == 1 and rest[-1].isalpha():
         oppr = rest[-1]
