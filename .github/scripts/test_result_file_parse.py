@@ -26,11 +26,15 @@ _TEXT_CACHE = {}
 
 
 def fixture_text(name):
-    """Full text of a fixture PDF (pages joined with newlines), cached."""
+    """Full text of a fixture PDF (pages joined with newlines), cached.
+
+    Extracts at the same tight x_tolerance as parse_result, so family
+    detection tests see exactly the text production sees.
+    """
     if name not in _TEXT_CACHE:
         with pdfplumber.open(os.path.join(FIXTURES, name)) as pdf:
             _TEXT_CACHE[name] = '\n'.join(
-                page.extract_text() or '' for page in pdf.pages
+                page.extract_text(x_tolerance=1) or '' for page in pdf.pages
             )
     return _TEXT_CACHE[name]
 
