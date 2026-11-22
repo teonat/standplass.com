@@ -5,4 +5,4 @@
 __pycache__/
 CLAUDE.md
 docs/
-opencode.json
+opencode.json.cache/
