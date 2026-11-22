@@ -152,7 +152,12 @@ var StandplassFilterWidgets = (function () {
 
     // Wires up a checkbox dropdown (click-outside, Escape, rebuild).
     // cfg: { btn, panel, list, clearAllBtn, getItems(), getSelected(), labelNone,
-    //        onToggle(id, name, checked), onClearAll(), searchable? }
+    //        labelEmpty?, onToggle(id, name, checked), onClearAll(), searchable?,
+    //        selectAllBtn?, onSelectAll()? }
+    // selectAllBtn/onSelectAll and labelEmpty are opt-in additions:
+    // a dropdown that offers a bulk tick-all action passes both, and
+    // one whose zero-ticked state is meaningful passes labelEmpty so
+    // the closed button doesn't claim the unfiltered label.
     // Returns: { rebuild(), destroy() } -- destroy() removes every
     // listener this wiring registered (btn click, panel Escape keydown,
     // clear-all click, and the root-node outside-click listener, which
@@ -165,7 +170,11 @@ var StandplassFilterWidgets = (function () {
         function updateLabel() {
             var selected = cfg.getSelected();
             if (!selected.length) {
-                cfg.btn.textContent = cfg.labelNone;
+                // Zero ticked is a real state for dropdowns whose bulk
+                // action unticks everything — without labelEmpty the
+                // closed button would claim the unfiltered label while
+                // the list shows nothing.
+                cfg.btn.textContent = cfg.labelEmpty || cfg.labelNone;
                 return;
             }
             if (selected.length <= 2) {
@@ -271,7 +280,9 @@ var StandplassFilterWidgets = (function () {
             searchInputEl.setAttribute('placeholder', 'Filtrer…');
             searchInputEl.setAttribute('aria-label', 'Filtrer valg');
             searchInputEl.setAttribute('autocomplete', 'off');
-            cfg.panel.insertBefore(searchInputEl, cfg.clearAllBtn);
+            // Above the bulk-action row as a whole when the buttons sit
+            // in one (.checkbox-dropdown-bulk), never inside it.
+            cfg.panel.insertBefore(searchInputEl, cfg.clearAllBtn.closest('.checkbox-dropdown-bulk') || cfg.clearAllBtn);
 
             searchInputEl.addEventListener('input', function () {
                 searchQuery = searchInputEl.value;
@@ -304,6 +315,13 @@ var StandplassFilterWidgets = (function () {
             cfg.onClearAll();
         }
         cfg.clearAllBtn.addEventListener('click', onClearAllClick);
+
+        function onSelectAllClick() {
+            cfg.onSelectAll();
+        }
+        if (cfg.selectAllBtn && cfg.onSelectAll) {
+            cfg.selectAllBtn.addEventListener('click', onSelectAllClick);
+        }
 
         function onPanelKeydown(e) {
             if (e.key === 'Escape') {
@@ -340,6 +358,7 @@ var StandplassFilterWidgets = (function () {
             cfg.btn.removeEventListener('click', onBtnClick);
             cfg.panel.removeEventListener('keydown', onPanelKeydown);
             cfg.clearAllBtn.removeEventListener('click', onClearAllClick);
+            if (cfg.selectAllBtn) { cfg.selectAllBtn.removeEventListener('click', onSelectAllClick); }
         }
 
         return { rebuild: rebuild, destroy: destroy };

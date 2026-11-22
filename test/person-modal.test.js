@@ -54,6 +54,17 @@ assert.deepStrictEqual(
     }),
     { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
 );
+// the bulk-untick state ([] = nothing ticked) serializes falsy -- the URL
+// sync's truthy check drops the param, so a shared link reopens unfiltered.
+// Deliberate: an all-unticked filter is a transient exploration state,
+// not something to deep-link someone else into.
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2026], activeYear: 2026, types: [], discs: [], classes: [],
+        metric: 'rankingScore', defaultMetric: 'rankingScore'
+    }).p_disc,
+    ''
+);
 
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },

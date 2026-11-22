@@ -261,62 +261,122 @@ var StandplassPersonModalController = (function () {
                 return base;
             }
 
-            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
-                var container = id(suffix);
-                if (liveDropdowns[suffix]) { liveDropdowns[suffix].destroy(); }
+            // opts: { suffix, items, getSelected(), labelNone, labelEmpty?,
+            //         searchable?, clearLabel?, selectAllLabel?,
+            //         onToggle(v, checked), onClearAll(), onSelectAll?() }
+            // The bulk pair sits above the list: "Merk alle" (when
+            // selectAllLabel is passed) ticks every box, "Fjern alle"
+            // unticks every box. getSelected() returns null for the
+            // unfiltered everything-state — the widget renders that as
+            // all boxes ticked.
+            function mountFilterDropdown(opts) {
+                var container = id(opts.suffix);
+                if (liveDropdowns[opts.suffix]) { liveDropdowns[opts.suffix].destroy(); }
                 if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
-                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
+                    + '<div class="checkbox-dropdown-panel" hidden role="group">'
+                    + '<div class="checkbox-dropdown-bulk">'
+                    + (opts.selectAllLabel ? '<button type="button" class="checkbox-dropdown-select-all">' + esc(opts.selectAllLabel) + '</button>' : '')
+                    + '<button type="button" class="checkbox-dropdown-clear-all">' + esc(opts.clearLabel || 'Fjern alle') + '</button>'
+                    + '</div>'
                     + '<ul class="checkbox-dropdown-list"></ul></div>';
                 var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
                     btn: container.querySelector('.checkbox-dropdown-btn'), panel: container.querySelector('.checkbox-dropdown-panel'),
                     list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
-                    labelNone: labelNone,
-                    searchable: !!searchable,
-                    getItems: function () { return items.map(function (i) { return { id: i, name: i }; }); },
-                    getSelected: function () { var s = getSelected(); return s === null ? items : s; },
-                    onToggle: function (v, name, checked) { onToggle(v, checked); dropdown.rebuild(); },
-                    onClearAll: function () { onClear(); dropdown.rebuild(); }
+                    selectAllBtn: container.querySelector('.checkbox-dropdown-select-all'),
+                    labelNone: opts.labelNone,
+                    // What the closed button says with zero boxes ticked
+                    // — reachable via the bulk untick and by hand.
+                    labelEmpty: opts.labelEmpty || 'Ingen valgt',
+                    searchable: !!opts.searchable,
+                    getItems: function () { return opts.items.map(function (i) { return { id: i, name: i }; }); },
+                    getSelected: function () { var s = opts.getSelected(); return s === null ? opts.items : s; },
+                    onToggle: function (v, name, checked) { opts.onToggle(v, checked); dropdown.rebuild(); },
+                    onClearAll: function () { opts.onClearAll(); dropdown.rebuild(); },
+                    onSelectAll: opts.onSelectAll ? function () { opts.onSelectAll(); dropdown.rebuild(); } : null
                 });
                 dropdown.rebuild();
-                liveDropdowns[suffix] = dropdown;
+                liveDropdowns[opts.suffix] = dropdown;
                 return dropdown;
             }
 
             function wireYearFilter() {
                 var years = [];
                 for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
-                mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
-                    var yr = parseInt(yearStr, 10);
-                    if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
-                    loadYearIfNeeded(yr).then(function () {
-                        if (mySeq !== personOpenSeq) { return; }
-                        // Only the value-derived dropdowns need remounting
-                        // when a year's data lands (their options are built
-                        // from it). The Year dropdown's own list is static --
-                        // remounting it too would close its open panel and
-                        // drop keyboard focus on every year toggle.
-                        wireValueDerivedFilters();
-                        refresh();
-                    });
-                }, function () { selectedYears = [cfg.defaultYear]; refresh(); }, false, 'Kun ' + cfg.defaultYear);
+                mountFilterDropdown({
+                    suffix: '-person-year-filter',
+                    items: years.map(String),
+                    getSelected: function () { return selectedYears.map(String); },
+                    labelNone: 'Alle år',
+                    onToggle: function (yearStr, checked) {
+                        var yr = parseInt(yearStr, 10);
+                        if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
+                        loadYearIfNeeded(yr).then(function () {
+                            if (mySeq !== personOpenSeq) { return; }
+                            // Only the value-derived dropdowns need remounting
+                            // when a year's data lands (their options are built
+                            // from it). The Year dropdown's own list is static --
+                            // remounting it too would close its open panel and
+                            // drop keyboard focus on every year toggle.
+                            wireValueDerivedFilters();
+                            refresh();
+                        });
+                    },
+                    // The year dropdown's bulk button is its reset: back to
+                    // the single default year, not an untick-all — zero
+                    // years would leave nothing to show at all.
+                    onClearAll: function () { selectedYears = [cfg.defaultYear]; refresh(); },
+                    clearLabel: 'Kun ' + cfg.defaultYear
+                });
             }
 
             function wireValueDerivedFilters() {
+                // Bulk semantics: "Merk alle" sets the null state (the
+                // canonical everything — all boxes ticked, no filtering,
+                // no URL param), "Fjern alle" sets the empty state (no
+                // boxes ticked, nothing matches, the table shows its
+                // "Ingen resultater." message). The empty state is
+                // deliberately not deep-linkable — it serializes to no
+                // param, so a shared link reopens unfiltered.
                 if (knownValues('competitionType').length > 1) {
-                    mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
-                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
-                        function () { filters.types = null; refresh(); });
+                    mountFilterDropdown({
+                        suffix: '-person-type-filter',
+                        items: knownValues('competitionType'),
+                        getSelected: function () { return filters.types; },
+                        labelNone: 'Alle stevnetyper',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        onToggle: function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
+                        onClearAll: function () { filters.types = []; refresh(); },
+                        onSelectAll: function () { filters.types = null; refresh(); }
+                    });
                 }
                 if (knownValues('discipline').length > 1) {
-                    mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
-                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
-                        function () { filters.discs = null; refresh(); }, true);
+                    mountFilterDropdown({
+                        suffix: '-person-disc-filter',
+                        items: knownValues('discipline'),
+                        getSelected: function () { return filters.discs; },
+                        labelNone: 'Alle øvelser',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        searchable: true,
+                        onToggle: function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
+                        onClearAll: function () { filters.discs = []; refresh(); },
+                        onSelectAll: function () { filters.discs = null; refresh(); }
+                    });
                 }
                 if (knownValues('class').length > 1) {
-                    mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
-                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
-                        function () { filters.classes = null; refresh(); });
+                    mountFilterDropdown({
+                        suffix: '-person-class-filter',
+                        items: knownValues('class'),
+                        getSelected: function () { return filters.classes; },
+                        labelNone: 'Alle klasser',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        onToggle: function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
+                        onClearAll: function () { filters.classes = []; refresh(); },
+                        onSelectAll: function () { filters.classes = null; refresh(); }
+                    });
                 }
             }
 

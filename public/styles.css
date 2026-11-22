@@ -831,6 +831,10 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     padding: 0.25rem 0;
 }
 
+/* Bulk actions above the checkbox list. Dropdowns with both pass
+   selectAllLabel; the pair then sits side by side in .checkbox-dropdown-bulk.
+   "Merk alle" ticks every box, "Fjern alle" unticks every box. */
+.checkbox-dropdown-select-all,
 .checkbox-dropdown-clear-all {
     display: block;
     width: 100%;
@@ -845,8 +849,20 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     cursor: pointer;
     margin-bottom: 0.125rem;
 }
+.checkbox-dropdown-select-all:hover,
 .checkbox-dropdown-clear-all:hover { color: var(--brand-primary); }
+.checkbox-dropdown-select-all:focus-visible,
 .checkbox-dropdown-clear-all:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: -2px; }
+.checkbox-dropdown-bulk { display: flex; }
+.checkbox-dropdown-bulk .checkbox-dropdown-select-all,
+.checkbox-dropdown-bulk .checkbox-dropdown-clear-all {
+    flex: 1;
+    width: auto;
+    margin-bottom: 0;
+}
+.checkbox-dropdown-bulk .checkbox-dropdown-select-all {
+    border-right: 1px solid var(--border);
+}
 
 .checkbox-dropdown-list {
     list-style: none;
@@ -1509,6 +1525,7 @@ tr[data-idx] { cursor: pointer; }
     color: var(--text);
 }
 [data-mode="dark"] .ranking-more-btn { border-color: var(--text); color: var(--text); }
+[data-mode="dark"] .checkbox-dropdown-select-all:hover,
 [data-mode="dark"] .checkbox-dropdown-clear-all:hover { color: var(--text); }
 
 /* ── Terminliste – Vis flere-knapp ─────────────────────── */
