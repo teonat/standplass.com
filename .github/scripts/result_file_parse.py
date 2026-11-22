@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 9
+PARSER_VERSION = 10
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -33,6 +33,11 @@ _CLUB_ENDINGS = (
     'klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket', 'skyttere',
 )
 _CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'ssl', 'gsl'}
+# club names may carry multi-word place parts: 'Horten og Omegn PK'
+# (a connector pair) and 'Nedre Eiker PK' (a place-forming prefix)
+_CLUB_PLACE_PREFIXES = {
+    'nedre', 'øvre', 'søndre', 'nordre', 'østre', 'vestre',
+}
 
 
 class UnsupportedFormatError(Exception):
@@ -153,7 +158,9 @@ def _split_name_club(tokens):
 
     The club is anchored on its suffix word (…klubb, …lag, …selskap),
     taking the word before it as the place part and anything after it
-    (e.g. ' - pistol' disambiguators) along. The split only has to be
+    (e.g. ' - pistol' disambiguators) along. Multi-word place parts
+    are absorbed too: a connector pair ('Horten og Omegn PK') and a
+    place-forming prefix ('Nedre Eiker PK'). The split only has to be
     reasonable: the person matcher joins rows against the API results
     and canonicalizes both fields there, so unmatched rows are the
     only consumers of this heuristic.
@@ -164,6 +171,11 @@ def _split_name_club(tokens):
         low = tokens[i].lower()
         if low.endswith(_CLUB_ENDINGS) or low in _CLUB_ACRONYMS:
             start = max(0, i - 1)
+            while start >= 2 and tokens[start - 1].lower() == 'og':
+                start -= 2
+            while (start >= 1
+                   and tokens[start - 1].lower() in _CLUB_PLACE_PREFIXES):
+                start -= 1
             name = ' '.join(tokens[:start])
             if name:
                 return name, ' '.join(tokens[start:])
@@ -1012,8 +1024,14 @@ def parse_inrx(text):
                 else:
                     class_dict = {'klasse': klasse, 'rows': []}
                     classes.append(class_dict)
+                # open øvelser print championship podiums with the
+                # medal as the first word — strip it on person
+                # øvelser; Lag/Mix-lag øvelser are team tables whose
+                # first word is the printed medal-team shape
+                is_lag = 'lag: ' in navn.lower()
                 current = (
-                    'rows', class_dict, n_series, has_oppr, has_premie, False,
+                    'rows', class_dict, n_series, has_oppr, has_premie,
+                    not is_lag,
                 )
             continue
         if current is None:

@@ -314,6 +314,83 @@ class ParseInrXLagRobustness(unittest.TestCase):
         self.assertEqual([m['name'] for m in team['members']], ['Per Hansen'])
 
 
+class ParseInrXMedalRows(unittest.TestCase):
+    """inrX open øvelser print championship podiums with the medal as
+    the first word ('Gull <name> <club> …'); NM comps carry all their
+    results this way, so without the strip every podium row fails
+    person matching and no mestere nm sections appear. Person øvelser
+    now strip the medal into a row field (the KM/DM tables always
+    did); Lag/Mix-lag øvelser keep the printed team shape — their
+    rows are team rows. Multi-word club place parts ('Horten og
+    Omegn PK', 'Nedre Eiker PK') used to leak into the name; the
+    split now absorbs the connector pair and place-forming prefix.
+
+    Fixture: comp 620ff3da (felt 2025, NM Spesialrevolver &
+    Spesialpistol), inrX 1.9.1.0."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-nm-medal.pdf'))
+
+    def test_person_ovelse_strips_medal_into_row_field(self):
+        row = find_row(self.detail, 'Felt Sp-Pistol', 'U', 'Philip Thorshaug')
+        self.assertEqual(row['medal'], 'Gull')
+        self.assertNotIn('pos', row)
+        self.assertEqual(row['name'], 'Philip Thorshaug')
+        self.assertEqual(row['club'], 'Horten og Omegn Pistolklubb')
+
+    def test_og_connector_place_part_stays_in_club(self):
+        row = find_row(self.detail, 'Felt Sp-Revolver', 'U',
+                       'Lucas Sebastian Sivertsen-Ekdahl')
+        self.assertEqual(row['medal'], 'Bronse')
+        self.assertEqual(row['club'], 'Horten og Omegn Pistolklubb')
+
+    def test_directional_place_prefix_stays_in_club(self):
+        rows = [r for c in next(o['classes'] for o in self.detail['ovelser']
+                               if o['navn'] == 'Felt Sp-Pistol')
+                for r in c['rows'] if r.get('name') == 'Kjetil Bromark']
+        medal_row = next(r for r in rows if r.get('medal') == 'Bronse')
+        self.assertEqual(medal_row['club'], 'Nedre Eiker Pistolklubb 8/5')
+        pos_row = find_row(self.detail, 'Felt Sp-Revolver', 'Å',
+                           'Kjetil Bromark')
+        self.assertEqual(pos_row['pos'], 43)
+        self.assertEqual(pos_row['club'], 'Nedre Eiker Pistolklubb')
+        self.assertNotIn('medal', pos_row)
+
+    def test_plain_two_word_club_split_unchanged(self):
+        row = find_row(self.detail, 'Felt Sp-Revolver', 'Å', 'Tore Vrålstad')
+        self.assertEqual(row['medal'], 'Gull')
+        self.assertEqual(row['name'], 'Tore Vrålstad')
+        self.assertEqual(row['club'], 'Greipstad Pistolklubb')
+
+    def test_lag_ovelse_keeps_printed_team_shape(self):
+        row = find_row(self.detail, 'Lag: Felt Sp-Pistol', 'Å', 'Gull')
+        self.assertNotIn('medal', row)
+        self.assertEqual(row['name'], 'Gull')
+        self.assertEqual(row['club'], 'Brumunddal Pistolklubb 1 SP-Pistol')
+
+    def test_mix_lag_ovelse_keeps_printed_team_shape(self):
+        row = find_row(self.detail, 'Mix-lag: Felt Sp-Pistol', 'Å', 'Gull')
+        self.assertNotIn('medal', row)
+        self.assertEqual(row['name'], 'Gull')
+        self.assertEqual(row['club'], 'Bjørkelangen Pistolklubb SP-Pistol')
+
+    def test_place_prefix_rules_on_synthetic_text(self):
+        text = '\n'.join([
+            'Felt Grov :: Klasse Å 1 2 3 4 5 6 7 8 9 10 iX Sum',
+            'Gull Per Hansen Tønsberg og Omegn PK 10/5 10/5 10/5 10/5'
+            ' 10/5 10/5 10/5 10/5 10/5 10/5 55 505',
+            '1 Kari Nordmann Øvre Eiker SK 10/5 10/5 10/5 10/5 10/5'
+            ' 10/5 10/5 10/5 10/5 10/5 55 505',
+        ])
+        detail = parse_inrx(text)
+        gull = find_row(detail, 'Felt Grov', 'Å', 'Per Hansen')
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['club'], 'Tønsberg og Omegn PK')
+        pos = find_row(detail, 'Felt Grov', 'Å', 'Kari Nordmann')
+        self.assertEqual(pos['club'], 'Øvre Eiker SK')
+
+
 class ParsePlainNo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -977,8 +1054,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_9(self):
-        self.assertEqual(PARSER_VERSION, 9)
+    def test_parser_version_is_10(self):
+        self.assertEqual(PARSER_VERSION, 10)
 
 
 class ParseResultDispatch(unittest.TestCase):
