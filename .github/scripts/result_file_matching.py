@@ -41,8 +41,12 @@ def _lookups(api_results):
 def _match(name, club, by_combined, by_name):
     if club:
         ids = by_combined.get(normalize(f'{name} {club}'))
-        if ids:
-            return next(iter(ids)) if len(ids) == 1 else None
+    else:
+        # the split found no club, so name holds the whole 'name club'
+        # region — try it as the combined key before anything else
+        ids = by_combined.get(normalize(name))
+    if ids:
+        return next(iter(ids)) if len(ids) == 1 else None
     ids = by_name.get(normalize(name), set())
     if len(ids) == 1:
         return next(iter(ids))

@@ -29,7 +29,9 @@ _MEDALS = ('Gull', 'Sølv', 'Bronse')
 
 # inrX rows print name and club as one space-joined region with no
 # delimiter; the club is anchored by its suffix word.
-_CLUB_ENDINGS = ('klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket')
+_CLUB_ENDINGS = (
+    'klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket', 'skyttere',
+)
 _CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'gsl'}
 
 

@@ -35,6 +35,16 @@ class Normalize(unittest.TestCase):
         self.assertEqual(normalize(''), '')
 
 
+class SplitNameClub(unittest.TestCase):
+    def test_skyttere_club_ending(self):
+        from result_file_parse import _split_name_club
+        name, club = _split_name_club(
+            'Arnstein Skare Melhus Sportsskyttere'.split()
+        )
+        self.assertEqual(name, 'Arnstein Skare')
+        self.assertEqual(club, 'Melhus Sportsskyttere')
+
+
 class AttachPersonIds(unittest.TestCase):
     def test_case_and_punctuation_variance_matches(self):
         detail = ovelse_detail([
@@ -82,6 +92,22 @@ class AttachPersonIds(unittest.TestCase):
         attach_person_ids(detail, API_RESULTS)
         row = detail['ovelser'][0]['classes'][0]['rows'][0]
         self.assertNotIn('personId', row)
+
+    def test_region_without_detected_club_matches_combined(self):
+        # club endings outside the split vocabulary leave the whole
+        # 'name club' region in name — it must still match on the
+        # combined key
+        api = API_RESULTS + [
+            {'personId': 'p9', 'name': 'Arnstein Skare',
+             'club': 'Melhus Sportsskyttere', 'discipline': 'd', 'class': 'A'},
+        ]
+        detail = ovelse_detail([
+            {'name': 'Arnstein Skare Melhus Sportsskyttere',
+             'series': [], 'ix': 1, 'sum': 2},
+        ])
+        attach_person_ids(detail, api)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertEqual(row['personId'], 'p9')
 
 
 class MatchStats(unittest.TestCase):
