@@ -56,7 +56,10 @@ jobs:
           SWEEP: ${{ github.event.schedule == '0 9 * * 0' || inputs.sweep }}
 
       - name: Commit data if changed
-        if: ${{ !inputs.dry_run }}
+        # run even when parsing ended non-zero: a single dead
+        # resultFileUrl must not discard the whole run's work — the
+        # job stays red as the signal, the data still lands
+        if: ${{ !inputs.dry_run && !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
