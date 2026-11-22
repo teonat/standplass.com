@@ -77,6 +77,101 @@ def load_detail(path):
         return json.load(f)
 
 
+def index_path(branch, year, root='.'):
+    """Path of a year's slim KM/DM champions index."""
+    return os.path.normpath(os.path.join(
+        root, DATA_DIR, branch, f'km-dm-{year}.json'
+    ))
+
+
+_MEDALS = ('Gull', 'Sølv', 'Bronse')
+
+
+def _person_champions(rows):
+    champions = []
+    for row in rows:
+        if row.get('medal') not in _MEDALS:
+            continue
+        entry = {'medal': row['medal']}
+        if row.get('personId'):
+            entry['personId'] = row['personId']
+        entry['name'] = row['name']
+        if row.get('club'):
+            entry['club'] = row['club']
+        champions.append(entry)
+    return champions
+
+
+def _team_champions(teams):
+    return [
+        {'medal': team['medal'], 'team': team['team']}
+        for team in teams
+        if team.get('medal') in _MEDALS
+    ]
+
+
+def build_km_index(branch, year, root='.'):
+    """Slim per-year index of championship results, champions only.
+
+    Reads the branch's detail files for the year and the year JSON
+    for comp metadata (title, date, organizer). Comps without
+    championship sections are excluded.
+    """
+    year_file = os.path.join(root, DATA_DIR, branch, f'{year}.json')
+    comps = {}
+    if os.path.exists(year_file):
+        with open(year_file, encoding='utf-8') as f:
+            data = json.load(f)
+        comps = {c['id']: c for c in data.get('competitions', [])}
+    detaljer_dir = os.path.join(root, DATA_DIR, 'detaljer', branch, year)
+    entries = []
+    if os.path.isdir(detaljer_dir):
+        for name in sorted(os.listdir(detaljer_dir)):
+            if not name.endswith('.json'):
+                continue
+            with open(os.path.join(detaljer_dir, name), encoding='utf-8') as f:
+                detail = json.load(f)
+            if detail.get('generator') == 'quarantined':
+                continue
+            comp = comps.get(detail.get('compId'))
+            if comp is None:
+                continue
+            entry = {
+                'compId': comp['id'],
+                'date': (comp.get('startDate') or '')[:10],
+                'title': comp.get('title'),
+                'organizer': comp.get('organizationName'),
+            }
+            for scope in ('km', 'dm'):
+                champ = detail.get(scope) or {}
+                sections = []
+                for section in champ.get('sections', []):
+                    champions = _person_champions(section.get('rows', []))
+                    if champions:
+                        sections.append({
+                            'ovelse': re.sub(rf'^{scope.upper()}: ', '', section['navn']),
+                            'klasse': section['klasse'],
+                            'champions': champions,
+                        })
+                if sections:
+                    entry[scope] = sections
+                lags = []
+                for lag in champ.get('lag', []):
+                    champions = _team_champions(lag.get('teams', []))
+                    if champions:
+                        lags.append({
+                            'ovelse': re.sub(rf'^{scope.upper()} Lag: ', '', lag['navn']),
+                            'klasse': lag['klasse'],
+                            'champions': champions,
+                        })
+                if lags:
+                    entry[scope + 'Lag'] = lags
+            if any(k in entry for k in ('km', 'dm', 'kmLag', 'dmLag')):
+                entries.append(entry)
+    entries.sort(key=lambda e: (e.get('date') or '', e.get('title') or ''))
+    return {'year': int(year), 'comps': entries}
+
+
 def write_detail(path, detail):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
@@ -222,6 +317,24 @@ def run(opts, *, fetch_pdf=None, root='.'):
         summary['by_family'][generator] = summary['by_family'].get(generator, 0) + 1
 
     summary['quarantine_list'] = quarantine_list
+
+    # Regenerate the slim KM/DM indexes for every year in scope that
+    # has detail files; write only when the content actually changes
+    # so daily runs produce no churn.
+    summary['indexes_written'] = 0
+    scopes = sorted({(branch, year) for branch, year, _ in collect_targets(opts, root)})
+    for branch, year in scopes:
+        index = build_km_index(branch, year, root=root)
+        if not index['comps']:
+            continue
+        path = index_path(branch, year, root=root)
+        existing = None
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                existing = json.load(f)
+        if existing != index:
+            write_detail(path, index)
+            summary['indexes_written'] += 1
     return summary
 
 

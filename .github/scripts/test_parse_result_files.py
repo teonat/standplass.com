@@ -11,7 +11,9 @@ import unittest
 
 from parse_result_files import (
     PARSER_VERSION,
+    build_km_index,
     detail_path,
+    index_path,
     run,
     should_reparse,
     source_hash,
@@ -252,6 +254,107 @@ class RunOrchestrator(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertFalse(os.path.exists(
             detail_path('felt', '2021', 'c-old', root=self.root)))
+
+
+class KmDmIndex(unittest.TestCase):
+    FELT_KM_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/f2fd227a.pdf'
+    BANE_KM_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/8c9065b4.pdf'
+    PLAIN_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/a17c50ce.pdf'
+
+    @classmethod
+    def setUpClass(cls):
+        import pdfplumber
+        from result_file_parse import parse_result
+        from result_file_matching import attach_person_ids
+        cls._tmp = tempfile.TemporaryDirectory()
+        root = cls._tmp.name
+        felt_comp = bane_km_comp = plain_comp = None
+        for path in ('public/data/felt/2025.json', 'public/data/bane/2025.json',
+                     'public/data/bane/2026.json'):
+            for c in json.load(open(path))['competitions']:
+                if 'f2fd227a' in (c.get('resultFileUrl') or ''):
+                    felt_comp = c
+                if '8c9065b4' in (c.get('resultFileUrl') or ''):
+                    bane_km_comp = c
+                if 'a17c50ce' in (c.get('resultFileUrl') or ''):
+                    plain_comp = c
+        cls.felt_comp_id = felt_comp['id']
+        cls.bane_km_comp_id = bane_km_comp['id']
+        cls.plain_comp_id = plain_comp['id']
+        write_year(root, 'felt', '2025', [felt_comp])
+        write_year(root, 'bane', '2025', [bane_km_comp, plain_comp])
+        plain_comp_url = plain_comp['resultFileUrl']
+
+        def fetch(url):
+            if 'f2fd227a' in url:
+                return fixture_bytes('inrx-felt-km.pdf'), '"e1"'
+            if '8c9065b4' in url:
+                return fixture_bytes('inrx-bane-km.pdf'), '"e2"'
+            if 'a17c50ce' in url:
+                return fixture_bytes('inrx-bane.pdf'), '"e3"'
+            raise AssertionError(f'unexpected url {url}')
+
+        cls.summary = run({'full_scan': True, 'year': '2025', 'branch': None,
+                           'dry_run': False}, fetch_pdf=fetch, root=root)
+        cls.root = root
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_run_wrote_both_indexes(self):
+        self.assertTrue(os.path.exists(index_path('felt', '2025', root=self.root)))
+        self.assertTrue(os.path.exists(index_path('bane', '2025', root=self.root)))
+        self.assertGreaterEqual(self.summary.get('indexes_written', 0), 2)
+
+    def test_index_path_shape(self):
+        self.assertEqual(
+            index_path('felt', '2025'),
+            'public/data/felt/km-dm-2025.json',
+        )
+
+    def test_felt_dm_champions_with_person_ids(self):
+        index = build_km_index('felt', '2025', root=self.root)
+        entry = next(c for c in index['comps'] if c['compId'] == self.felt_comp_id)
+        self.assertEqual(entry['title'], 'Feltstemne FGMR DM i FGMR')
+        self.assertTrue(entry['organizer'])
+        self.assertEqual(entry['date'], entry['date'][:10])
+        section = next(s for s in entry['dm']
+                       if s['ovelse'] == 'Felt Fin' and s['klasse'] == 'M')
+        self.assertEqual([c['medal'] for c in section['champions']],
+                         ['Gull', 'Sølv', 'Bronse'])
+        gull = section['champions'][0]
+        self.assertEqual(gull['name'], 'Kjell Jomar Heltne')
+        self.assertEqual(gull['club'], 'Florø Pistolklubb')
+        self.assertTrue(gull['personId'])
+        self.assertNotIn('series', section)
+
+    def test_bane_km_and_lag_champions(self):
+        index = build_km_index('bane', '2025', root=self.root)
+        entry = next(c for c in index['comps'] if c['compId'] == self.bane_km_comp_id)
+        section = next(s for s in entry['km']
+                       if s['ovelse'] == 'Hurtig Sp Pistol' and s['klasse'] == 'Å')
+        gull = section['champions'][0]
+        self.assertEqual(gull['name'], 'Tore Vrålstad')
+        self.assertTrue(gull['personId'])
+        lag = next(s for s in entry['kmLag'] if s['ovelse'] == 'Hurtig Sp Pistol')
+        self.assertEqual(lag['champions'][0], {'medal': 'Gull', 'team': 'GPK 1'})
+
+    def test_comp_without_championships_excluded(self):
+        index = build_km_index('bane', '2025', root=self.root)
+        comp_ids = {c['compId'] for c in index['comps']}
+        self.assertNotIn(self.plain_comp_id, comp_ids)
+        self.assertEqual(index['year'], 2025)
+
+    def test_second_run_rewrites_no_indexes(self):
+        def fetch(url):
+            raise AssertionError('second run must not fetch anything')
+
+        summary = run({'full_scan': True, 'year': '2025', 'branch': None,
+                       'dry_run': False}, fetch_pdf=fetch, root=self.root)
+        self.assertEqual(summary['parsed'], 0)
+        self.assertEqual(summary['up_to_date'], 3)
+        self.assertEqual(summary['indexes_written'], 0)
 
 
 if __name__ == '__main__':
