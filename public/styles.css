@@ -1372,6 +1372,20 @@ tr[data-idx] { cursor: pointer; }
    overflow-y: auto, never hidden: browser find-in-page must be able to
    scroll the region to matches. */
 .person-table-scroll { overflow-y: auto; max-height: 40dvh; }
+/* Sticky header inside that cap — the terminliste-scroll-wrap pattern:
+   border-collapse: collapse does not move a sticky th's borders with
+   it, so separate + spacing 0 (identical rendering for this table's
+   simple bottom borders). --surface-base is a translucent tint, not a
+   surface — rows scrolling under the header would bleed through it,
+   so the tint is composited over the modal shell's opaque
+   --surface-card: identical resting look, nothing shows through. */
+.person-table-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
+.person-table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
 .person-chart-dot:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 3px;

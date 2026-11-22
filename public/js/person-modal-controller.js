@@ -160,27 +160,64 @@ var StandplassPersonModalController = (function () {
             }
             syncCurrentPersonModalUrl = syncPersonModalUrl;
 
+            // The table's sort state — created per open (renderPersonModal
+            // runs per open), so every fresh open starts at the date-asc
+            // default, and filter refreshes keep the active sort.
+            var tableSort = null;
+            var modalDisplayName = personName || 'Ukjent skytter';
+
+            function renderPersonTable() {
+                var host = id('-person-table');
+                if (!host) { return; }
+                // data-idx is the entry's index into modalEntries — the
+                // same index renderChart stamps on its dots, so the
+                // row↔dot linking keeps working. The base's data-dt-row
+                // would be the index into the array as passed (the
+                // date-sorted display order), so the map goes by object.
+                var rowIdx = new Map();
+                modalEntries.forEach(function (e, i) { rowIdx.set(e, i); });
+                // date-asc is the order this table has always shown. The
+                // base only APPLIES state.sort (a user sort); defaultSort
+                // merely marks the initial aria-sort, so the rows are
+                // passed pre-sorted — every base table's contract.
+                var displayRows = modalEntries.slice().sort(function (a, b) {
+                    return (a.date || '') < (b.date || '') ? -1 : 1;
+                });
+                host.innerHTML = StandplassDataTable.renderTable('person-results', {
+                    columns: StandplassPersonModal.resultsTableColumns(),
+                    rows: displayRows,
+                    ariaLabel: 'Resultater for ' + modalDisplayName,
+                    defaultSort: { key: 'date', dir: 'asc' },
+                    rowAttrs: function (row) {
+                        return 'data-idx="' + rowIdx.get(row) + '" tabindex="-1"'
+                            + ' aria-label="Klikk for å markere resultatet i grafen"';
+                    }
+                }, { sort: tableSort });
+                if (!modalEntries.length) {
+                    var tbody = host.querySelector('tbody');
+                    if (tbody) { tbody.innerHTML = '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
+                    return;
+                }
+                StandplassDataTable.wireTable(modalEl, 'person-results', {
+                    columns: StandplassPersonModal.resultsTableColumns()
+                }, {
+                    onSortChange: function (sort) {
+                        tableSort = sort;
+                        renderPersonTable();
+                        // Same focus-restoration convention as every
+                        // other base table: the clicked header button was
+                        // destroyed with the re-render.
+                        var btn = modalEl.querySelector('table[data-dt-id="person-results"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                        if (btn) { btn.focus(); }
+                    }
+                });
+            }
+
             function refresh() {
                 syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
-                // Row↔dot linking: rows carry the entry's index into
-                // modalEntries — the same index renderChart stamps on dots.
-                var rowIdx = new Map();
-                modalEntries.forEach(function (e, i) { rowIdx.set(e, i); });
-                var body = modalEntries.slice().sort(function (a, b) {
-                    return (a.date || '') < (b.date || '') ? -1 : 1;
-                }).map(function (r) {
-                    return '<tr data-idx="' + rowIdx.get(r) + '" tabindex="-1"'
-                        + ' aria-label="Klikk for å markere resultatet i grafen"><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
-                        + '<td>' + esc(r.competition || '–') + '</td>'
-                        + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
-                        + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
-                        + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
-                        + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
-                }).join('');
-                var tbody = id('-person-table-body');
-                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
+                renderPersonTable();
                 drawChart();
             }
 
@@ -206,8 +243,7 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<div class="person-table-scroll"><table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table></div>';
+                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>';
             }
 
             function toggleSetValue(current, known, v, checked) {
@@ -289,6 +325,7 @@ var StandplassPersonModalController = (function () {
                 if (!urlFilters) {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
+                modalDisplayName = resolvedName || modalDisplayName;
                 showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
                 refresh();

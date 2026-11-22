@@ -519,11 +519,39 @@ var StandplassPersonModal = (function () {
         return { activateDot: function () {}, clearActive: function () {} };
     }
 
+    // The result table's column spec for the shared data-table base —
+    // a straight port of the hand-rolled markup: nulls render as –,
+    // dates short-form, rankingScore two decimals, every column
+    // left-aligned. Rows are the modal's filtered entries in FILTER
+    // order, so the base's data-dt-row index doubles as the chart's
+    // dot index (the controller passes rowAttrs that stamp it as
+    // data-idx); the date-asc default sort is the order the table has
+    // always shown.
+    function resultsTableColumns() {
+        return [
+            { key: 'date', label: 'Dato', sortable: true, defaultDir: 'asc',
+                format: function (v) { return v ? shortDate(v) : '–'; } },
+            { key: 'competition', label: 'Stevne', sortable: true, defaultDir: 'asc',
+                format: function (v) { return v || '–'; } },
+            { key: 'discipline', label: 'Øvelse', sortable: true, defaultDir: 'asc',
+                format: function (v) { return v || ''; } },
+            { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc',
+                format: function (v) { return v || ''; } },
+            { key: 'position', label: 'Plass', sortable: true, defaultDir: 'asc',
+                format: function (v) { return v == null ? '–' : v; } },
+            { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc',
+                format: function (v) { return v == null ? '–' : v; } },
+            { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc',
+                format: function (v) { return v == null ? '–' : Number(v).toFixed(2); } }
+        ];
+    }
+
     return {
         parsePersonFromUrl: parsePersonFromUrl,
         buildPersonUrl: buildPersonUrl,
         clearPersonFromUrl: clearPersonFromUrl,
         shortDate: shortDate,
+        resultsTableColumns: resultsTableColumns,
         chartPoints: chartPoints,
         dotColor: dotColor,
         computeOverlapCounts: computeOverlapCounts,
