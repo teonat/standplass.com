@@ -276,10 +276,10 @@ assert.strictEqual(cols[2].format(null), '', 'missing discipline renders empty, 
 assert.strictEqual(cols[4].format(null), '–', 'missing position renders –');
 assert.strictEqual(cols[6].cell({ rankingScore: 0.9, class: 'Åpen' }), '0.90', 'rankingScore renders two decimals');
 assert.strictEqual(cols[6].cell({ rankingScore: null, class: 'A' }), '–', 'missing rankingScore renders –');
-assert.ok(cols[6].raw, 'the Ranking cell is raw HTML — it carries the band dot');
+assert.ok(cols[6].raw, 'the Ranking cell is raw HTML — it carries the colored value');
 assert.strictEqual(cols[6].cell({ rankingScore: 98, class: 'B' }),
-    '98.00<span class="rank-dot" style="background:var(--chart-green)" title="Opprykksgrense nådd"></span>',
-    'a banded ranking renders its dot from the shared module');
+    '<span class="rank-value" style="color:var(--chart-green)" title="Opprykksgrense nådd">98.00</span>',
+    'a banded ranking renders its color from the shared module');
 
 // Render through the base: the migration contract — date-asc default
 // order (the order the table has always shown), rows stamped with
@@ -317,8 +317,8 @@ assert.ok(pmTable.indexOf('<tr data-dt-row="1" data-idx="0"') >= 0,
 // cell formats through the base
 assert.ok(pmTable.indexOf('<td>1. mai &#39;26</td>') >= 0, 'short date in the Dato cell');
 assert.ok(pmTable.indexOf('<td>–</td>') >= 0, 'null score renders –');
-assert.ok(pmTable.indexOf('<td>0.90<span class="rank-dot" style="background:var(--chart-orange)" title="2+ klasser under"></span></td>') >= 0,
-    'rankingScore 0.9 renders 0.90 with its band dot (class A, far below)');
+assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-orange)" title="2+ klasser under">0.90</span></td>') >= 0,
+    'rankingScore 0.9 renders 0.90 colored by its band (class A, far below)');
 // every header sortable, Dato carrying the initial aria-sort
 assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
 assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');

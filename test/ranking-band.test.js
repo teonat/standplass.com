@@ -51,11 +51,11 @@ assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.label; }),
 
 // ── cellHtml: the shared table cell ──────────────────────────────────
 assert.strictEqual(RB.cellHtml(97.5, 'A'),
-    '97.50<span class="rank-dot" style="background:var(--chart-blue)" title="I klassen"></span>');
+    '<span class="rank-value" style="color:var(--chart-blue)" title="I klassen">97.50</span>');
 assert.strictEqual(RB.cellHtml(98, 'B'),
-    '98.00<span class="rank-dot" style="background:var(--chart-green)" title="Opprykksgrense nådd"></span>');
+    '<span class="rank-value" style="color:var(--chart-green)" title="Opprykksgrense nådd">98.00</span>');
 assert.strictEqual(RB.cellHtml(84.99, 'C'),
-    '84.99<span class="rank-dot" style="background:var(--chart-blue)" title="I klassen"></span>');
-assert.strictEqual(RB.cellHtml(90, 'Åpen'), '90.00', 'off-ladder: plain value, no dot');
+    '<span class="rank-value" style="color:var(--chart-blue)" title="I klassen">84.99</span>');
+assert.strictEqual(RB.cellHtml(90, 'Åpen'), '90.00', 'off-ladder: plain value, no color');
 assert.strictEqual(RB.cellHtml(null, 'A'), '–', 'no ranking renders –');
-assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no dot');
+assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no color');

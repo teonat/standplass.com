@@ -52,7 +52,9 @@ var StandplassRankingBand = (function () {
     }
 
     // The shared table cell for a Ranking column (raw HTML — consumers
-    // must set the column's raw flag). No escaping needed: the text is
+    // must set the column's raw flag): the value itself carries the
+    // band color, with the band label as its title so the color is
+    // never the only signal. No escaping needed: the text is
     // Number.toFixed output (digits, dot, minus only) and the color and
     // label are this module's own static strings.
     function cellHtml(rankingScore, cls) {
@@ -60,8 +62,8 @@ var StandplassRankingBand = (function () {
         var text = Number(rankingScore).toFixed(2);
         var band = bandFor(cls, rankingScore);
         if (!band) { return text; }
-        return text + '<span class="rank-dot" style="background:' + band.color
-            + '" title="' + band.label + '"></span>';
+        return '<span class="rank-value" style="color:' + band.color
+            + '" title="' + band.label + '">' + text + '</span>';
     }
 
     return { bandFor: bandFor, cellHtml: cellHtml, BANDS: BANDS };
