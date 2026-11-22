@@ -267,9 +267,9 @@ var StandplassTerminlistePage = (function () {
 
         var nameInput = id('-name-input');
         var fraInput = id('-fra-input'), tilInput = id('-til-input');
-        var grenBtn = id('-gren-btn'), grenPanel = id('-gren-panel'), grenList = id('-gren-list'), grenClear = id('-gren-clear');
-        var typeBtn = id('-type-btn'), typePanel = id('-type-panel'), typeList = id('-type-list'), typeClear = id('-type-clear');
-        var groupBtn = id('-group-btn'), groupPanel = id('-group-panel'), groupList = id('-group-list'), groupClear = id('-group-clear');
+        var grenBtn = id('-gren-btn'), grenPanel = id('-gren-panel'), grenList = id('-gren-list'), grenClear = id('-gren-clear'), grenSelect = id('-gren-select');
+        var typeBtn = id('-type-btn'), typePanel = id('-type-panel'), typeList = id('-type-list'), typeClear = id('-type-clear'), typeSelect = id('-type-select');
+        var groupBtn = id('-group-btn'), groupPanel = id('-group-panel'), groupList = id('-group-list'), groupClear = id('-group-clear'), groupSelect = id('-group-select');
         var orgInput = id('-org-input'), orgList = id('-org-list'), orgTags = id('-org-tags'), orgClear = id('-org-clear');
         var kretsInput = id('-krets-input'), kretsList = id('-krets-list'), kretsTags = id('-krets-tags'), kretsClear = id('-krets-clear');
         var statusEl = id('-status');
@@ -326,6 +326,7 @@ var StandplassTerminlistePage = (function () {
 
         var grenDropdown = FW.makeCheckboxDropdown({
             btn: grenBtn, panel: grenPanel, list: grenList, clearAllBtn: grenClear,
+            selectAllBtn: grenSelect,
             labelNone: 'Alle grener',
             getItems: function () {
                 return branchlistData.branches.map(function (b) { return { id: b.id, name: b.name }; });
@@ -349,6 +350,19 @@ var StandplassTerminlistePage = (function () {
                 selectedBranchIds = [];
                 grenDropdown.rebuild();
                 setUrlParam('t_gren', null);
+                fetchAndRender(true);
+            },
+            // Same convention as the person modal and stevner øvelse
+            // filters: "Merk alle" ticks every box — the view stays
+            // everything until an untick narrows it (everything-except
+            // filtering). Selecting all branches only WIDENS the group
+            // candidates, so selected groups stay valid — no pruning
+            // (unlike onToggle, which handles shrinks).
+            onSelectAll: function () {
+                selectedBranchIds = branchlistData.branches.map(function (b) { return b.id; });
+                grenDropdown.rebuild();
+                groupDropdown.rebuild();
+                setUrlParam('t_gren', StandplassTerminlistePage.encodeIdList(selectedBranchIds) || null);
                 fetchAndRender(true);
             }
         });
@@ -413,6 +427,7 @@ var StandplassTerminlistePage = (function () {
 
         var typeDropdown = FW.makeCheckboxDropdown({
             btn: typeBtn, panel: typePanel, list: typeList, clearAllBtn: typeClear,
+            selectAllBtn: typeSelect,
             labelNone: 'Alle stevnetyper',
             getItems: function () { return allTypes.map(function (t) { return { id: t.id, name: t.name }; }); },
             getSelected: function () { return selectedTypeIds; },
@@ -428,11 +443,18 @@ var StandplassTerminlistePage = (function () {
                 typeDropdown.rebuild();
                 setUrlParam('t_type', null);
                 fetchAndRender(true);
+            },
+            onSelectAll: function () {
+                selectedTypeIds = allTypes.map(function (t) { return t.id; });
+                typeDropdown.rebuild();
+                setUrlParam('t_type', StandplassTerminlistePage.encodeIdList(selectedTypeIds) || null);
+                fetchAndRender(true);
             }
         });
 
         var groupDropdown = FW.makeCheckboxDropdown({
             btn: groupBtn, panel: groupPanel, list: groupList, clearAllBtn: groupClear,
+            selectAllBtn: groupSelect,
             labelNone: 'Alle øvelsesgrupper',
             searchable: true,
             getItems: function () {
@@ -452,6 +474,17 @@ var StandplassTerminlistePage = (function () {
                 selectedGroupIds = [];
                 groupDropdown.rebuild();
                 setUrlParam('t_group', null);
+                fetchAndRender(true);
+            },
+            // All groups for the currently selected branches (the
+            // dropdown's own candidate set) — an empty branch
+            // selection means every branch, so from the default state
+            // this is every group there is.
+            onSelectAll: function () {
+                selectedGroupIds = StandplassTerminlistePage.groupsForBranches(branchlistData.branches, selectedBranchIds)
+                    .map(function (g) { return g.id; });
+                groupDropdown.rebuild();
+                setUrlParam('t_group', StandplassTerminlistePage.encodeIdList(selectedGroupIds) || null);
                 fetchAndRender(true);
             }
         });
@@ -861,7 +894,10 @@ var StandplassTerminlistePage = (function () {
             + '  <div class="filter-group"><label>Gren</label><div class="checkbox-dropdown">'
             + '    <button type="button" id="' + idPrefix + '-gren-btn" class="checkbox-dropdown-btn" aria-expanded="false" aria-controls="' + idPrefix + '-gren-panel">Alle grener</button>'
             + '    <div class="checkbox-dropdown-panel" id="' + idPrefix + '-gren-panel" hidden role="group">'
-            + '      <button type="button" id="' + idPrefix + '-gren-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      <div class="checkbox-dropdown-bulk">'
+            + '        <button type="button" id="' + idPrefix + '-gren-select" class="checkbox-dropdown-select-all">Merk alle</button>'
+            + '        <button type="button" id="' + idPrefix + '-gren-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      </div>'
             + '      <ul id="' + idPrefix + '-gren-list" class="checkbox-dropdown-list" aria-label="Velg grener"></ul>'
             + '    </div></div></div>'
             + '  <div class="filter-group"><label>Arrangør</label>'
@@ -881,13 +917,19 @@ var StandplassTerminlistePage = (function () {
             + '  <div class="filter-group"><label>Stevnetype</label><div class="checkbox-dropdown">'
             + '    <button type="button" id="' + idPrefix + '-type-btn" class="checkbox-dropdown-btn" aria-expanded="false" aria-controls="' + idPrefix + '-type-panel">Alle stevnetyper</button>'
             + '    <div class="checkbox-dropdown-panel" id="' + idPrefix + '-type-panel" hidden role="group">'
-            + '      <button type="button" id="' + idPrefix + '-type-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      <div class="checkbox-dropdown-bulk">'
+            + '        <button type="button" id="' + idPrefix + '-type-select" class="checkbox-dropdown-select-all">Merk alle</button>'
+            + '        <button type="button" id="' + idPrefix + '-type-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      </div>'
             + '      <ul id="' + idPrefix + '-type-list" class="checkbox-dropdown-list" aria-label="Velg stevnetyper"></ul>'
             + '    </div></div></div>'
             + '  <div class="filter-group"><label>Øvelsesgruppe</label><div class="checkbox-dropdown">'
             + '    <button type="button" id="' + idPrefix + '-group-btn" class="checkbox-dropdown-btn" aria-expanded="false" aria-controls="' + idPrefix + '-group-panel">Alle øvelsesgrupper</button>'
             + '    <div class="checkbox-dropdown-panel" id="' + idPrefix + '-group-panel" hidden role="group">'
-            + '      <button type="button" id="' + idPrefix + '-group-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      <div class="checkbox-dropdown-bulk">'
+            + '        <button type="button" id="' + idPrefix + '-group-select" class="checkbox-dropdown-select-all">Merk alle</button>'
+            + '        <button type="button" id="' + idPrefix + '-group-clear" class="checkbox-dropdown-clear-all">Fjern alle</button>'
+            + '      </div>'
             + '      <ul id="' + idPrefix + '-group-list" class="checkbox-dropdown-list" aria-label="Velg øvelsesgrupper"></ul>'
             + '    </div></div></div>'
             + '</div>'

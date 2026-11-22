@@ -831,6 +831,10 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     padding: 0.25rem 0;
 }
 
+/* Bulk actions above the checkbox list. Dropdowns with both pass
+   selectAllLabel; the pair then sits side by side in .checkbox-dropdown-bulk.
+   "Merk alle" ticks every box, "Fjern alle" unticks every box. */
+.checkbox-dropdown-select-all,
 .checkbox-dropdown-clear-all {
     display: block;
     width: 100%;
@@ -845,8 +849,20 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     cursor: pointer;
     margin-bottom: 0.125rem;
 }
+.checkbox-dropdown-select-all:hover,
 .checkbox-dropdown-clear-all:hover { color: var(--brand-primary); }
+.checkbox-dropdown-select-all:focus-visible,
 .checkbox-dropdown-clear-all:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: -2px; }
+.checkbox-dropdown-bulk { display: flex; }
+.checkbox-dropdown-bulk .checkbox-dropdown-select-all,
+.checkbox-dropdown-bulk .checkbox-dropdown-clear-all {
+    flex: 1;
+    width: auto;
+    margin-bottom: 0;
+}
+.checkbox-dropdown-bulk .checkbox-dropdown-select-all {
+    border-right: 1px solid var(--border);
+}
 
 .checkbox-dropdown-list {
     list-style: none;
@@ -1372,6 +1388,20 @@ tr[data-idx] { cursor: pointer; }
    overflow-y: auto, never hidden: browser find-in-page must be able to
    scroll the region to matches. */
 .person-table-scroll { overflow-y: auto; max-height: 40dvh; }
+/* Sticky header inside that cap — the terminliste-scroll-wrap pattern:
+   border-collapse: collapse does not move a sticky th's borders with
+   it, so separate + spacing 0 (identical rendering for this table's
+   simple bottom borders). --surface-base is a translucent tint, not a
+   surface — rows scrolling under the header would bleed through it,
+   so the tint is composited over the modal shell's opaque
+   --surface-card: identical resting look, nothing shows through. */
+.person-table-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
+.person-table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
 .person-chart-dot:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 3px;
@@ -1495,6 +1525,7 @@ tr[data-idx] { cursor: pointer; }
     color: var(--text);
 }
 [data-mode="dark"] .ranking-more-btn { border-color: var(--text); color: var(--text); }
+[data-mode="dark"] .checkbox-dropdown-select-all:hover,
 [data-mode="dark"] .checkbox-dropdown-clear-all:hover { color: var(--text); }
 
 /* ── Terminliste – Vis flere-knapp ─────────────────────── */
@@ -1601,6 +1632,49 @@ tr[data-idx] { cursor: pointer; }
    default setting (15 rows). overflow-y: auto, never hidden: browser
    find-in-page (Ctrl+F) must be able to scroll the region to matches. */
 .club-stats-list-scroll { overflow-y: auto; max-height: var(--club-stats-rows-max, 33.5rem); }
+/* Sticky headers on every one of these caps — the terminliste
+   treatment. border-collapse: collapse does not move a sticky th's
+   borders with it, so separate + spacing 0 (identical rendering for
+   these tables' simple bottom borders). --surface-base is a
+   translucent tint, not a surface — rows scrolling under the header
+   would bleed through it — so the tint is composited over an opaque
+   base. Caps inside a card composite over the card's --surface-card;
+   the norgesfelt search table's cap sits bare on the page, so it
+   composites over --surface-page instead (the tint rendered over
+   that same page background before — the resting look is unchanged,
+   only scrolling rows stop showing through). */
+.club-stats-list-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
+.club-stats-list-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-page);
+}
+.ranking-card .club-stats-list-scroll thead th {
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
+/* Full-bleed caps. Cards lay their body out as a full-bleed header bar
+   plus inset content: .club-stats-section > .ranking-card-header ~ *
+   pads every sibling after the header 1.125rem in from the card edges.
+   On a scroll cap that inset becomes a gap between the pinned header
+   band and the scrollbar — visible since the headers went opaque for
+   the sticky treatment above. Caps opt out of the body inset and go
+   edge-to-edge with the card instead (the terminliste cap's shape);
+   the inset moves into the first/last cells (card inset + the cell's
+   own 0.5rem) so text alignment is pixel-identical. Overview toplist
+   cards (club-stats-toplist) never had the body inset — untouched. */
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll {
+    padding-left: 0;
+    padding-right: 0;
+}
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table th:first-child,
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table td:first-child {
+    padding-left: calc(1.125rem + 0.5rem);
+}
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table th:last-child,
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table td:last-child {
+    padding-right: calc(1.125rem + 0.5rem);
+}
 
 /* ── Data-table base affordances ──────────────────────────────────── */
 /* Rendered by public/js/data-table.js. All colors are mode-flipping

@@ -128,10 +128,13 @@ var StandplassPersonModalController = (function () {
             var mySeq = ++personOpenSeq;
             var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
             var entriesByYear = {};
+            // Value filters use the felt/terminliste convention: nothing
+            // picked = everything shown. [] (or a normalized null from the
+            // URL parse) is the unfiltered state.
             var filters = {
-                types: (urlFilters && urlFilters.types) || null,
-                discs: (urlFilters && urlFilters.discs) || null,
-                classes: (urlFilters && urlFilters.classes) || null
+                types: (urlFilters && urlFilters.types) || [],
+                discs: (urlFilters && urlFilters.discs) || [],
+                classes: (urlFilters && urlFilters.classes) || []
             };
             if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
 
@@ -160,27 +163,73 @@ var StandplassPersonModalController = (function () {
             }
             syncCurrentPersonModalUrl = syncPersonModalUrl;
 
+            // The table's sort state — created per open (renderPersonModal
+            // runs per open), so every fresh open starts at the date-asc
+            // default, and filter refreshes keep the active sort.
+            var tableSort = null;
+            var modalDisplayName = personName || 'Ukjent skytter';
+
+            function renderPersonTable() {
+                var host = id('-person-table');
+                if (!host) { return; }
+                // data-idx is the entry's index into modalEntries — the
+                // same index renderChart stamps on its dots, so the
+                // row↔dot linking keeps working. The base's data-dt-row
+                // would be the index into the array as passed (the
+                // date-sorted display order), so the map goes by object.
+                var rowIdx = new Map();
+                modalEntries.forEach(function (e, i) { rowIdx.set(e, i); });
+                // date-asc is the order this table has always shown. The
+                // base only APPLIES state.sort (a user sort); defaultSort
+                // merely marks the initial aria-sort, so the rows are
+                // passed pre-sorted — every base table's contract. The
+                // same defaultSort is also what wireTable's toggle falls
+                // back to while no user sort is active, so a FIRST click
+                // on Dato flips to desc (the table already shows asc)
+                // instead of re-applying asc.
+                var displayRows = modalEntries.slice().sort(function (a, b) {
+                    return (a.date || '') < (b.date || '') ? -1 : 1;
+                });
+                var tableOpts = {
+                    columns: StandplassPersonModal.resultsTableColumns(),
+                    defaultSort: { key: 'date', dir: 'asc' }
+                };
+                host.innerHTML = StandplassDataTable.renderTable('person-results', {
+                    columns: tableOpts.columns,
+                    rows: displayRows,
+                    ariaLabel: 'Resultater for ' + modalDisplayName,
+                    defaultSort: tableOpts.defaultSort,
+                    rowAttrs: function (row) {
+                        return 'data-idx="' + rowIdx.get(row) + '" tabindex="-1"'
+                            + ' aria-label="Klikk for å markere resultatet i grafen"';
+                    }
+                }, { sort: tableSort });
+                if (!modalEntries.length) {
+                    var tbody = host.querySelector('tbody');
+                    if (tbody) { tbody.innerHTML = '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
+                    return;
+                }
+                StandplassDataTable.wireTable(modalEl, 'person-results', tableOpts, {
+                    onSortChange: function (sort) {
+                        tableSort = sort;
+                        renderPersonTable();
+                        // Same focus-restoration convention as every
+                        // other base table: the clicked header button was
+                        // destroyed with the re-render.
+                        var btn = modalEl.querySelector('table[data-dt-id="person-results"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
+                        if (btn) { btn.focus(); }
+                    }
+                // The 5th argument is the state the toggle computes
+                // against — without it every click re-applies the
+                // column's defaultDir and no direction ever flips.
+                }, { sort: tableSort });
+            }
+
             function refresh() {
                 syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
-                // Row↔dot linking: rows carry the entry's index into
-                // modalEntries — the same index renderChart stamps on dots.
-                var rowIdx = new Map();
-                modalEntries.forEach(function (e, i) { rowIdx.set(e, i); });
-                var body = modalEntries.slice().sort(function (a, b) {
-                    return (a.date || '') < (b.date || '') ? -1 : 1;
-                }).map(function (r) {
-                    return '<tr data-idx="' + rowIdx.get(r) + '" tabindex="-1"'
-                        + ' aria-label="Klikk for å markere resultatet i grafen"><td>' + (r.date ? esc(StandplassPersonModal.shortDate(r.date)) : '–') + '</td>'
-                        + '<td>' + esc(r.competition || '–') + '</td>'
-                        + '<td>' + esc(r.discipline || '') + '</td><td>' + esc(r.class || '') + '</td>'
-                        + '<td>' + (r.position == null ? '–' : esc(r.position)) + '</td>'
-                        + '<td>' + (r.score == null ? '–' : esc(r.score)) + '</td>'
-                        + '<td>' + (r.rankingScore == null ? '–' : esc(Number(r.rankingScore).toFixed(2))) + '</td></tr>';
-                }).join('');
-                var tbody = id('-person-table-body');
-                if (tbody) { tbody.innerHTML = body || '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
+                renderPersonTable();
                 drawChart();
             }
 
@@ -206,72 +255,136 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<div class="person-table-scroll"><table class="ranking-table"><thead><tr><th>Dato</th><th>Stevne</th><th>Øvelse</th><th>Klasse</th><th>Plass</th><th>Poeng</th><th>Ranking</th></tr></thead>'
-                    + '<tbody id="' + cfg.idPrefix + '-person-table-body"></tbody></table></div>';
+                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>';
             }
 
-            function toggleSetValue(current, known, v, checked) {
-                var base = current === null ? known.slice() : current.slice();
+            function toggleSetValue(current, v, checked) {
+                var base = (current || []).slice();
                 if (checked) { if (base.indexOf(v) < 0) { base.push(v); } } else { base = base.filter(function (x) { return x !== v; }); }
                 return base;
             }
 
-            function mountFilterDropdown(suffix, items, getSelected, labelNone, onToggle, onClear, searchable, clearLabel) {
-                var container = id(suffix);
-                if (liveDropdowns[suffix]) { liveDropdowns[suffix].destroy(); }
+            // opts: { suffix, items, getSelected(), labelNone, labelEmpty?,
+            //         searchable?, clearLabel?, selectAllLabel?,
+            //         onToggle(v, checked), onClearAll(), onSelectAll?() }
+            // The bulk pair sits above the list: "Merk alle" (when
+            // selectAllLabel is passed) ticks every box, "Fjern alle"
+            // unticks every box. Nothing picked means everything shown,
+            // so a null/empty selection renders as zero boxes ticked —
+            // and "Merk alle" is how you set up everything-EXCEPT
+            // filtering: tick all, then untick the one you don't want.
+            function mountFilterDropdown(opts) {
+                var container = id(opts.suffix);
+                if (liveDropdowns[opts.suffix]) { liveDropdowns[opts.suffix].destroy(); }
                 if (container.parentElement.classList.contains('filter-group')) { container.parentElement.hidden = false; }
                 container.innerHTML = '<button type="button" class="checkbox-dropdown-btn" aria-expanded="false"></button>'
-                    + '<div class="checkbox-dropdown-panel" hidden role="group"><button type="button" class="checkbox-dropdown-clear-all">' + esc(clearLabel || 'Fjern alle') + '</button>'
+                    + '<div class="checkbox-dropdown-panel" hidden role="group">'
+                    + '<div class="checkbox-dropdown-bulk">'
+                    + (opts.selectAllLabel ? '<button type="button" class="checkbox-dropdown-select-all">' + esc(opts.selectAllLabel) + '</button>' : '')
+                    + '<button type="button" class="checkbox-dropdown-clear-all">' + esc(opts.clearLabel || 'Fjern alle') + '</button>'
+                    + '</div>'
                     + '<ul class="checkbox-dropdown-list"></ul></div>';
                 var dropdown = StandplassFilterWidgets.makeCheckboxDropdown({
                     btn: container.querySelector('.checkbox-dropdown-btn'), panel: container.querySelector('.checkbox-dropdown-panel'),
                     list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
-                    labelNone: labelNone,
-                    searchable: !!searchable,
-                    getItems: function () { return items.map(function (i) { return { id: i, name: i }; }); },
-                    getSelected: function () { var s = getSelected(); return s === null ? items : s; },
-                    onToggle: function (v, name, checked) { onToggle(v, checked); dropdown.rebuild(); },
-                    onClearAll: function () { onClear(); dropdown.rebuild(); }
+                    selectAllBtn: container.querySelector('.checkbox-dropdown-select-all'),
+                    labelNone: opts.labelNone,
+                    // Only the year dropdown passes labelEmpty — its zero
+                    // state genuinely means nothing. The value filters'
+                    // zero state means everything, which labelNone already
+                    // says truthfully.
+                    labelEmpty: opts.labelEmpty,
+                    searchable: !!opts.searchable,
+                    getItems: function () { return opts.items.map(function (i) { return { id: i, name: i }; }); },
+                    getSelected: function () { var s = opts.getSelected(); return s == null ? [] : s; },
+                    onToggle: function (v, name, checked) { opts.onToggle(v, checked); dropdown.rebuild(); },
+                    onClearAll: function () { opts.onClearAll(); dropdown.rebuild(); },
+                    onSelectAll: opts.onSelectAll ? function () { opts.onSelectAll(); dropdown.rebuild(); } : null
                 });
                 dropdown.rebuild();
-                liveDropdowns[suffix] = dropdown;
+                liveDropdowns[opts.suffix] = dropdown;
                 return dropdown;
             }
 
             function wireYearFilter() {
                 var years = [];
                 for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
-                mountFilterDropdown('-person-year-filter', years.map(String), function () { return selectedYears.map(String); }, 'Alle år', function (yearStr, checked) {
-                    var yr = parseInt(yearStr, 10);
-                    if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
-                    loadYearIfNeeded(yr).then(function () {
-                        if (mySeq !== personOpenSeq) { return; }
-                        // Only the value-derived dropdowns need remounting
-                        // when a year's data lands (their options are built
-                        // from it). The Year dropdown's own list is static --
-                        // remounting it too would close its open panel and
-                        // drop keyboard focus on every year toggle.
-                        wireValueDerivedFilters();
-                        refresh();
-                    });
-                }, function () { selectedYears = [cfg.defaultYear]; refresh(); }, false, 'Kun ' + cfg.defaultYear);
+                mountFilterDropdown({
+                    suffix: '-person-year-filter',
+                    items: years.map(String),
+                    getSelected: function () { return selectedYears.map(String); },
+                    labelNone: 'Alle år',
+                    onToggle: function (yearStr, checked) {
+                        var yr = parseInt(yearStr, 10);
+                        if (checked) { selectedYears.push(yr); } else { selectedYears = selectedYears.filter(function (v) { return v !== yr; }); }
+                        loadYearIfNeeded(yr).then(function () {
+                            if (mySeq !== personOpenSeq) { return; }
+                            // Only the value-derived dropdowns need remounting
+                            // when a year's data lands (their options are built
+                            // from it). The Year dropdown's own list is static --
+                            // remounting it too would close its open panel and
+                            // drop keyboard focus on every year toggle.
+                            wireValueDerivedFilters();
+                            refresh();
+                        });
+                    },
+                    // The year dropdown's bulk button is its reset: back to
+                    // the single default year, not an untick-all — zero
+                    // years would leave nothing to show at all. Its zero
+                    // state IS "nothing", so it gets the honest
+                    // labelEmpty; the value filters' zero state means
+                    // everything and keeps labelNone.
+                    onClearAll: function () { selectedYears = [cfg.defaultYear]; refresh(); },
+                    labelEmpty: 'Ingen valgt',
+                    clearLabel: 'Kun ' + cfg.defaultYear
+                });
             }
 
             function wireValueDerivedFilters() {
+                // Bulk semantics (nothing picked = everything shown):
+                // "Fjern alle" unticks every box — the unfiltered state,
+                // no URL param. "Merk alle" ticks every box — the view
+                // stays everything until an untick narrows it, which is
+                // the shortcut for everything-EXCEPT filtering.
                 if (knownValues('competitionType').length > 1) {
-                    mountFilterDropdown('-person-type-filter', knownValues('competitionType'), function () { return filters.types; }, 'Alle stevnetyper',
-                        function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
-                        function () { filters.types = null; refresh(); });
+                    mountFilterDropdown({
+                        suffix: '-person-type-filter',
+                        items: knownValues('competitionType'),
+                        getSelected: function () { return filters.types; },
+                        labelNone: 'Alle stevnetyper',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        onToggle: function (v, checked) { filters.types = toggleSetValue(filters.types, v, checked); refresh(); },
+                        onClearAll: function () { filters.types = []; refresh(); },
+                        onSelectAll: function () { filters.types = knownValues('competitionType'); refresh(); }
+                    });
                 }
                 if (knownValues('discipline').length > 1) {
-                    mountFilterDropdown('-person-disc-filter', knownValues('discipline'), function () { return filters.discs; }, 'Alle øvelser',
-                        function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
-                        function () { filters.discs = null; refresh(); }, true);
+                    mountFilterDropdown({
+                        suffix: '-person-disc-filter',
+                        items: knownValues('discipline'),
+                        getSelected: function () { return filters.discs; },
+                        labelNone: 'Alle øvelser',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        searchable: true,
+                        onToggle: function (v, checked) { filters.discs = toggleSetValue(filters.discs, v, checked); refresh(); },
+                        onClearAll: function () { filters.discs = []; refresh(); },
+                        onSelectAll: function () { filters.discs = knownValues('discipline'); refresh(); }
+                    });
                 }
                 if (knownValues('class').length > 1) {
-                    mountFilterDropdown('-person-class-filter', knownValues('class'), function () { return filters.classes; }, 'Alle klasser',
-                        function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
-                        function () { filters.classes = null; refresh(); });
+                    mountFilterDropdown({
+                        suffix: '-person-class-filter',
+                        items: knownValues('class'),
+                        getSelected: function () { return filters.classes; },
+                        labelNone: 'Alle klasser',
+                        clearLabel: 'Fjern alle',
+                        selectAllLabel: 'Merk alle',
+                        onToggle: function (v, checked) { filters.classes = toggleSetValue(filters.classes, v, checked); refresh(); },
+                        onClearAll: function () { filters.classes = []; refresh(); },
+                        onSelectAll: function () { filters.classes = knownValues('class'); refresh(); }
+                    });
                 }
             }
 
@@ -289,6 +402,7 @@ var StandplassPersonModalController = (function () {
                 if (!urlFilters) {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
+                modalDisplayName = resolvedName || modalDisplayName;
                 showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
                 refresh();

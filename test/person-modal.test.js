@@ -54,6 +54,16 @@ assert.deepStrictEqual(
     }),
     { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
 );
+// the unfiltered state (empty filter lists) serializes to no params —
+// an all-unticked or never-touched filter never writes p_* clutter,
+// and a shared link reopens unfiltered.
+assert.deepStrictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2026], activeYear: 2026, types: [], discs: [], classes: [],
+        metric: 'rankingScore', defaultMetric: 'rankingScore'
+    }),
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+);
 
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },
@@ -152,12 +162,14 @@ var filtered = StandplassPersonModal.getFilteredEntries(merged, { types: null, d
 assert.strictEqual(filtered.length, 1);
 assert.strictEqual(filtered[0].discipline, 'Grovfelt');
 
-var noneSelected = StandplassPersonModal.getFilteredEntries(merged, { types: null, discs: [], classes: null });
-assert.strictEqual(noneSelected.length, 0, 'an empty array means "none selected", not "no filter"');
+// nothing picked = everything shown: empty filter lists are no
+// restriction, so unticking every box is the unfiltered state
+var emptyIsAll = StandplassPersonModal.getFilteredEntries(merged, { types: [], discs: [], classes: [] });
+assert.strictEqual(emptyIsAll.length, 2, 'empty filter lists mean unfiltered, not "nothing"');
 
 assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Grovfelt', ['Grovfelt', 'Fellesfelt']), ['Grovfelt']);
-assert.strictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), null, 'unmatched initial value falls back to no filter, never a false empty state');
-assert.strictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), null);
+assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), [], 'unmatched initial value falls back to unfiltered');
+assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), []);
 
 var overlapEntries = [
     { date: '2025-05-01', rankingScore: 90 }, { date: '2025-05-01', rankingScore: 90 }, { date: '2025-06-01', rankingScore: 80 }
@@ -243,3 +255,62 @@ assert.ok(html.indexOf('Grovfelt') !== -1 && html.indexOf('Fellesfelt') !== -1, 
 })();
 
 console.log('person-modal.test.js: all assertions passed');
+
+// ── resultsTableColumns: the shared-base spec for the modal's table ────
+// (straight port of the hand-rolled markup it replaced)
+var cols = StandplassPersonModal.resultsTableColumns();
+assert.deepStrictEqual(cols.map(function (c) { return c.key; }),
+    ['date', 'competition', 'discipline', 'class', 'position', 'score', 'rankingScore'],
+    'seven columns in the original order');
+assert.deepStrictEqual(cols.map(function (c) { return c.label; }),
+    ['Dato', 'Stevne', 'Øvelse', 'Klasse', 'Plass', 'Poeng', 'Ranking'],
+    'labels unchanged from the hand-rolled thead');
+assert.ok(cols.every(function (c) { return c.sortable; }), 'every column sortable on the base');
+assert.strictEqual(cols[0].format('2026-05-01T10:00:00Z'), "1. mai '26", 'dates render short-form');
+assert.strictEqual(cols[0].format(null), '–', 'missing date renders –');
+assert.strictEqual(cols[1].format(null), '–', 'missing competition renders –');
+assert.strictEqual(cols[2].format(null), '', 'missing discipline renders empty, like before');
+assert.strictEqual(cols[4].format(null), '–', 'missing position renders –');
+assert.strictEqual(cols[6].format(0.9), '0.90', 'rankingScore renders two decimals');
+assert.strictEqual(cols[6].format(null), '–', 'missing rankingScore renders –');
+
+// Render through the base: the migration contract — date-asc default
+// order (the order the table has always shown), rows stamped with
+// data-idx = the entry's FILTER-order index (the chart's dot index, so
+// the row↔dot linking keeps working), formats as above.
+global.StandplassDataTable = require('../public/js/data-table.js');
+var pmEntries = [
+    { date: '2026-06-01T00:00:00Z', competition: 'Høstfelt', discipline: 'Finfelt', class: 'A', position: 3, score: 90, rankingScore: 0.9 },
+    { date: '2026-05-01T00:00:00Z', competition: 'Vårfelt', discipline: 'Grovfelt', class: 'B', position: 1, score: null, rankingScore: null },
+    { date: '2026-07-01T00:00:00Z', competition: 'Sommerstevne', discipline: 'Finfelt', class: 'Åpen', position: 2, score: 85, rankingScore: 0.85 }
+];
+var pmRowIdx = new Map();
+pmEntries.forEach(function (e, i) { pmRowIdx.set(e, i); });
+var pmTable = StandplassDataTable.renderTable('qa-person-results', {
+    columns: StandplassPersonModal.resultsTableColumns(),
+    rows: pmEntries.slice().sort(function (a, b) {
+        return (a.date || '') < (b.date || '') ? -1 : 1;
+    }),
+    ariaLabel: 'Resultater for Test Skytter',
+    defaultSort: { key: 'date', dir: 'asc' },
+    rowAttrs: function (row) {
+        return 'data-idx="' + pmRowIdx.get(row) + '" tabindex="-1" aria-label="Klikk for å markere resultatet i grafen"';
+    }
+}, { sort: null });
+// date-asc display order
+assert.ok(pmTable.indexOf('Vårfelt') < pmTable.indexOf('Høstfelt')
+    && pmTable.indexOf('Høstfelt') < pmTable.indexOf('Sommerstevne'),
+    'default sort is date-ascending, the historical order');
+// data-idx travels with the row, not the sort: Vårfelt is filter-index 1
+// but sorts first (data-dt-row 0) — the two indices deliberately differ.
+assert.ok(pmTable.indexOf('<tr data-dt-row="0" data-idx="1" tabindex="-1"') >= 0,
+    'Vårfelt sorts first (data-dt-row 0) but keeps its filter-order index (1) as data-idx');
+assert.ok(pmTable.indexOf('<tr data-dt-row="1" data-idx="0"') >= 0,
+    'Høstfelt keeps filter-index 0 as data-idx at sorted position 1');
+// cell formats through the base
+assert.ok(pmTable.indexOf('<td>1. mai &#39;26</td>') >= 0, 'short date in the Dato cell');
+assert.ok(pmTable.indexOf('<td>–</td>') >= 0, 'null score renders –');
+assert.ok(pmTable.indexOf('<td>0.90</td>') >= 0, 'rankingScore 0.9 renders 0.90');
+// every header sortable, Dato carrying the initial aria-sort
+assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
+assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');
