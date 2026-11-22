@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 1
+PARSER_VERSION = 2
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -62,7 +62,65 @@ def parse_result(pdf):
     family = detect_family(text)
     if family == 'inrX':
         return parse_inrx(text)
+    if family == 'plain-NO':
+        return parse_plain_no(text)
     raise UnsupportedFormatError(f'unrecognized result file family: {family}')
+
+
+_PLAINNO_KLASSE = re.compile(r'^Klasse\s+(.+?)(?:\s+-\s+.+)?$')
+_PLAINNO_ROW = re.compile(
+    r'^(?P<pos>\d+)\s+(?P<region>.+?)\s+'
+    r'(?P<cells>(?:\d+\s+\d+x,\s+)+)(?P<sum>\d+)\s+(?P<ix>\d+)x$'
+)
+
+
+def parse_plain_no(text):
+    """Parse plain-Norwegian-family text (2021-era) into the detail shape.
+
+    Rows print 'NN Mx,' series cells and end with a sum + total-x cell;
+    the øvelse name comes from the 'Program :' header and classes from
+    'Klasse <X> - <øvelse>' lines.
+    """
+    detail = {'generator': 'plain-NO'}
+    program = re.search(r'^Program\s*:\s*(.+)$', text, re.MULTILINE)
+    ovelse = {'navn': program.group(1).strip() if program else 'Ukjent',
+              'classes': []}
+    current = None
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        klasse = _PLAINNO_KLASSE.match(line)
+        if klasse:
+            current = {'klasse': klasse.group(1).strip(), 'rows': []}
+            ovelse['classes'].append(current)
+            continue
+        if current is None:
+            continue
+        row = _parse_plain_no_row(line)
+        if row is not None:
+            current['rows'].append(row)
+    detail['ovelser'] = [ovelse] if ovelse['classes'] else []
+    return detail
+
+
+def _parse_plain_no_row(line):
+    match = _PLAINNO_ROW.match(line)
+    if not match:
+        return None
+    cells = [
+        [int(score), int(inner)]
+        for score, inner in re.findall(r'(\d+)\s+(\d+)x', match.group('cells'))
+    ]
+    name, club = _split_name_club(match.group('region').split())
+    row = {'pos': int(match.group('pos'))}
+    row['name'] = name
+    if club:
+        row['club'] = club
+    row['series'] = cells
+    row['ix'] = int(match.group('ix'))
+    row['sum'] = int(match.group('sum'))
+    return row
 
 
 def _split_name_club(tokens):

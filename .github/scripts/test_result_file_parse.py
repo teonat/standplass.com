@@ -9,8 +9,14 @@ import unittest
 
 import pdfplumber
 
-from result_file_parse import detect_family, parse_inrx, parse_result
-from result_file_parse import UnsupportedFormatError
+from result_file_parse import (
+    PARSER_VERSION,
+    UnsupportedFormatError,
+    detect_family,
+    parse_inrx,
+    parse_plain_no,
+    parse_result,
+)
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures')
 
@@ -228,6 +234,49 @@ class ParseInrXBaneKmLagSections(unittest.TestCase):
     def test_open_sections_still_parsed_as_ovelser(self):
         navn = {o['navn'] for o in self.detail['ovelser']}
         self.assertIn('Hurtig Sp Pistol', navn)
+
+
+class ParsePlainNo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_plain_no(fixture_text('plain-no.pdf'))
+
+    def test_klasse_c_row_1(self):
+        row = find_row(self.detail, 'Silhuett', 'C', 'Raymond Thorjussen')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Porsgrunn Pk')
+        self.assertEqual(
+            row['series'],
+            [[95, 0], [92, 1], [82, 2], [90, 3], [83, 2], [63, 0]],
+        )
+        self.assertEqual(row['ix'], 8)
+        self.assertEqual(row['sum'], 505)
+
+    def test_klasse_d_exists(self):
+        row = find_row(self.detail, 'Silhuett', 'D', 'Bjørnar Vestnes')
+        self.assertEqual(row['pos'], 1)
+
+    def test_ovelse_navn_comes_from_program_header(self):
+        self.assertEqual(
+            [o['navn'] for o in self.detail['ovelser']], ['Silhuett']
+        )
+
+    def test_generator_stamp(self):
+        self.assertEqual(self.detail['generator'], 'plain-NO')
+
+
+class ParsePlainNoDispatch(unittest.TestCase):
+    def test_parse_result_routes_plain_no(self):
+        path = os.path.join(FIXTURES, 'plain-no.pdf')
+        with pdfplumber.open(path) as pdf:
+            detail = parse_result(pdf)
+        self.assertEqual(detail['generator'], 'plain-NO')
+        self.assertTrue(detail['ovelser'])
+
+
+class ParserVersionBump(unittest.TestCase):
+    def test_parser_version_is_2(self):
+        self.assertEqual(PARSER_VERSION, 2)
 
 
 class ParseResultDispatch(unittest.TestCase):
