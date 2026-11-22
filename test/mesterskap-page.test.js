@@ -5,6 +5,7 @@ var MP = require('../public/js/mesterskap-page.js');
 // pattern as every other page test in this repo).
 global.StandplassMestereData = require('../public/js/mestere-data.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
+global.StandplassFormat = require('../public/js/format.js');
 
 // ── Test data: the published mestere-{year}.json shape ─────────────────
 
@@ -66,57 +67,105 @@ assert.deepStrictEqual(MP.resolveInitial('?ar=2030', 2026), { gren: 'felt', ar: 
 assert.strictEqual(MP.grenDisplayName('felt'), 'feltskyting');
 assert.strictEqual(MP.grenDisplayName('bane'), 'baneskyting');
 
-// ── tableSpecFor ──────────────────────────────────────────────────────
+// ── resolveFilters / filterParams: the URL filter codec ────────────────
 
-var spec = MP.tableSpecFor(sec('Felt Fin', 'U', [
-    { medal: 'Gull', personId: 'p1', name: 'Anne <Test>', club: 'Kongsvinger Sportsskyttere', sum: 88 },
-    { medal: 'Sølv', name: 'Berit', club: 'Brumunddal Pistolklubb' },
-    { medal: 'Bronse', name: 'Carl' }
-]));
+var EMPTY_FILTERS = { ovelse: [], klasse: [], krets: [], klubb: '', navn: '', type: '' };
+assert.deepStrictEqual(MP.resolveFilters(''), EMPTY_FILTERS);
+assert.deepStrictEqual(MP.resolveFilters('?ovelse=Felt%20Fin,Felt%20Grov'), {
+    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], krets: [], klubb: '', navn: '', type: ''
+}, 'øvelse is a comma-joined, per-element-encoded list');
+assert.strictEqual(MP.resolveFilters('?type=lag').type, 'lag');
+assert.strictEqual(MP.resolveFilters('?type=ugyldig').type, '',
+    'invalid type falls back to alle');
+
+var full = {
+    ovelse: ['Felt Fin', 'Felt Militær Rødpunkt'], klasse: ['U'],
+    krets: ['Buskerud'], klubb: 'Bodø PK', navn: 'anne', type: 'individuelt'
+};
+var sp = new URLSearchParams();
+MP.filterParams(full).forEach(function (p) { sp.set(p[0], p[1]); });
+assert.deepStrictEqual(MP.resolveFilters('?' + sp.toString()), full,
+    'resolveFilters inverts filterParams (names with spaces and æ/ø round-trip)');
+assert.deepStrictEqual(MP.filterParams(EMPTY_FILTERS), [],
+    'empty filters produce no params');
+assert.deepStrictEqual(MP.filterParams({ ovelse: ['Felt Fin'], klasse: [], krets: [], klubb: '', navn: '', type: 'lag' }),
+    [['ovelse', 'Felt%20Fin'], ['type', 'lag']],
+    'only non-empty values are written; klasse writes the class param');
+
+// ── filterBarMarkup: the scope-aware filter row ─────────────────────────
+
+var kmBar = MP.filterBarMarkup('km');
+['mesterskap-ovelse-btn', 'mesterskap-ovelse-panel', 'mesterskap-ovelse-list',
+ 'mesterskap-klasse-btn', 'mesterskap-klasse-list',
+ 'mesterskap-krets-btn', 'mesterskap-krets-list',
+ 'mesterskap-klubb-input', 'mesterskap-klubb-tags', 'mesterskap-klubb-clear',
+ 'mesterskap-navn', 'mesterskap-type', 'mesterskap-rows',
+ 'mesterskap-clear-filters'
+].forEach(function (id) { assert.ok(kmBar.indexOf('id="' + id + '"') !== -1, 'km bar has ' + id); });
+assert.ok(kmBar.indexOf('checkbox-dropdown') !== -1, 'øvelse/klasse/krets use checkbox dropdowns');
+assert.ok(kmBar.indexOf('autocomplete-list') !== -1, 'klubb uses the tag-combo pattern');
+assert.ok(MP.filterBarMarkup('nm').indexOf('mesterskap-krets') === -1,
+    'nm has no krets filter');
+assert.ok(MP.filterBarMarkup('dm').indexOf('mesterskap-krets-btn') !== -1,
+    'dm keeps the krets filter (the krets→distrikt finder)');
+assert.ok(/id="mesterskap-type"[^>]*>[\s\S]*?<option value="">Alle<\/option>[\s\S]*?<option value="individuelt">Individuelt<\/option>[\s\S]*?<option value="lag">Lag<\/option>/.test(kmBar),
+    'the Type select offers Alle/Individuelt/Lag');
+assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/.test(kmBar),
+    'the Rader select defaults to 30');
+
+// ── tableSpecFor: the dense podium table ────────────────────────────────
+
+var rows = global.StandplassMestereData.podiumRows(pageIndex, 'km');
+assert.strictEqual(rows.length, 5);
+
+var spec = MP.tableSpecFor(rows, 'km');
 assert.deepStrictEqual(spec.columns.map(function (c) { return c.key; }),
-    ['medal', 'name', 'club', 'sum']);
-assert.strictEqual(spec.columns[0].label, 'Medalje');
-assert.strictEqual(spec.columns[1].raw, true,
-    'the name column is a raw pre-escaped cell (house person-link pattern)');
-var link = spec.columns[1].cell(spec.rows[0]);
-assert.ok(link.indexOf('stevner-person-btn') !== -1,
-    'person rows become person-modal buttons');
-assert.ok(link.indexOf('data-person-id="p1"') !== -1);
-assert.ok(link.indexOf('Anne &lt;Test&gt;') !== -1, 'the name is escaped inside the button');
-assert.strictEqual(spec.columns[1].cell(spec.rows[1]), 'Berit',
-    'rows without a personId render as plain escaped text');
-assert.strictEqual(spec.columns[3].cell(spec.rows[0]), '88');
-assert.strictEqual(spec.columns[3].cell(spec.rows[1]), '–', 'missing sum renders –');
-assert.strictEqual(spec.rows.length, 3, 'the podium rows are the table rows');
+    ['ovelseRank', 'klasse', 'medalRank', 'name', 'club', 'sum', 'region', 'date', 'organizer']);
+assert.strictEqual(spec.columns[0].label, 'Øvelse');
+assert.strictEqual(spec.columns[0].cell(rows[0]), rows[0].ovelse,
+    'Øvelse displays the name, sorts by ovelseRank');
+assert.strictEqual(spec.columns[2].label, 'Medalje');
+assert.strictEqual(spec.columns[2].cell(rows[0]), rows[0].medal,
+    'Medalje displays the name, sorts by medalRank');
+assert.strictEqual(spec.columns[6].label, 'Krets', 'km carries the krets context column');
+assert.strictEqual(spec.columns[6].defaultHidden, true,
+    'the region column hides behind the group row');
+assert.ok(spec.columns.every(function (c) { return c.key !== 'distrikt'; }),
+    'km has no distrikt column');
+var link = spec.columns[3].cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
+assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
+    'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
+var teamRow = rows.filter(function (r) { return r.isTeam; })[0];
+assert.strictEqual(spec.columns[3].cell(teamRow), 'Hurum SKL',
+    'team rows render the team name, no link');
+assert.strictEqual(spec.columns[4].cell(teamRow), '–', 'team rows show – for club');
+assert.strictEqual(spec.columns[5].cell({ sum: null }), '–', 'missing sum renders –');
+var escRow = { medal: 'Gull', name: 'A <B>', klasse: 'U', medalRank: 1, ovelseRank: 1, ovelse: 'X', isTeam: false };
+assert.ok(spec.columns[3].cell(escRow).indexOf('A &lt;B&gt;') !== -1,
+    'non-person names escape');
+assert.ok(spec.wrapClass.indexOf('club-stats-list-scroll') !== -1,
+    'the table sits in a contained scroll region');
+assert.ok(spec.picker, 'the Kolonner picker is on');
 
-// No sum anywhere → no Sum column
-var noSumSpec = MP.tableSpecFor(sec('X', null, [{ medal: 'Gull', name: 'A' }]));
-assert.deepStrictEqual(noSumSpec.columns.map(function (c) { return c.key; }),
-    ['medal', 'name', 'club']);
+var groups = spec.groupRows(rows);
+assert.strictEqual(groups.length, 2);
+assert.strictEqual(groups[0].label, 'Buskerud');
+assert.strictEqual(groups[0].rows.length, 4);
+assert.strictEqual(groups[1].label, 'Ukjent region', 'null region sinks to a final group');
+assert.strictEqual(groups[1].rows.length, 1);
 
-// Team sections: medal + team columns, no person links
-var teamSpec = MP.tableSpecFor(sec('Felt Fin', 'M', [{ medal: 'Gull', team: 'Hurum SKL' }]));
-assert.deepStrictEqual(teamSpec.columns.map(function (c) { return c.key; }),
-    ['medal', 'team']);
-assert.strictEqual(teamSpec.columns[1].label, 'Lag');
+var nmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm'), 'nm');
+assert.strictEqual(nmSpec.groupRows, null, 'nm is flat');
+assert.ok(nmSpec.columns.every(function (c) { return c.key !== 'region'; }),
+    'nm carries no region column');
+var dmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'dm'), 'dm');
+var dmKeys = dmSpec.columns.map(function (c) { return c.key; });
+assert.ok(dmKeys.indexOf('distrikt') !== -1 && dmKeys.indexOf('region') === -1,
+    'dm carries the distrikt column, not krets (and no sum column when no row has one)');
 
-// ── renderYear ─────────────────────────────────────────────────────────
-
-var html = MP.renderYear('km', pageIndex);
-assert.ok(html.indexOf('Buskerud') !== -1, 'region heading rendered');
-assert.ok(html.indexOf('Ukjent region') !== -1,
-    'region-less comps get their own final bucket');
-assert.ok(html.indexOf('Teststevne c1') !== -1, 'comp title rendered');
-assert.ok(html.indexOf('Felt Fin') !== -1, 'øvelse name rendered');
-assert.ok(html.indexOf('Hurum SKL') !== -1,
-    'lag sections render alongside the individual ones');
-assert.ok(/data-dt-id="mest-km-/.test(html),
-    'tables render through the data-table base with scoped ids');
-var nmHtml = MP.renderYear('nm', pageIndex);
-assert.ok(nmHtml.indexOf('Ukjent region') === -1, 'the nm page has no region grouping');
-assert.ok(nmHtml.indexOf('Teststevne c7') !== -1);
-assert.strictEqual(MP.renderYear('km', { comps: [] }), '',
-    'no matching comps → no markup (the page shows its empty card)');
+var noSum = MP.tableSpecFor([{ medal: 'Gull', name: 'A', isTeam: false }], 'nm');
+assert.ok(noSum.columns.every(function (c) { return c.key !== 'sum'; }),
+    'no Sum column when no row has one');
 
 // ── emptyYearCard: the fetch-rejection / no-data card ──────────────────
 
