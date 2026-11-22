@@ -14,6 +14,7 @@ from result_file_parse import (
     PARSER_VERSION,
     UnsupportedFormatError,
     _parse_blinken_row,
+    _parse_leon_row,
     detect_family,
     parse_blinken,
     parse_datotid,
@@ -687,13 +688,13 @@ class ParseLeon(unittest.TestCase):
         self.assertEqual(row['hurtig'],
                          [[3, None], [8, None], [8, None]])
 
-    def test_abbreviated_club_rides_the_name(self):
-        # 'Aron S. Drammen' has no club-suffix word, so the row keeps
-        # the whole region as its name — the matcher's club-tail strip
-        # resolves it against the API club 'Aron Skytterklubb, Drammen'
-        row = find_row(self.detail, '25m Fin', 'D',
-                       'Håvard Ellingsen Aron S. Drammen')
-        self.assertNotIn('club', row)
+    def test_abbreviated_club_is_split_off(self):
+        # 'Aron S. Drammen' (Aron Skytterklubb, Drammen) has no
+        # club-suffix word; the medial single initial between two
+        # words marks it as an abbreviated club
+        row = find_row(self.detail, '25m Fin', 'D', 'Håvard Ellingsen')
+        self.assertEqual(row['name'], 'Håvard Ellingsen')
+        self.assertEqual(row['club'], 'Aron S. Drammen')
         self.assertEqual(row['sum'], 530)
 
     def test_row_count_matches_deltagere(self):
@@ -1005,6 +1006,75 @@ class ParseBlinkenNopClub(unittest.TestCase):
                          '43edbbe0-ecf7-48d1-0a94-08d87c24af2c')
 
 
+class LeonClubAbbreviations(unittest.TestCase):
+    """Leon files print clubs with no suffix anchor word: 'Aron S.
+    Drammen' (Aron Skytterklubb, Drammen — the single largest fused
+    shape), 'Farris Sp.Sk.' (Farris Sportsskyttere), 'Oslo Komm.Tj.M.
+    SKL' (Oslo Kommunale Tjenestemenns Skytterlag), 'Tofte og Hurum
+    SKL'. The anchored split left them fused into the name, so every
+    such row failed person matching. Rules: a dot-separated
+    abbreviation token marks the club, starting one word before it —
+    and it must run before the suffix anchor, because 'SKL' is now
+    an acronym and would otherwise split 'Oslo Komm.Tj.M. SKL'
+    mid-club; a medial single initial between two words marks an
+    abbreviated club as the last three tokens, but only when a name
+    remainder survives, so a bare 'Per S. Hansen' stays whole.
+
+    Fixtures: comps 00bd1727 + 08788bcb (bane 2021, Hurtig alle
+    FGMRSPSR)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.abbrev = parse_leon(fixture_text('leon-club-abbrev.pdf'))
+        cls.oslo = parse_leon(fixture_text('leon-oslo-komm.pdf'))
+
+    def test_medial_initial_is_abbreviated_club(self):
+        row = find_row(self.abbrev, '25m Fin', 'B', 'Rune Hammer')
+        self.assertEqual(row['name'], 'Rune Hammer')
+        self.assertEqual(row['club'], 'Aron S. Drammen')
+
+    def test_dotted_abbreviation_is_club(self):
+        row = find_row(self.abbrev, '25m Fin', 'B',
+                       'Bjørn Johannes Øyestaul')
+        self.assertEqual(row['name'], 'Bjørn Johannes Øyestaul')
+        self.assertEqual(row['club'], 'Farris Sp.Sk.')
+
+    def test_dotted_beats_acronym_anchor(self):
+        row = find_row(self.oslo, '25m Fin', 'B', 'Rune Finstad')
+        self.assertEqual(row['name'], 'Rune Finstad')
+        self.assertEqual(row['club'], 'Oslo Komm.Tj.M. SKL')
+
+    def test_suffix_anchored_clubs_unchanged(self):
+        row = find_row(self.abbrev, '25m Fin', 'B', 'Gunnar Lier')
+        self.assertEqual(row['name'], 'Gunnar Lier')
+        self.assertEqual(row['club'], 'Oslo Feltskyttere')
+
+    def test_og_connector_with_skl_acronym(self):
+        row = _parse_leon_row(
+            '2. Per Hansen Tofte og Hurum SKL 90 88 91 92 93 5 5 5 (7*)',
+            5, 'vm')
+        self.assertEqual(row['name'], 'Per Hansen')
+        self.assertEqual(row['club'], 'Tofte og Hurum SKL')
+
+    def test_bare_initial_name_stays_whole(self):
+        row = _parse_leon_row(
+            '1. Per S. Hansen 90 88 91 92 93 5 5 5 (7*)', 5, 'vm')
+        self.assertEqual(row['name'], 'Per S. Hansen')
+        self.assertNotIn('club', row)
+
+    def test_matched_person_ids(self):
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2021.json')))
+        comp = next(c for c in year['competitions']
+                    if '9f95a954' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.abbrev, comp['results'])
+        row = find_row(self.abbrev, '25m Fin', 'B', 'Rune Hammer')
+        self.assertEqual(row.get('personId'),
+                         'de0b653f-6763-41a7-94e5-08d87b5318bf')
+
+
 class ParseMegalink(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1109,8 +1179,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_11(self):
-        self.assertEqual(PARSER_VERSION, 11)
+    def test_parser_version_is_12(self):
+        self.assertEqual(PARSER_VERSION, 12)
 
 
 class ParseResultDispatch(unittest.TestCase):

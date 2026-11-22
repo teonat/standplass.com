@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 11
+PARSER_VERSION = 12
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -32,7 +32,8 @@ _MEDALS = ('Gull', 'Sølv', 'Bronse')
 _CLUB_ENDINGS = (
     'klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket', 'skyttere',
 )
-_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'ssl', 'gsl'}
+_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'ssl', 'gsl',
+                  'skl', 'pl'}
 # club names may carry multi-word place parts: 'Horten og Omegn PK'
 # (a connector pair) and 'Nedre Eiker PK' (a place-forming prefix)
 _CLUB_PLACE_PREFIXES = {
@@ -153,28 +154,54 @@ def _parse_plain_no_row(line):
     return row
 
 
+# 'Aron S. Drammen' (Aron Skytterklubb, Drammen) — a medial single
+# initial between two words marks an abbreviated club
+_SINGLE_INITIAL = re.compile(r'^[A-ZÆØÅ]\.$')
+
+
+def _is_dotted_club_abbr(token):
+    """True for abbreviated club words ('Sp.Sk.', 'Komm.Tj.M.',
+    'Pres.Sk') — dot-separated alphabetic segments, at least two,
+    one of them multi-letter. Single initials ('J.') are names."""
+    if '.' not in token:
+        return False
+    segments = token.rstrip('.').split('.')
+    return (len(segments) >= 2 and all(segments)
+            and any(len(s) >= 2 for s in segments)
+            and all(s.isalpha() for s in segments))
+
+
 def _split_name_club(tokens):
     """Split a row's pre-series region into (name, club).
 
-    The club is anchored on its suffix word (…klubb, …lag, …selskap),
-    taking the word before it as the place part and anything after it
-    (e.g. ' - pistol' disambiguators) along. Multi-word place parts
-    are absorbed too: a connector pair ('Horten og Omegn PK') and a
-    place-forming prefix ('Nedre Eiker PK'). The split only has to be
-    reasonable: the person matcher joins rows against the API results
-    and canonicalizes both fields there, so unmatched rows are the
+    The club is found in one of four ways, strongest marker first:
+    a 'Norske Offiserers Pistolklubb' branch token ('NOP-Bergen',
+    'NOP Voss'), a dot-separated abbreviation word ('Farris
+    Sp.Sk.', 'Oslo Komm.Tj.M. SKL' — the club starts one word
+    before it), a suffix word (…klubb, …lag, PK, SKL — with
+    multi-word place parts like 'Horten og Omegn' and 'Nedre
+    Eiker' absorbed), or a medial single initial between two words
+    ('Aron S. Drammen'). The split only has to be reasonable: the
+    person matcher joins rows against the API results and
+    canonicalizes both fields there, so unmatched rows are the
     only consumers of this heuristic.
     """
     if not tokens:
         return '', None
-    # 'Norske Offiserers Pistolklubb' prints its branches as 'NOP',
-    # 'NOP-Bergen', 'NOP Voss' — a prefix-anchored club with no
-    # suffix word to anchor on
     for i, tok in enumerate(tokens):
         if tok == 'NOP' or tok.startswith('NOP-'):
             name = ' '.join(tokens[:i])
             if name:
                 return name, ' '.join(tokens[i:])
+            break
+    # the abbreviated club word must beat the suffix anchor below —
+    # 'SKL' is an acronym, and 'Oslo Komm.Tj.M. SKL' would otherwise
+    # split mid-club
+    for i, tok in enumerate(tokens):
+        if _is_dotted_club_abbr(tok):
+            start = i - 1
+            if start >= 1:
+                return ' '.join(tokens[:start]), ' '.join(tokens[start:])
             break
     for i in range(len(tokens) - 1, -1, -1):
         low = tokens[i].lower()
@@ -189,6 +216,11 @@ def _split_name_club(tokens):
             if name:
                 return name, ' '.join(tokens[start:])
             break
+    if (len(tokens) >= 4
+            and _SINGLE_INITIAL.fullmatch(tokens[-2])
+            and tokens[-1][0].isupper()
+            and tokens[-3][0].isupper()):
+        return ' '.join(tokens[:-3]), ' '.join(tokens[-3:])
     return ' '.join(tokens), None
 
 
