@@ -175,6 +175,38 @@ class KmDmClassification(MestereIndexBase):
         self.assertEqual(section['klasse'], 'M')
         self.assertEqual(len(section['podium']), 3)
 
+    def test_25m_scope_labels(self):
+        d = detail('s1', [
+            {'navn': '25m KM - Grov', 'classes': [
+                {'klasse': 'V55', 'rows': [
+                    row('A', pos=1), row('B', pos=2), row('C', pos=3),
+                ]},
+            ]},
+            {'navn': '25m DM - Spesialrevolver', 'classes': [
+                {'klasse': 'Åpen', 'rows': [
+                    row('D', pos=1), row('E', pos=2), row('F', pos=3),
+                ]},
+            ]},
+            {'navn': '25m KM -', 'classes': [
+                {'klasse': 'Åpen', 'rows': [
+                    row('G', pos=1), row('H', pos=2), row('I', pos=3),
+                ]},
+            ]},
+            {'navn': '25m Fin', 'classes': [
+                {'klasse': 'Åpen', 'rows': [row('J', pos=1)]},
+            ]},
+        ])
+        index = self.build('bane', 2022,
+                           [comp('s1',
+                                 competitionTypeName='Åpent stevne m/DM og KM')],
+                           {'s1': d})
+        entry = index['comps'][0]
+        self.assertEqual([s['ovelse'] for s in entry['km']],
+                         ['25m Grov', '25m'])
+        self.assertEqual([s['ovelse'] for s in entry['dm']],
+                         ['25m Spesialrevolver'])
+        self.assertEqual(index['warnings'], [])
+
     def test_relisting_pattern_non_t96(self):
         d = detail('r1', [
             {'navn': 'Spesialpistol (KM - Hordaland)', 'classes': [

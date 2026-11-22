@@ -13,7 +13,9 @@ Rules (spec: 2026-11-22-result-details-frontend-design.md):
 3. Øvelse-navn patterns: 'KM|DM Mix-lag: X' → scopeLag klasse 'Mix';
    'KM: X'/'DM: X' → scope sections; datotid's fused
    '<ovelse> Dato/tid: … Mesterskap: <KM|DM> <region> Deltakere' →
-   scope section; '(<KM|DM> - <region>)' re-listings → scope section.
+   scope section; '(<KM|DM> - <region>)' re-listings → scope section;
+   '25m <KM|DM> - <disc>' labels → scope section named '25m <disc>'
+   (bare → '25m').
    The region named inside a navn is recorded on the section
    ('region'); resolving entries' krets/distrikt is layered on top
    of that separately.
@@ -42,6 +44,10 @@ _FUSED = re.compile(
     r'.*?Mesterskap:\s*(?P<scope>KM|DM)\s+(?P<region>.+?)\s+Deltakere')
 _RELIST = re.compile(
     r'^(?P<ovelse>.+?)\s*\((?P<scope>KM|DM)\s*-\s*(?P<region>[^)]+)\)$')
+# '25m KM - Grov' / '25m DM - Spesialrevolver' (bare '25m KM -' too):
+# leon labels championship øvelser with a mid-navn scope token
+_SCOPED = re.compile(
+    r'^(?P<prefix>.+?)\s+(?P<scope>KM|DM)\s*-\s*(?P<name>.*)$')
 _TEAM_NAME = re.compile(r'^(Gull|Sølv|Bronse)(?:\s+(?P<team>.+))?$')
 _CHAMPIONSHIPISH = re.compile(r'KM|DM|NM|Mesterskap')
 
@@ -190,6 +196,16 @@ def _classify(detail, comp):
         if scope_name:
             out[scope_name].extend(_sections_from_classes(
                 ovelse_name, classes, _person_podium, region=navn_region))
+            continue
+
+        scoped = _SCOPED.match(navn)
+        if scoped:
+            # '25m KM - Grov' → '25m Grov'; bare '25m KM -' → '25m'
+            prefix = scoped.group('prefix')
+            name = scoped.group('name').strip()
+            ovelse_name = f'{prefix} {name}' if name else prefix
+            out[scoped.group('scope').lower()].extend(_sections_from_classes(
+                ovelse_name, classes, _person_podium))
             continue
 
         if _CHAMPIONSHIPISH.search(navn):
