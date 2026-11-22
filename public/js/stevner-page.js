@@ -699,17 +699,24 @@ var StandplassStevnerPage = (function () {
         });
 
         // ── Discipline checkbox dropdown (stevner.js:130-158) ─────────────
+        // Same bulk pair as the person modal's filters, same convention:
+        // nothing picked = everything shown. "Fjern alle" unticks every
+        // box (the unfiltered reset), "Merk alle" ticks every box — the
+        // view stays everything until an untick narrows it, which is the
+        // shortcut for everything-EXCEPT filtering.
+        function allDiscIds() {
+            return Object.keys(masterDiscs).sort(function (a, b) { return a.localeCompare(b, 'no'); });
+        }
         var discDropdown = FW.makeCheckboxDropdown({
             btn: id('-disc-btn'),
             panel: id('-disc-panel'),
             list: id('-disc-list'),
             clearAllBtn: id('-disc-clear'),
+            selectAllBtn: id('-disc-select'),
             labelNone: 'Alle øvelser',
             searchable: true,
             getItems: function () {
-                return Object.keys(masterDiscs)
-                    .sort(function (a, b) { return a.localeCompare(b, 'no'); })
-                    .map(function (n) { return { id: n, name: n }; });
+                return allDiscIds().map(function (n) { return { id: n, name: n }; });
             },
             getSelected: function () { return activeDiscs; },
             onToggle: function (id_, name, checked) {
@@ -726,6 +733,12 @@ var StandplassStevnerPage = (function () {
                 activeDiscs = [];
                 discDropdown.rebuild();
                 setUrlParam('disc', null);
+                applyFilters();
+            },
+            onSelectAll: function () {
+                activeDiscs = allDiscIds();
+                discDropdown.rebuild();
+                setUrlParam('disc', StandplassFormat.encodeIdList(activeDiscs));
                 applyFilters();
             }
         });
