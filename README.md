@@ -72,7 +72,7 @@ the workflow retries itself up to three times.
 
 `.github/workflows/parse-details.yml` parses the result PDFs behind
 each competition into `public/data/detaljer/` and a per-year
-championship index (`km-dm-{year}.json` in each branch folder).
+championship index (`mestere-{year}.json` in each branch folder).
 
 - **Daily 08:00 UTC** (after the scrapers) — parses new and updated
   competitions from the current and previous year files.
