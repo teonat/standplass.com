@@ -13,7 +13,9 @@ import pdfplumber
 from result_file_parse import (
     PARSER_VERSION,
     UnsupportedFormatError,
+    _parse_blinken_row,
     detect_family,
+    parse_blinken,
     parse_datotid,
     parse_inrx,
     parse_plain_no,
@@ -42,6 +44,12 @@ def fixture_text(name):
 class DetectFamily(unittest.TestCase):
     def test_inrx_bane_fixture(self):
         self.assertEqual(detect_family(fixture_text('inrx-bane.pdf')), 'inrX')
+
+    def test_blinken_fixtures(self):
+        self.assertEqual(
+            detect_family(fixture_text('blinken-felt.pdf')), 'blinken')
+        self.assertEqual(
+            detect_family(fixture_text('blinken-bane.pdf')), 'blinken')
 
     def test_inrx_felt_fixture(self):
         self.assertEqual(detect_family(fixture_text('inrx-felt.pdf')), 'inrX')
@@ -405,9 +413,152 @@ class ParseDatotidDispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseBlinken(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-felt.pdf'))
+
+    def test_generator_and_ovelser(self):
+        self.assertEqual(self.detail['generator'], 'blinken 3.0.15')
+        self.assertEqual(
+            [o['navn'] for o in self.detail['ovelser']],
+            ['Fin felt', 'Grov felt', 'Militær felt', 'Revolver felt'],
+        )
+
+    def test_klasse_a_row_1(self):
+        row = find_row(self.detail, 'Fin felt', 'A', 'Eirik Djønne')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Odda PK')
+        self.assertEqual(
+            row['series'],
+            [[11, None], [11, None], [11, None], [11, None], [11, None],
+             [10, None], [8, None], [11, None], [11, None], [12, None]],
+        )
+        self.assertEqual(row['ix'], 41)
+        self.assertEqual(row['sum'], 107)
+        self.assertEqual(row['mrk'], 'G')
+
+    def test_series_values_sum_to_row_sum(self):
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    if 'sum' in row:
+                        self.assertEqual(
+                            sum(cell[0] for cell in row['series']),
+                            row['sum'],
+                            row['name'],
+                        )
+
+    def test_row_counts_match_deltakere(self):
+        counts = {o['navn']: o['deltakere'] for o in self.detail['ovelser']}
+        self.assertEqual(
+            counts, {'Fin felt': 31, 'Grov felt': 17,
+                     'Militær felt': 30, 'Revolver felt': 20},
+        )
+        for ovelse in self.detail['ovelser']:
+            rows = sum(len(c['rows']) for c in ovelse['classes'])
+            self.assertEqual(rows, ovelse['deltakere'], ovelse['navn'])
+
+    def test_class_continues_across_page_break(self):
+        klasse_a = next(c for o in self.detail['ovelser']
+                        if o['navn'] == 'Grov felt'
+                        for c in o['classes'] if c['klasse'] == 'A')
+        self.assertEqual([r['pos'] for r in klasse_a['rows']], [1, 2, 3, 4, 5])
+        klasse_c = next(c for o in self.detail['ovelser']
+                        if o['navn'] == 'Militær felt'
+                        for c in o['classes'] if c['klasse'] == 'C')
+        self.assertEqual(len(klasse_c['rows']), 13)
+
+    def test_dnf_row_keeps_partial_series_without_sum(self):
+        row = find_row(self.detail, 'Fin felt', 'B', 'Geir Sivertsen')
+        self.assertEqual(row['status'], 'DNF')
+        self.assertEqual(row['series'],
+                         [[11, None], [10, None], [8, None], [11, None]]
+                         + [[0, None]] * 6)
+        self.assertEqual(row['ix'], 0)
+        self.assertNotIn('sum', row)
+        self.assertNotIn('pos', row)
+
+    def test_dns_row(self):
+        row = find_row(self.detail, 'Fin felt', 'B', 'Jina Seo-Larsen')
+        self.assertEqual(row['status'], 'DNS')
+        self.assertEqual(row['series'], [[0, None]] * 10)
+        self.assertEqual(row['ix'], 0)
+
+    def test_multi_letter_mrk(self):
+        row = find_row(self.detail, 'Grov felt', 'B', 'Dag Arild Hansen')
+        self.assertEqual(row['mrk'], 'G A')
+        row = find_row(self.detail, 'Fin felt', 'A', 'Morten Sleire')
+        self.assertEqual(row['mrk'], 'S B')
+
+    def test_rows_match_api_person_ids(self):
+        """Blinken prints abbreviated clubs ('Odda PK' where the API has
+        'Odda Pistolklubb'), so matching rides the name-unique
+        fallback. The 19 unmatched rows: the glued 'NOP-<city>' club
+        rows (name+club fused by the suffix heuristic), DNS/DNF
+        participants the API omits, and 'Ole-Christian' hyphen-style
+        name variants."""
+        from result_file_matching import attach_person_ids, match_stats
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'felt', '2022.json')))
+        comp = next(c for c in year['competitions']
+                    if c['id'].startswith('2f879487'))
+        attach_person_ids(self.detail, comp['results'])
+        matched, total = match_stats(self.detail)
+        self.assertEqual(total, 98)  # 31 + 17 + 30 + 20 deltakere
+        self.assertEqual(matched, 79)
+
+
+class ParseBlinkenBane(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-bane.pdf'))
+
+    def test_ovelser_and_series_count(self):
+        self.assertEqual(
+            [o['navn'] for o in self.detail['ovelser']],
+            ['25m Hurtig spesialpistol', '25m Hurtig spesialrevolver'],
+        )
+        row = find_row(self.detail, '25m Hurtig spesialpistol', 'A',
+                       'Gisle Enge')
+        self.assertEqual(len(row['series']), 12)
+        self.assertEqual(row['ix'], 12)
+        self.assertEqual(row['sum'], 560)
+        self.assertEqual(row['mrk'], 'B')
+
+    def test_row_counts_match_deltakere(self):
+        for ovelse in self.detail['ovelser']:
+            rows = sum(len(c['rows']) for c in ovelse['classes'])
+            self.assertEqual(rows, ovelse['deltakere'], ovelse['navn'])
+
+
+class ParseBlinkenRowTail(unittest.TestCase):
+    def test_kr_premie(self):
+        row = _parse_blinken_row(
+            '1 Test Person Oslo PK 11 11 11 11 11 10 8 11 11 12 '
+            '41 107 G kr 311,50', 10)
+        self.assertIsNotNone(row)
+        self.assertEqual(row['premie'], 311.5)
+        self.assertEqual(row['mrk'], 'G')
+        row = _parse_blinken_row(
+            '2 Annen Person Oslo PK 11 11 11 11 11 10 8 11 11 12 '
+            '41 107 kr 311.00', 10)
+        self.assertEqual(row['premie'], 311)
+        self.assertEqual(row['name'], 'Annen Person')
+
+
+class ParseBlinkenDispatch(unittest.TestCase):
+    def test_parse_result_routes_blinken(self):
+        with pdfplumber.open(os.path.join(FIXTURES, 'blinken-bane.pdf')) as pdf:
+            detail = parse_result(pdf)
+        self.assertTrue(detail['generator'].startswith('blinken'))
+        self.assertTrue(detail['ovelser'])
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_4(self):
-        self.assertEqual(PARSER_VERSION, 4)
+    def test_parser_version_is_5(self):
+        self.assertEqual(PARSER_VERSION, 5)
 
 
 class ParseResultDispatch(unittest.TestCase):

@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -47,6 +47,8 @@ def detect_family(text):
     """
     if _INRX_FOOTER.search(text) or ':: Klasse' in text:
         return 'inrX'
+    if 'Arrangert av' in text and 'Event #' in text:
+        return 'blinken'
     if 'Dato/tid:' in text and (
         'Stevnenummer' in text or 'file:///C:/resultat' in text
     ):
@@ -69,6 +71,8 @@ def parse_result(pdf):
     family = detect_family(text)
     if family == 'inrX':
         return parse_inrx(text)
+    if family == 'blinken':
+        return parse_blinken(text)
     if family == 'plain-NO':
         return parse_plain_no(text)
     if family == 'datotid':
@@ -474,6 +478,144 @@ def _parse_datotid_tail(tail_words):
         series.append([a, None])
         series.append([b, None])
     return series, numbers[-2], numbers[-1], oppr, mrk, premie
+
+
+_BLINKEN_OVELSE = re.compile(r'^(.+?) Max poeng\s*:\s*\d+\s*$')
+_BLINKEN_CODE = re.compile(r'^\d+[A-Z]+\s*-\s*')
+_BLINKEN_KLASSE = re.compile(
+    r'^Klasse (\S+) Klubb ((?:\d+ )+)X OS Total Mrk OR Premie\s*$'
+)
+_BLINKEN_DELTAKERE = re.compile(r'^Deltakere\s*:\s*(\d+)\s*$')
+_BLINKEN_VERSION = re.compile(r'Blinken \(V([\d.]+)')
+_BLINKEN_LETTER = re.compile(r'[A-Z]')
+
+
+def parse_blinken(text):
+    """Parse the Blinken generator ('Arrangert av' header, 'Event #').
+
+    Class headers enumerate the stand columns, so the series count is
+    read per class; classes continue across page breaks, where the
+    øvelse header and the interrupted class header repeat. The øvelse
+    code prefix ('1F - ', '7SP - ') is stripped from the name.
+    """
+    detail = {}
+    stamp = _BLINKEN_VERSION.search(text)
+    detail['generator'] = f'blinken {stamp.group(1)}' if stamp else 'blinken'
+    ovelser = []
+    by_navn = {}
+    sink = None
+    n_series = 0
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        ovelse = _BLINKEN_OVELSE.match(line)
+        if ovelse:
+            navn = _BLINKEN_CODE.sub('', ovelse.group(1)).strip()
+            current = by_navn.get(navn)
+            if current is None:
+                current = {'navn': navn, 'classes': []}
+                by_navn[navn] = current
+                ovelser.append(current)
+            sink = None
+            continue
+        klasse = _BLINKEN_KLASSE.match(line)
+        if klasse:
+            n_series = len(klasse.group(2).split())
+            current = ovelser[-1] if ovelser else None
+            if current is None:
+                continue
+            classes = current['classes']
+            if classes and classes[-1]['klasse'] == klasse.group(1):
+                sink = classes[-1]
+            else:
+                sink = {'klasse': klasse.group(1), 'rows': []}
+                classes.append(sink)
+            continue
+        deltakere = _BLINKEN_DELTAKERE.match(line)
+        if deltakere and ovelser:
+            by_navn[ovelser[-1]['navn']]['deltakere'] = int(
+                deltakere.group(1)
+            )
+            continue
+        if sink is None:
+            continue
+        row = _parse_blinken_row(line, n_series)
+        if row is not None:
+            sink['rows'].append(row)
+    detail['ovelser'] = ovelser
+    return detail
+
+
+def _parse_blinken_row(line, n_series):
+    """Parse one Blinken table row; None for lines that are not rows.
+
+    Row shape: 'pos name club series… X Total [Mrk letters]
+    [kr premie] [DNF|DNS]'. Ranked rows must satisfy the series-sum
+    == Total arithmetic; DNF/DNS rows print no Total.
+    """
+    tokens = line.split()
+    if not tokens or not n_series:
+        return None
+    row = {}
+    if tokens[0] == '-':
+        tokens = tokens[1:]
+    elif tokens[0].isdigit():
+        row['pos'] = int(tokens[0])
+        tokens = tokens[1:]
+    else:
+        return None
+    status = None
+    if tokens[-1] in ('DNF', 'DNS'):
+        status = tokens[-1]
+        tokens = tokens[:-1]
+    premie = None
+    if len(tokens) >= 2 and tokens[-2] == 'kr':
+        try:
+            amount = float(tokens[-1].replace(',', '.'))
+        except ValueError:
+            return None
+        premie = int(amount) if amount.is_integer() else amount
+        tokens = tokens[:-2]
+    letters = []
+    while tokens and _BLINKEN_LETTER.fullmatch(tokens[-1]):
+        letters.append(tokens.pop())
+    if letters:
+        row['mrk'] = ' '.join(reversed(letters))
+    count = None
+    for candidate, has_total in ((n_series + 2, True), (n_series + 1, False)):
+        if len(tokens) < candidate + 1:
+            continue
+        if not all(t.isdigit() for t in tokens[-candidate:]):
+            continue
+        if has_total:
+            if sum(int(t) for t in tokens[-candidate:-2]) != int(tokens[-1]):
+                continue
+        elif status is None:
+            continue  # a ranked row always prints a Total
+        count = candidate
+        break
+    if count is None:
+        return None
+    if count == n_series + 2:
+        series = [int(t) for t in tokens[-count:-2]]
+        row['ix'] = int(tokens[-2])
+        row['sum'] = int(tokens[-1])
+    else:
+        series = [int(t) for t in tokens[-count:-1]]
+        row['ix'] = int(tokens[-1])
+    name, club = _split_name_club(tokens[:-count])
+    if not name:
+        return None
+    row['name'] = name
+    if club:
+        row['club'] = club
+    row['series'] = [[value, None] for value in series]
+    if status:
+        row['status'] = status
+    if premie is not None:
+        row['premie'] = premie
+    return row
 
 
 def _champ_entry(entries, navn, klasse, rows_key):
