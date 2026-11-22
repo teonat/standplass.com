@@ -258,40 +258,34 @@ class RunOrchestrator(unittest.TestCase):
 
 
 class KmDmIndex(unittest.TestCase):
-    FELT_KM_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/f2fd227a.pdf'
-    BANE_KM_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/8c9065b4.pdf'
-    PLAIN_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/a17c50ce.pdf'
-
     @classmethod
     def setUpClass(cls):
-        import pdfplumber
-        from result_file_parse import parse_result
-        from result_file_matching import attach_person_ids
         cls._tmp = tempfile.TemporaryDirectory()
         root = cls._tmp.name
         felt_comp = bane_km_comp = plain_comp = None
-        for path in ('public/data/felt/2025.json', 'public/data/bane/2025.json',
-                     'public/data/bane/2026.json'):
+        # real comp records, pinned to past-year files that the daily
+        # scraper no longer rewrites
+        for path in ('public/data/felt/2025.json', 'public/data/bane/2025.json'):
             for c in json.load(open(path))['competitions']:
                 if 'f2fd227a' in (c.get('resultFileUrl') or ''):
                     felt_comp = c
                 if '8c9065b4' in (c.get('resultFileUrl') or ''):
                     bane_km_comp = c
-                if 'a17c50ce' in (c.get('resultFileUrl') or ''):
+                if 'b499f82caac9' in (c.get('resultFileUrl') or ''):
                     plain_comp = c
+        cls.felt_comp = felt_comp
         cls.felt_comp_id = felt_comp['id']
         cls.bane_km_comp_id = bane_km_comp['id']
         cls.plain_comp_id = plain_comp['id']
         write_year(root, 'felt', '2025', [felt_comp])
         write_year(root, 'bane', '2025', [bane_km_comp, plain_comp])
-        plain_comp_url = plain_comp['resultFileUrl']
 
         def fetch(url):
             if 'f2fd227a' in url:
                 return fixture_bytes('inrx-felt-km.pdf'), '"e1"'
             if '8c9065b4' in url:
                 return fixture_bytes('inrx-bane-km.pdf'), '"e2"'
-            if 'a17c50ce' in url:
+            if 'b499f82caac9' in url:
                 return fixture_bytes('inrx-bane.pdf'), '"e3"'
             raise AssertionError(f'unexpected url {url}')
 
@@ -357,6 +351,50 @@ class KmDmIndex(unittest.TestCase):
         self.assertEqual(summary['up_to_date'], 3)
         self.assertEqual(summary['indexes_written'], 0)
 
+    def test_sweep_rewrites_index_when_pdf_replaced(self):
+        def conditional(url, etag):
+            if 'f2fd227a' in url:
+                return 200, fixture_bytes('inrx-bane.pdf'), '"e9"'
+            return 304, b'', etag
+
+        summary = run_sweep({'full_scan': True, 'year': '2025', 'branch': None},
+                            fetch_conditional=conditional, root=self.root)
+        self.assertEqual(summary['re-parsed'], 1)
+        self.assertEqual(summary['indexes_written'], 1)
+        with open(index_path('felt', '2025', root=self.root),
+                  encoding='utf-8') as f:
+            index = json.load(f)
+        # the replacement carries no championship sections, so the
+        # comp must leave the index — a stale entry must not survive
+        self.assertEqual(index['comps'], [])
+        with open(index_path('bane', '2025', root=self.root),
+                  encoding='utf-8') as f:
+            self.assertEqual(json.load(f)['comps'][0]['compId'],
+                             self.bane_km_comp_id)
+
+    def test_dry_run_writes_no_index(self):
+        with tempfile.TemporaryDirectory() as root:
+            write_year(root, 'felt', '2025', [self.felt_comp])
+
+            def fetch(url):
+                return fixture_bytes('inrx-felt-km.pdf'), '"e1"'
+
+            run({'full_scan': True, 'year': '2025', 'branch': 'felt',
+                 'dry_run': False}, fetch_pdf=fetch, root=root)
+            path = index_path('felt', '2025', root=root)
+            self.assertTrue(os.path.exists(path))
+            os.remove(path)
+
+            def no_fetch(url):
+                raise AssertionError('dry run must not fetch anything')
+
+            summary = run({'full_scan': True, 'year': '2025', 'branch': 'felt',
+                           'dry_run': True}, fetch_pdf=no_fetch, root=root)
+            self.assertEqual(summary['up_to_date'], 1)
+            self.assertEqual(summary['parsed'], 0)
+            self.assertEqual(summary['indexes_written'], 0)
+            self.assertFalse(os.path.exists(path))
+
 
 class EtagSweep(unittest.TestCase):
     PDF_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/a17c50ce-full.pdf'
@@ -416,6 +454,19 @@ class EtagSweep(unittest.TestCase):
         names = {r['name'] for o in detail['ovelser'] for c in o['classes']
                  for r in c['rows']}
         self.assertIn('Gustav Tisthamar', names)
+
+    def test_error_status_counted_as_failed(self):
+        self._run_once()
+
+        def conditional(url, etag):
+            return 404, b'', None
+
+        summary = run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                            fetch_conditional=conditional, root=self.root)
+        self.assertEqual(summary['checked'], 1)
+        self.assertEqual(summary['failed'], 1)
+        self.assertEqual(summary['changed'], 0)
+        self.assertEqual(summary['re-parsed'], 0)
 
     def test_missing_etag_treated_as_changed_once(self):
         self._run_once()

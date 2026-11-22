@@ -285,6 +285,30 @@ def fetch_conditional(url, etag):
 _default_fetch_conditional = fetch_conditional
 
 
+def _write_indexes(targets, summary, root, dry_run):
+    """Regenerate the slim KM/DM indexes for every (branch, year) the
+    targets touched; write only when the content actually changes so
+    daily runs produce no churn. A year whose comps all lost their
+    championship sections has its index emptied rather than left
+    stale, but years that never had an index get no empty file."""
+    summary['indexes_written'] = 0
+    if dry_run:
+        return
+    scopes = sorted({(branch, year) for branch, year, _ in targets})
+    for branch, year in scopes:
+        index = build_km_index(branch, year, root=root)
+        path = index_path(branch, year, root=root)
+        if not index['comps'] and not os.path.exists(path):
+            continue
+        existing = None
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                existing = json.load(f)
+        if existing != index:
+            write_detail(path, index)
+            summary['indexes_written'] += 1
+
+
 def run_sweep(opts, *, fetch_conditional=None, root='.'):
     """Weekly freshness sweep: conditional-GET every parsed PDF and
     re-parse the ones organizers replaced behind the same URL.
@@ -306,7 +330,8 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
         'quarantine_list': [],
     }
     fetched_any = False
-    for branch, year, comp in collect_targets(opts, root):
+    targets = list(collect_targets(opts, root))
+    for branch, year, comp in targets:
         url = comp['resultFileUrl']
         if not url.lower().split('?')[0].endswith('.pdf'):
             continue
@@ -326,12 +351,19 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
             print(f'  sweep fetch failed {url}: {exc}')
             continue
         summary['checked'] += 1
+        if status == 304:
+            continue
         if status != 200:
+            # a deleted or erroring blob is a fetch failure, not
+            # "unchanged" — deletions must be observable in the summary
+            summary['failed'] += 1
+            print(f'  sweep unexpected status {status} for {url}')
             continue
         summary['changed'] += 1
         if _parse_and_write(comp, url, content, etag, path, summary,
                             opts.get('dry_run')):
             summary['re-parsed'] += 1
+    _write_indexes(targets, summary, root, opts.get('dry_run'))
     return summary
 
 
@@ -364,7 +396,8 @@ def run(opts, *, fetch_pdf=None, root='.'):
             fetch_cache[url] = fetch_pdf(url)
         return fetch_cache[url]
 
-    for branch, year, comp in collect_targets(opts, root):
+    targets = list(collect_targets(opts, root))
+    for branch, year, comp in targets:
         url = comp['resultFileUrl']
         if not url.lower().split('?')[0].endswith('.pdf'):
             summary['skipped_non_pdf'] += 1
@@ -388,23 +421,7 @@ def run(opts, *, fetch_pdf=None, root='.'):
         _parse_and_write(comp, url, content, etag, path, summary,
                          opts.get('dry_run'))
 
-    # Regenerate the slim KM/DM indexes for every year in scope that
-    # has detail files; write only when the content actually changes
-    # so daily runs produce no churn.
-    summary['indexes_written'] = 0
-    scopes = sorted({(branch, year) for branch, year, _ in collect_targets(opts, root)})
-    for branch, year in scopes:
-        index = build_km_index(branch, year, root=root)
-        if not index['comps']:
-            continue
-        path = index_path(branch, year, root=root)
-        existing = None
-        if os.path.exists(path):
-            with open(path, encoding='utf-8') as f:
-                existing = json.load(f)
-        if existing != index:
-            write_detail(path, index)
-            summary['indexes_written'] += 1
+    _write_indexes(targets, summary, root, opts.get('dry_run'))
     return summary
 
 
