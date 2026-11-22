@@ -253,6 +253,7 @@ def build_competition(comp, all_results, discipline_names, class_names):
         'endDate': comp.get('endDate'),
         'facilityName': comp.get('facilityName'),
         'organizationName': comp.get('organizationName'),
+        'regionOrganizationId': comp.get('regionOrganizationId'),
         'competitionTypeName': comp.get('competitionTypeName'),
         'applicableForClassification': comp.get('applicableForClassification'),
         'status': comp.get('status'),
