@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 10
+PARSER_VERSION = 11
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -167,6 +167,15 @@ def _split_name_club(tokens):
     """
     if not tokens:
         return '', None
+    # 'Norske Offiserers Pistolklubb' prints its branches as 'NOP',
+    # 'NOP-Bergen', 'NOP Voss' — a prefix-anchored club with no
+    # suffix word to anchor on
+    for i, tok in enumerate(tokens):
+        if tok == 'NOP' or tok.startswith('NOP-'):
+            name = ' '.join(tokens[:i])
+            if name:
+                return name, ' '.join(tokens[i:])
+            break
     for i in range(len(tokens) - 1, -1, -1):
         low = tokens[i].lower()
         if low.endswith(_CLUB_ENDINGS) or low in _CLUB_ACRONYMS:

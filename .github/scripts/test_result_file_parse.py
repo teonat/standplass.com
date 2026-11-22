@@ -950,6 +950,61 @@ class ParseBlinkenClassColumn(unittest.TestCase):
         self.assertTrue(row.get('personId'))
 
 
+class ParseBlinkenNopClub(unittest.TestCase):
+    """Blinken (and t96) rows print 'Norske Offiserers
+    Pistolklubb' branches as 'NOP-Bergen' / 'NOP Voss' — a
+    prefix-anchored club with no suffix word, so the club-anchored
+    split left it glued to the name and every NOP row failed person
+    matching. The split now recognizes a leading NOP token as the
+    club start; the person-class token still strips after the club
+    split. Fixture: comp 39fb6515 (felt 2022, Felt FGRMSPSR),
+    blinken 3.0.18 — carries both spellings and both branches."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-nop.pdf'))
+
+    def test_hyphen_branch_becomes_club(self):
+        row = find_row(self.detail, 'Fin felt', 'B', 'Johnny Aslaksen')
+        self.assertEqual(row['name'], 'Johnny Aslaksen')
+        self.assertEqual(row['club'], 'NOP-Bergen')
+
+    def test_spaced_branch_becomes_club(self):
+        row = find_row(self.detail, 'Fin felt', 'C', 'Stig Aldal')
+        self.assertEqual(row['name'], 'Stig Aldal')
+        self.assertEqual(row['club'], 'NOP Voss')
+
+    def test_class_token_still_strips_after_club_split(self):
+        row = find_row(self.detail, 'Spesialrevolver felt', 'A',
+                       'Johnny Aslaksen')
+        self.assertEqual(row['name'], 'Johnny Aslaksen')
+        self.assertEqual(row['club'], 'NOP-Bergen')
+
+    def test_no_fused_nop_tokens_remain(self):
+        for o in self.detail['ovelser']:
+            for c in o['classes']:
+                for r in c['rows']:
+                    self.assertNotIn('NOP', r['name'], r['name'])
+                    if r.get('club'):
+                        self.assertTrue('NOP' in r['club'] or r['club'] != '',
+                                        r['club'])
+
+    def test_matched_person_ids(self):
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'felt', '2022.json')))
+        comp = next(c for c in year['competitions']
+                    if '6abc23a5' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        row = find_row(self.detail, 'Fin felt', 'C', 'Stig Aldal')
+        self.assertEqual(row.get('personId'),
+                         'ea269560-3f20-4c41-0e6c-08d87c24af2c')
+        row = find_row(self.detail, 'Fin felt', 'B', 'Johnny Aslaksen')
+        self.assertEqual(row.get('personId'),
+                         '43edbbe0-ecf7-48d1-0a94-08d87c24af2c')
+
+
 class ParseMegalink(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1054,8 +1109,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_10(self):
-        self.assertEqual(PARSER_VERSION, 10)
+    def test_parser_version_is_11(self):
+        self.assertEqual(PARSER_VERSION, 11)
 
 
 class ParseResultDispatch(unittest.TestCase):
