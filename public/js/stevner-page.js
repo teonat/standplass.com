@@ -254,8 +254,8 @@ var StandplassStevnerPage = (function () {
         { key: 'discipline', label: 'Øvelse', hideBelow: 700 },
         { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc' },
         { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc', format: num },
-        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc',
-            cell: function (row) { return row.rankingScore != null ? Number(row.rankingScore).toFixed(2) : '–'; } }
+        { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc', raw: true,
+            cell: function (row) { return StandplassRankingBand.cellHtml(row.rankingScore, row.class); } }
     ];
 
     function competitionCardTableSpec(card) {

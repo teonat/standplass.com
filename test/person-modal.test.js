@@ -1,5 +1,8 @@
 'use strict';
 var assert = require('node:assert');
+// person-modal.js resolves the shared band module as a browser global
+// at call time (the site-chrome.test.js pattern for cross-module refs).
+global.StandplassRankingBand = require('../public/js/ranking-band.js');
 var StandplassPersonModal = require('../public/js/person-modal.js');
 
 assert.strictEqual(StandplassPersonModal.parsePersonFromUrl('?klubb=eksempel'), null);
@@ -271,8 +274,12 @@ assert.strictEqual(cols[0].format(null), '–', 'missing date renders –');
 assert.strictEqual(cols[1].format(null), '–', 'missing competition renders –');
 assert.strictEqual(cols[2].format(null), '', 'missing discipline renders empty, like before');
 assert.strictEqual(cols[4].format(null), '–', 'missing position renders –');
-assert.strictEqual(cols[6].format(0.9), '0.90', 'rankingScore renders two decimals');
-assert.strictEqual(cols[6].format(null), '–', 'missing rankingScore renders –');
+assert.strictEqual(cols[6].cell({ rankingScore: 0.9, class: 'Åpen' }), '0.90', 'rankingScore renders two decimals');
+assert.strictEqual(cols[6].cell({ rankingScore: null, class: 'A' }), '–', 'missing rankingScore renders –');
+assert.ok(cols[6].raw, 'the Ranking cell is raw HTML — it carries the band dot');
+assert.strictEqual(cols[6].cell({ rankingScore: 98, class: 'B' }),
+    '98.00<span class="rank-dot" style="background:var(--chart-green)" title="Opprykksgrense nådd"></span>',
+    'a banded ranking renders its dot from the shared module');
 
 // Render through the base: the migration contract — date-asc default
 // order (the order the table has always shown), rows stamped with
@@ -310,7 +317,8 @@ assert.ok(pmTable.indexOf('<tr data-dt-row="1" data-idx="0"') >= 0,
 // cell formats through the base
 assert.ok(pmTable.indexOf('<td>1. mai &#39;26</td>') >= 0, 'short date in the Dato cell');
 assert.ok(pmTable.indexOf('<td>–</td>') >= 0, 'null score renders –');
-assert.ok(pmTable.indexOf('<td>0.90</td>') >= 0, 'rankingScore 0.9 renders 0.90');
+assert.ok(pmTable.indexOf('<td>0.90<span class="rank-dot" style="background:var(--chart-orange)" title="2+ klasser under"></span></td>') >= 0,
+    'rankingScore 0.9 renders 0.90 with its band dot (class A, far below)');
 // every header sortable, Dato carrying the initial aria-sort
 assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
 assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');

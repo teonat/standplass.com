@@ -4,6 +4,7 @@ var assert = require('node:assert');
 // browser global -- shim it here the same way comp-modal.test.js does.
 global.StandplassFormat = require('../public/js/format.js');
 global.StandplassDataTable = require('../public/js/data-table.js');
+global.StandplassRankingBand = require('../public/js/ranking-band.js');
 var SP = require('../public/js/stevner-page.js');
 var PM = require('../public/js/person-modal.js');
 
@@ -189,8 +190,8 @@ assert.ok(klasseHtml.indexOf('ranking-rank') === -1 && klasseHtml.indexOf('ranki
     'card table: cells stay completely unclassed (owner ruling — plain look)');
 assert.ok(klasseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – A</th></tr>') !== -1,
     'card table: group rows via dt-group-row with today\'s labels');
-assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td>2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td>90.00</td></tr>') !== -1,
-    'card table: person button byte-exact, num/toFixed(2) cells, no cell classes (comparator order: Fellesfelt < Grovfelt puts Ola at index 1)');
+assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td>2</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td>90.00<span class="rank-dot" style="background:var(--chart-red)" title="Under klassen"></span></td></tr>') !== -1,
+    'card table: person button byte-exact, num/toFixed(2) cells with band dots, no cell classes (comparator order: Fellesfelt < Grovfelt puts Ola at index 1)');
 
 // Single-group card (c2): carries the group row TOO — the label row is
 // the discipline's home when the Øvelse column is tier-hidden.
@@ -199,7 +200,7 @@ assert.ok(singleSpec.groupRows, 'single-group card carries the groupRows opt');
 var singleHtml = nfRender(singleSpec);
 assert.ok(singleHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – B</th></tr>') !== -1,
     'single-group card renders its group label row');
-assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td>1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td>92.00</td></tr>') !== -1,
+assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td>1</td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td>92.00<span class="rank-dot" style="background:var(--chart-blue)" title="I klassen"></span></td></tr>') !== -1,
     'single-group card: rows keep comparator order beneath the label');
 
 // Single-group card in poeng mode keeps the comparator (poeng desc) order.

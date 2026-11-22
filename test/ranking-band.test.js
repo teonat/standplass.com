@@ -1,0 +1,61 @@
+'use strict';
+var assert = require('node:assert');
+var RB = require('../public/js/ranking-band.js');
+
+// ── bandFor: the owner-confirmed ladder ──────────────────────────────
+// A: ≥97 in class; 85–97 under (B level); <85 2+ under.
+assert.strictEqual(RB.bandFor('A', 97).id, 'inClass');
+assert.strictEqual(RB.bandFor('A', 96.99).id, 'below');
+assert.strictEqual(RB.bandFor('A', 85).id, 'below');
+assert.strictEqual(RB.bandFor('A', 84.99).id, 'twoBelow');
+// B: ≥97 opprykk (A level); 85–97 in class; <85 under (C/D level).
+// No twoBelow band — only the C/D zone is below B.
+assert.strictEqual(RB.bandFor('B', 97).id, 'promotion');
+assert.strictEqual(RB.bandFor('B', 96.99).id, 'inClass');
+assert.strictEqual(RB.bandFor('B', 85).id, 'inClass');
+assert.strictEqual(RB.bandFor('B', 84.99).id, 'below');
+// C: ≥97 2+ over; 85–97 opprykk (B level); <85 in class — C and D are
+// one zone (D auto-converts to C after a year), so C never goes below-band.
+assert.strictEqual(RB.bandFor('C', 97).id, 'twoAbove');
+assert.strictEqual(RB.bandFor('C', 96.99).id, 'promotion');
+assert.strictEqual(RB.bandFor('C', 85).id, 'promotion');
+assert.strictEqual(RB.bandFor('C', 84.99).id, 'inClass');
+assert.strictEqual(RB.bandFor('C', 10).id, 'inClass');
+// D: ≥85 2+ over (B level or higher); <85 in class — C is no promotion
+// from D (auto-convert), so 75–85 is in-class, not opprykk.
+assert.strictEqual(RB.bandFor('D', 85).id, 'twoAbove');
+assert.strictEqual(RB.bandFor('D', 100).id, 'twoAbove');
+assert.strictEqual(RB.bandFor('D', 84.99).id, 'inClass');
+assert.strictEqual(RB.bandFor('D', 75).id, 'inClass');
+
+// off-ladder classes and no-ranking scores carry no band
+assert.strictEqual(RB.bandFor('Åpen', 90), null);
+assert.strictEqual(RB.bandFor('Veteran 55', 90), null);
+assert.strictEqual(RB.bandFor('', 90), null);
+assert.strictEqual(RB.bandFor(null, 90), null);
+assert.strictEqual(RB.bandFor('A', null), null);
+assert.strictEqual(RB.bandFor('A', undefined), null);
+assert.strictEqual(RB.bandFor('A', 0), null, '0 rankingScore means no ranking (chartPoints excludes it too)');
+
+// band payload: the chart's color vars and legend labels
+assert.strictEqual(RB.bandFor('B', 98).color, 'var(--chart-green)');
+assert.strictEqual(RB.bandFor('B', 98).label, 'Opprykksgrense nådd');
+assert.strictEqual(RB.bandFor('A', 84).color, 'var(--chart-orange)');
+assert.strictEqual(RB.bandFor('D', 90).color, 'var(--chart-purple)');
+
+// BANDS: exactly five, in the chart legend's order, labels verbatim
+assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.id; }),
+    ['twoAbove', 'promotion', 'inClass', 'below', 'twoBelow']);
+assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.label; }),
+    ['2+ klasser over', 'Opprykksgrense nådd', 'I klassen', 'Under klassen', '2+ klasser under']);
+
+// ── cellHtml: the shared table cell ──────────────────────────────────
+assert.strictEqual(RB.cellHtml(97.5, 'A'),
+    '97.50<span class="rank-dot" style="background:var(--chart-blue)" title="I klassen"></span>');
+assert.strictEqual(RB.cellHtml(98, 'B'),
+    '98.00<span class="rank-dot" style="background:var(--chart-green)" title="Opprykksgrense nådd"></span>');
+assert.strictEqual(RB.cellHtml(84.99, 'C'),
+    '84.99<span class="rank-dot" style="background:var(--chart-blue)" title="I klassen"></span>');
+assert.strictEqual(RB.cellHtml(90, 'Åpen'), '90.00', 'off-ladder: plain value, no dot');
+assert.strictEqual(RB.cellHtml(null, 'A'), '–', 'no ranking renders –');
+assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no dot');
