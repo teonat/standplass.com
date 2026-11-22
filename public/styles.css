@@ -1488,10 +1488,16 @@ tr[data-idx] { cursor: pointer; }
    test/chart-text-contrast.test.js. */
 .medal {
     display: inline-block;
-    padding: 0.05rem 0.4rem;
+    padding: 0 0.4rem;
     border-radius: 4px;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: inherit;
+    /* The chip must not move the number: its horizontal padding and
+       border are compensated with matching negative margins so the
+       digits sit exactly where a plain value would (the values above
+       and below in the column stay aligned), and the 1px borders are
+       compensated vertically so the row height doesn't grow. */
+    margin: -1px calc(-0.4rem - 1px);
 }
 .medal--gold   { background: rgba(232, 185, 35, 0.18); border: 1px solid rgba(232, 185, 35, 0.45); color: var(--chart-gold-text); }
 .medal--silver { background: rgba(200, 208, 216, 0.18); border: 1px solid rgba(200, 208, 216, 0.50); color: var(--chart-silver-text); }
