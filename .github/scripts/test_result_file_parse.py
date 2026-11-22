@@ -4,6 +4,7 @@
     python3 .github/scripts/test_result_file_parse.py
 """
 
+import json
 import os
 import unittest
 
@@ -13,6 +14,7 @@ from result_file_parse import (
     PARSER_VERSION,
     UnsupportedFormatError,
     detect_family,
+    parse_datotid,
     parse_inrx,
     parse_plain_no,
     parse_result,
@@ -314,9 +316,94 @@ class ParsePlainNoDispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseDatotid(unittest.TestCase):
+    STEVNE = '7F 25m hurtigpistol fin'
+
+    @classmethod
+    def setUpClass(cls):
+        with pdfplumber.open(os.path.join(FIXTURES, 'datotid.pdf')) as pdf:
+            cls.detail = parse_datotid(pdf)
+
+    def test_klasse_b_row_1(self):
+        row = find_row(self.detail, self.STEVNE, 'B', 'Sondre Risan Haltvik')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Frosta Salongskytterlag')
+        self.assertEqual(
+            row['series'],
+            [[99, None], [96, None], [95, None],
+             [96, None], [98, None], [96, None]],
+        )
+        self.assertEqual(row['ix'], 20)
+        self.assertEqual(row['sum'], 580)
+        self.assertEqual(row['oppr'], 'A')
+        self.assertEqual(row['mrk'], 'S')
+        self.assertEqual(row['premie'], 0)
+
+    def test_series_values_sum_to_row_sum(self):
+        """The interleaved pair subtotals are validated then dropped —
+        the surviving invariant is that the series values sum to the
+        row's total."""
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    self.assertEqual(
+                        sum(cell[0] for cell in row['series']),
+                        row['sum'],
+                        row['name'],
+                    )
+
+    def test_stacked_names_and_clubs(self):
+        row = find_row(self.detail, self.STEVNE, 'B', 'Roar Hembre')
+        self.assertEqual(row['club'], 'Trondheim Sportsskyttere')
+        row = find_row(self.detail, self.STEVNE, 'C', 'Kjell Åke Lappen Andresen')
+        self.assertEqual(row['club'], 'Verdal Sportsskytterlag')
+
+    def test_hyphen_continuation_and_four_line_name_block(self):
+        row = find_row(
+            self.detail, self.STEVNE, 'C', 'Linda-Marie Neshagen Haakonsen'
+        )
+        self.assertEqual(row['club'], 'Stjørdal sportsskytterklubb')
+        self.assertEqual(row['sum'], 485)
+
+    def test_row_count_matches_deltakere(self):
+        rows = [r for o in self.detail['ovelser'] for c in o['classes']
+                for r in c['rows']]
+        self.assertEqual(len(rows), 11)
+
+    def test_every_parsed_pair_is_exact_api_or_known_variant(self):
+        from result_file_matching import normalize
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2024.json')))
+        comp = next(c for c in year['competitions']
+                    if c['title'] == 'Romjulskrus hurtigpistol')
+        api_pairs = {(normalize(r['name']), normalize(r['club']))
+                     for r in comp['results']}
+        parsed = {(normalize(r['name']), normalize(r.get('club') or ''))
+                  for o in self.detail['ovelser'] for c in o['classes']
+                  for r in c['rows']}
+        exact = parsed & api_pairs
+        self.assertGreaterEqual(len(exact), 8)
+        variants = parsed - api_pairs
+        self.assertTrue(variants <= {
+            ('eva olaug iversen', 'trondheim sportsskyttere'),
+            ('håvard haakonsen', 'stjørdal sportsskytterklubb'),
+            ('linda marie neshagen haakonsen', 'stjørdal sportsskytterklubb'),
+        })
+
+
+class ParseDatotidDispatch(unittest.TestCase):
+    def test_parse_result_routes_datotid(self):
+        path = os.path.join(FIXTURES, 'datotid.pdf')
+        with pdfplumber.open(path) as pdf:
+            detail = parse_result(pdf)
+        self.assertEqual(detail['generator'], 'datotid')
+        self.assertTrue(detail['ovelser'])
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_3(self):
-        self.assertEqual(PARSER_VERSION, 3)
+    def test_parser_version_is_4(self):
+        self.assertEqual(PARSER_VERSION, 4)
 
 
 class ParseResultDispatch(unittest.TestCase):

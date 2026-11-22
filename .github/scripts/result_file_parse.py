@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -71,6 +71,8 @@ def parse_result(pdf):
         return parse_inrx(text)
     if family == 'plain-NO':
         return parse_plain_no(text)
+    if family == 'datotid':
+        return parse_datotid(pdf)
     raise UnsupportedFormatError(f'unrecognized result file family: {family}')
 
 
@@ -303,6 +305,175 @@ def _parse_lag_line(line, n_series, entry):
     team['sum'] = int(tokens[-1])
     team['members'] = []
     entry['teams'].append(team)
+
+
+_DATOTID_STEVNE = re.compile(r'^Stevne:\s*(.+?)\s*Maks poengsum', re.MULTILINE)
+_DATOTID_KLASSE = re.compile(r'^Klasse\s+(\S+)')
+
+# The datotid generator lays names and clubs out as stacked word
+# columns beside each result row; these x0 ranges separate them.
+_DATOTID_NAME_X = (43, 102)
+_DATOTID_CLUB_X = (102, 200)
+# Name/club words sit at most two stacked lines (about 20pt) from
+# their row; class headers and page headers are 30pt+ away.
+_DATOTID_ROW_WINDOW = 25
+
+
+def parse_datotid(pdf):
+    """Parse the 'Dato/tid' generator family from word coordinates.
+
+    Its text layer interleaves columns, so rows are rebuilt from word
+    positions: result rows are the lines starting with a position
+    number at the far left, names and clubs are the stacked words in
+    the two columns beside them (assigned to the nearest row), and
+    the series run carries interleaved pair subtotals which are
+    validated (a + b == subtotal) and dropped.
+    """
+    detail = {'generator': 'datotid'}
+    texts = []
+    classes = []
+    current = None
+    for page in pdf.pages:
+        texts.append(page.extract_text() or '')
+        words = page.extract_words(
+            x_tolerance=1.5, y_tolerance=2, keep_blank_chars=False
+        )
+        lines = {}
+        for word in words:
+            lines.setdefault(round(word['top'] / 3), []).append(word)
+        number_lines = []  # {'top', 'pos', 'tail', 'names', 'club'}
+        taken = set()
+        for key in sorted(lines):
+            line = sorted(lines[key], key=lambda w: w['x0'])
+            first = line[0]
+            tail = [w for w in line if w['x0'] >= 200]
+            if (
+                first['text'].isdigit()
+                and first['x0'] < 44
+                and len(tail) >= 5
+                and current is not None
+            ):
+                number_lines.append({
+                    'top': first['top'],
+                    'pos': int(first['text']),
+                    'tail': tail,
+                    # names/clubs printed inline on the row itself
+                    'names': [w for w in line
+                              if _DATOTID_NAME_X[0] <= w['x0'] < _DATOTID_NAME_X[1]],
+                    'club': [w for w in line
+                             if _DATOTID_CLUB_X[0] <= w['x0'] < _DATOTID_CLUB_X[1]],
+                    'class': current,
+                })
+                taken.update(id(w) for w in line)
+                continue
+            joined = ' '.join(w['text'] for w in line)
+            klasse = _DATOTID_KLASSE.match(joined)
+            if klasse and len(tail) >= 2:
+                if classes and classes[-1]['klasse'] == klasse.group(1):
+                    current = classes[-1]
+                else:
+                    current = {'klasse': klasse.group(1), 'rows': []}
+                    classes.append(current)
+                taken.update(id(w) for w in line)
+        if not number_lines:
+            continue
+        for word in words:
+            if id(word) in taken:
+                continue
+            x0 = word['x0']
+            if _DATOTID_NAME_X[0] <= x0 < _DATOTID_NAME_X[1]:
+                pool = 'names'
+            elif _DATOTID_CLUB_X[0] <= x0 < _DATOTID_CLUB_X[1]:
+                pool = 'club'
+            else:
+                continue
+            nearest = min(
+                number_lines,
+                key=lambda row: abs(word['top'] - row['top']),
+            )
+            if abs(word['top'] - nearest['top']) <= _DATOTID_ROW_WINDOW:
+                nearest[pool].append(word)
+        for row in number_lines:
+            parsed = _parse_datotid_tail(row['tail'])
+            if parsed is None:
+                continue
+            series, ix, total, oppr, mrk, premie = parsed
+            entry = {'pos': row['pos']}
+            name = _join_stacked(row['names'])
+            if not name:
+                continue
+            entry['name'] = name
+            club = _join_stacked(row['club'])
+            if club:
+                entry['club'] = club
+            entry['series'] = series
+            entry['ix'] = ix
+            entry['sum'] = total
+            if oppr:
+                entry['oppr'] = oppr
+            if mrk:
+                entry['mrk'] = mrk
+            if premie is not None:
+                entry['premie'] = premie
+            row['class']['rows'].append(entry)
+
+    stevne = _DATOTID_STEVNE.search('\n'.join(texts))
+    navn = stevne.group(1).strip() if stevne else 'Ukjent'
+    detail['ovelser'] = [
+        {'navn': navn, 'classes': classes}
+    ] if classes else []
+    return detail
+
+
+def _join_stacked(words):
+    """Join y-sorted stacked words; a trailing hyphen continues onto
+    the next line ('Linda-' + 'Marie' -> 'Linda-Marie')."""
+    text = ''
+    for word in sorted(words, key=lambda w: w['top']):
+        if not text:
+            text = word['text']
+        elif text.endswith('-'):
+            text += word['text']
+        else:
+            text += ' ' + word['text']
+    return text
+
+
+def _parse_datotid_tail(tail_words):
+    """Parse a datotid row's tail: series values with interleaved pair
+    subtotals, then InnerX, sum, and the Oppr/Mrk/Premie columns.
+
+    Returns (series, ix, sum, oppr, mrk, premie) or None when the
+    arithmetic does not hold — subtotals must equal the pair sum.
+    """
+    tokens = [w['text'] for w in sorted(tail_words, key=lambda w: w['x0'])]
+    numbers = []
+    rest = []
+    for i, token in enumerate(tokens):
+        if token.isdigit():
+            numbers.append(int(token))
+        else:
+            rest = tokens[i:]
+            break
+    premie = None
+    if rest and re.fullmatch(r'\d+\*?', rest[-1]):
+        premie = int(rest[-1].rstrip('*'))
+        rest = rest[:-1]
+    oppr = rest[0] if len(rest) >= 1 else None
+    mrk = rest[1] if len(rest) >= 2 else None
+    if len(rest) > 2:
+        return None
+    if len(numbers) < 5 or (len(numbers) - 2) % 3 != 0:
+        return None
+    body = numbers[:-2]
+    series = []
+    for i in range(0, len(body), 3):
+        a, b, subtotal = body[i:i + 3]
+        if a + b != subtotal:
+            return None
+        series.append([a, None])
+        series.append([b, None])
+    return series, numbers[-2], numbers[-1], oppr, mrk, premie
 
 
 def _champ_entry(entries, navn, klasse, rows_key):
