@@ -179,15 +179,23 @@ var StandplassPersonModalController = (function () {
                 // date-asc is the order this table has always shown. The
                 // base only APPLIES state.sort (a user sort); defaultSort
                 // merely marks the initial aria-sort, so the rows are
-                // passed pre-sorted — every base table's contract.
+                // passed pre-sorted — every base table's contract. The
+                // same defaultSort is also what wireTable's toggle falls
+                // back to while no user sort is active, so a FIRST click
+                // on Dato flips to desc (the table already shows asc)
+                // instead of re-applying asc.
                 var displayRows = modalEntries.slice().sort(function (a, b) {
                     return (a.date || '') < (b.date || '') ? -1 : 1;
                 });
-                host.innerHTML = StandplassDataTable.renderTable('person-results', {
+                var tableOpts = {
                     columns: StandplassPersonModal.resultsTableColumns(),
+                    defaultSort: { key: 'date', dir: 'asc' }
+                };
+                host.innerHTML = StandplassDataTable.renderTable('person-results', {
+                    columns: tableOpts.columns,
                     rows: displayRows,
                     ariaLabel: 'Resultater for ' + modalDisplayName,
-                    defaultSort: { key: 'date', dir: 'asc' },
+                    defaultSort: tableOpts.defaultSort,
                     rowAttrs: function (row) {
                         return 'data-idx="' + rowIdx.get(row) + '" tabindex="-1"'
                             + ' aria-label="Klikk for å markere resultatet i grafen"';
@@ -198,9 +206,7 @@ var StandplassPersonModalController = (function () {
                     if (tbody) { tbody.innerHTML = '<tr><td colspan="7">Ingen resultater.</td></tr>'; }
                     return;
                 }
-                StandplassDataTable.wireTable(modalEl, 'person-results', {
-                    columns: StandplassPersonModal.resultsTableColumns()
-                }, {
+                StandplassDataTable.wireTable(modalEl, 'person-results', tableOpts, {
                     onSortChange: function (sort) {
                         tableSort = sort;
                         renderPersonTable();
@@ -210,7 +216,10 @@ var StandplassPersonModalController = (function () {
                         var btn = modalEl.querySelector('table[data-dt-id="person-results"] .dt-sort-btn[data-dt-sort="' + sort.key + '"]');
                         if (btn) { btn.focus(); }
                     }
-                });
+                // The 5th argument is the state the toggle computes
+                // against — without it every click re-applies the
+                // column's defaultDir and no direction ever flips.
+                }, { sort: tableSort });
             }
 
             function refresh() {
