@@ -228,6 +228,113 @@ def collect_targets(opts, root):
     return targets
 
 
+def _parse_and_write(comp, url, content, etag, path, summary, dry_run):
+    """Parse fetched content, attach person ids, stamp, and write the
+    detail file (or a quarantine marker). Counts into summary."""
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            detail = parse_result(pdf)
+    except UnsupportedFormatError as exc:
+        detail = None
+        reason = f'unsupported family: {exc}'
+    except Exception as exc:  # noqa: BLE001 — parse failures quarantine
+        detail = None
+        reason = f'parse error: {exc}'
+    if detail is None:
+        if not dry_run:
+            write_detail(path, {
+                'generator': 'quarantined',
+                'reason': reason,
+                'parserVersion': PARSER_VERSION,
+                'sourceUrl': url,
+                'sourceHash': source_hash(comp, url),
+            })
+        summary['quarantined'] += 1
+        summary['quarantine_list'].append(
+            (path.split(os.sep)[-3], path.split(os.sep)[-2], comp['id'], reason)
+        )
+        return False
+    attach_person_ids(detail, comp.get('results') or [])
+    matched, total = match_stats(detail)
+    summary['matched'] += matched
+    summary['unmatched'] += total - matched
+    detail['compId'] = comp['id']
+    detail['sourceUrl'] = url
+    detail['sourceHash'] = source_hash(comp, url)
+    if etag:
+        detail['pdfEtag'] = etag
+    detail['parsedAt'] = datetime.now(timezone.utc).isoformat()
+    detail['parserVersion'] = PARSER_VERSION
+    if not dry_run:
+        write_detail(path, detail)
+    summary['parsed'] += 1
+    generator = detail['generator']
+    summary['by_family'][generator] = summary['by_family'].get(generator, 0) + 1
+    return True
+
+
+def fetch_conditional(url, etag):
+    """Conditional GET: returns (status, content, etag or None)."""
+    headers = dict(REQUEST_HEADERS)
+    if etag:
+        headers['If-None-Match'] = etag
+    response = requests.get(url, headers=headers, timeout=60)
+    return response.status_code, response.content, response.headers.get('ETag')
+
+
+_default_fetch_conditional = fetch_conditional
+
+
+def run_sweep(opts, *, fetch_conditional=None, root='.'):
+    """Weekly freshness sweep: conditional-GET every parsed PDF and
+    re-parse the ones organizers replaced behind the same URL.
+
+    Detail files without a stored etag are fetched once and gain one.
+    """
+    if fetch_conditional is None:
+        fetch_conditional = _default_fetch_conditional
+    summary = {
+        'checked': 0,
+        'changed': 0,
+        're-parsed': 0,
+        'parsed': 0,
+        'quarantined': 0,
+        'failed': 0,
+        'matched': 0,
+        'unmatched': 0,
+        'by_family': {},
+        'quarantine_list': [],
+    }
+    fetched_any = False
+    for branch, year, comp in collect_targets(opts, root):
+        url = comp['resultFileUrl']
+        if not url.lower().split('?')[0].endswith('.pdf'):
+            continue
+        path = detail_path(branch, year, comp['id'], root=root)
+        if not os.path.exists(path):
+            continue
+        existing = load_detail(path)
+        if existing.get('generator') == 'quarantined':
+            continue
+        if fetched_any:
+            time.sleep(FETCH_SPACING_SECONDS)
+        fetched_any = True
+        try:
+            status, content, etag = fetch_conditional(url, existing.get('pdfEtag'))
+        except Exception as exc:  # noqa: BLE001 — network errors are run output
+            summary['failed'] += 1
+            print(f'  sweep fetch failed {url}: {exc}')
+            continue
+        summary['checked'] += 1
+        if status != 200:
+            continue
+        summary['changed'] += 1
+        if _parse_and_write(comp, url, content, etag, path, summary,
+                            opts.get('dry_run')):
+            summary['re-parsed'] += 1
+    return summary
+
+
 def run(opts, *, fetch_pdf=None, root='.'):
     """Parse result files for the targeted comps; returns a summary.
 
@@ -246,8 +353,8 @@ def run(opts, *, fetch_pdf=None, root='.'):
         'matched': 0,
         'unmatched': 0,
         'by_family': {},
+        'quarantine_list': [],
     }
-    quarantine_list = []
     fetch_cache = {}
 
     def cached_fetch(url):
@@ -278,45 +385,8 @@ def run(opts, *, fetch_pdf=None, root='.'):
             summary['failed'] += 1
             print(f'  fetch failed {url}: {exc}')
             continue
-        try:
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                detail = parse_result(pdf)
-        except UnsupportedFormatError as exc:
-            detail = None
-            reason = f'unsupported family: {exc}'
-        except Exception as exc:  # noqa: BLE001 — parse failures quarantine
-            detail = None
-            reason = f'parse error: {exc}'
-        if detail is None:
-            if not opts.get('dry_run'):
-                write_detail(path, {
-                    'generator': 'quarantined',
-                    'reason': reason,
-                    'parserVersion': PARSER_VERSION,
-                    'sourceUrl': url,
-                    'sourceHash': source_hash(comp, url),
-                })
-            summary['quarantined'] += 1
-            quarantine_list.append((branch, year, comp['id'], reason))
-            continue
-        attach_person_ids(detail, comp.get('results') or [])
-        matched, total = match_stats(detail)
-        summary['matched'] += matched
-        summary['unmatched'] += total - matched
-        detail['compId'] = comp['id']
-        detail['sourceUrl'] = url
-        detail['sourceHash'] = source_hash(comp, url)
-        if etag:
-            detail['pdfEtag'] = etag
-        detail['parsedAt'] = datetime.now(timezone.utc).isoformat()
-        detail['parserVersion'] = PARSER_VERSION
-        if not opts.get('dry_run'):
-            write_detail(path, detail)
-        summary['parsed'] += 1
-        generator = detail['generator']
-        summary['by_family'][generator] = summary['by_family'].get(generator, 0) + 1
-
-    summary['quarantine_list'] = quarantine_list
+        _parse_and_write(comp, url, content, etag, path, summary,
+                         opts.get('dry_run'))
 
     # Regenerate the slim KM/DM indexes for every year in scope that
     # has detail files; write only when the content actually changes
@@ -347,6 +417,19 @@ def main():
         'branch': os.environ.get('BRANCH') or None,
         'dry_run': os.environ.get('DRY_RUN', 'false').lower() == 'true',
     }
+    if os.environ.get('SWEEP', 'false').lower() == 'true':
+        # the weekly sweep covers every year — replacements can hit
+        # long-settled comps too
+        opts['full_scan'] = True
+        summary = run_sweep(opts)
+        print()
+        print(f"checked: {summary['checked']}, changed: {summary['changed']}, "
+              f"re-parsed: {summary['re-parsed']}, failed: {summary['failed']}")
+        for branch, year, comp_id, reason in summary['quarantine_list']:
+            print(f'  quarantined {branch}/{year}/{comp_id}: {reason}')
+        if summary['failed']:
+            sys.exit(1)
+        return
     summary = run(opts)
 
     matched = summary['matched']

@@ -15,6 +15,7 @@ from parse_result_files import (
     detail_path,
     index_path,
     run,
+    run_sweep,
     should_reparse,
     source_hash,
     write_detail,
@@ -355,6 +356,90 @@ class KmDmIndex(unittest.TestCase):
         self.assertEqual(summary['parsed'], 0)
         self.assertEqual(summary['up_to_date'], 3)
         self.assertEqual(summary['indexes_written'], 0)
+
+
+class EtagSweep(unittest.TestCase):
+    PDF_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/a17c50ce-full.pdf'
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        write_year(self.root, 'felt', '2025', [
+            make_comp('comp-a', self.PDF_URL, BANE_PDF_RESULTS),
+        ])
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run_once(self):
+        fetch, _ = None, None
+
+        def plain_fetch(url):
+            return fixture_bytes('inrx-bane.pdf'), '"e1"'
+
+        return run({'full_scan': True, 'year': '2025', 'branch': 'felt',
+                   'dry_run': False}, fetch_pdf=plain_fetch, root=self.root)
+
+    def _detail(self):
+        with open(detail_path('felt', '2025', 'comp-a', root=self.root),
+                  encoding='utf-8') as f:
+            return json.load(f)
+
+    def test_304_leaves_file_untouched(self):
+        self._run_once()
+        before = self._detail()
+
+        def conditional(url, etag):
+            assert etag == '"e1"'
+            return 304, b'', '"e1"'
+
+        summary = run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                            fetch_conditional=conditional, root=self.root)
+        self.assertEqual(summary['checked'], 1)
+        self.assertEqual(summary['changed'], 0)
+        self.assertEqual(summary['re-parsed'], 0)
+        self.assertEqual(self._detail(), before)
+
+    def test_200_re_parses_and_updates_etag(self):
+        self._run_once()
+
+        def conditional(url, etag):
+            assert etag == '"e1"'
+            return 200, fixture_bytes('inrx-felt.pdf'), '"e2"'
+
+        summary = run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                            fetch_conditional=conditional, root=self.root)
+        self.assertEqual(summary['changed'], 1)
+        self.assertEqual(summary['re-parsed'], 1)
+        detail = self._detail()
+        self.assertEqual(detail['pdfEtag'], '"e2"')
+        names = {r['name'] for o in detail['ovelser'] for c in o['classes']
+                 for r in c['rows']}
+        self.assertIn('Gustav Tisthamar', names)
+
+    def test_missing_etag_treated_as_changed_once(self):
+        self._run_once()
+        path = detail_path('felt', '2025', 'comp-a', root=self.root)
+        detail = json.load(open(path))
+        detail.pop('pdfEtag')
+        json.dump(detail, open(path, 'w'))
+
+        def conditional(url, etag):
+            assert etag is None
+            return 200, fixture_bytes('inrx-bane.pdf'), '"e9"'
+
+        summary = run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                            fetch_conditional=conditional, root=self.root)
+        self.assertEqual(summary['changed'], 1)
+        self.assertEqual(self._detail()['pdfEtag'], '"e9"')
+
+        def now_304(url, etag):
+            assert etag == '"e9"'
+            return 304, b'', '"e9"'
+
+        summary2 = run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                             fetch_conditional=now_304, root=self.root)
+        self.assertEqual(summary2['changed'], 0)
 
 
 if __name__ == '__main__':
