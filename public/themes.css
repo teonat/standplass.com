@@ -24,6 +24,14 @@
     --chart-gold:   #f0c93a;
     --chart-silver: #d1d5db;
     --chart-bronze: #d4915c;
+    --chart-blue-text:   #6ba6ed;
+    --chart-purple-text: #c084fc;
+    --chart-green-text:  #4ade80;
+    --chart-red-text:    #f87171;
+    --chart-orange-text: #fb923c;
+    --chart-gold-text:   #f0c93a;
+    --chart-silver-text: #d1d5db;
+    --chart-bronze-text: #d4915c;
   }
 
   /* Club-scoped dark fallback: the kss preset carries the host's
@@ -67,6 +75,14 @@
   --chart-gold:   #f0c93a;
   --chart-silver: #d1d5db;
   --chart-bronze: #d4915c;
+  --chart-blue-text:   #6ba6ed;
+  --chart-purple-text: #c084fc;
+  --chart-green-text:  #4ade80;
+  --chart-red-text:  #f87171;
+  --chart-orange-text: #fb923c;
+  --chart-gold-text:   #f0c93a;
+  --chart-silver-text: #d1d5db;
+  --chart-bronze-text: #d4915c;
 }
 
 /* Club-scoped dark: the kss preset carries the host's dark palette —

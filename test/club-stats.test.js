@@ -5,6 +5,7 @@ global.StandplassStevnerPage = require('../public/js/stevner-page.js');
 // Cross-module globals the page modules reference at call time (same
 // pattern as every other page test in this repo).
 global.StandplassDataTable = require('../public/js/data-table.js');
+global.StandplassRankingBand = require('../public/js/ranking-band.js');
 
 // ── Test data ──────────────────────────────────────────────────────────
 
@@ -239,14 +240,10 @@ assert.strictEqual(findClub(yoy, 'Klubb A').delta, 3, 'absolute delta (10-7=3), 
 // Empty inputs
 assert.strictEqual(CS.computeYearOverYear(null, null).length, 0, 'null inputs → empty');
 
-// ── formatSignedDelta ──────────────────────────────────────────────────
-
-// Signed display for økning/endring values: positives carry +, zeros
-// and negatives render bare (a negative already carries its own minus).
-assert.strictEqual(CS.formatSignedDelta(12), '+12', 'positive → +12');
-assert.strictEqual(CS.formatSignedDelta(1), '+1', 'positive one → +1');
-assert.strictEqual(CS.formatSignedDelta(0), '0', 'zero → bare 0, no prefix');
-assert.strictEqual(CS.formatSignedDelta(-3), '-3', 'negative keeps its own minus');
+// ── signed deltas ──────────────────────────────────────────────────────
+// formatSignedDelta retired into ranking-band.js's deltaCellHtml
+// (colored cells); its sign convention is pinned in
+// test/ranking-band.test.js.
 assert.strictEqual(CS.computeYearOverYear({}, {}).length, 0, 'empty inputs → empty');
 assert.strictEqual(CS.computeYearOverYear(currentStats, null).length, 3, 'null previous → all current clubs are new');
 

@@ -243,7 +243,8 @@ var StandplassStevnerPage = (function () {
     // this array, and the page-level shared picker lists the same
     // columns (choices apply to every card at once).
     var CARD_COLUMNS = [
-        { key: 'position', label: '#', sortable: true, defaultDir: 'asc', format: num },
+        { key: 'position', label: '#', sortable: true, defaultDir: 'asc', raw: true,
+            cell: function (row) { return StandplassRankingBand.positionCellHtml(row.position); } },
         { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true,
             cell: function (row) { return row.nameHtml; } },
         { key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 700 },

@@ -273,12 +273,16 @@ assert.strictEqual(cols[0].format('2026-05-01T10:00:00Z'), "1. mai '26", 'dates 
 assert.strictEqual(cols[0].format(null), '–', 'missing date renders –');
 assert.strictEqual(cols[1].format(null), '–', 'missing competition renders –');
 assert.strictEqual(cols[2].format(null), '', 'missing discipline renders empty, like before');
-assert.strictEqual(cols[4].format(null), '–', 'missing position renders –');
+assert.strictEqual(cols[4].cell({ position: null }), '–', 'missing position renders –');
+assert.strictEqual(cols[4].cell({ position: 2 }),
+    '<span class="rank-value" style="color:var(--chart-silver-text)">2</span>',
+    'a 2nd place renders silver from the shared module');
+assert.ok(cols[4].raw, 'the Plass cell is raw HTML — it carries the medal color');
 assert.strictEqual(cols[6].cell({ rankingScore: 0.9, class: 'Åpen' }), '0.90', 'rankingScore renders two decimals');
 assert.strictEqual(cols[6].cell({ rankingScore: null, class: 'A' }), '–', 'missing rankingScore renders –');
 assert.ok(cols[6].raw, 'the Ranking cell is raw HTML — it carries the colored value');
 assert.strictEqual(cols[6].cell({ rankingScore: 98, class: 'B' }),
-    '<span class="rank-value" style="color:var(--chart-green)" title="Opprykksgrense nådd">98.00</span>',
+    '<span class="rank-value" style="color:var(--chart-green-text)" title="Opprykksgrense nådd">98.00</span>',
     'a banded ranking renders its color from the shared module');
 
 // Render through the base: the migration contract — date-asc default
@@ -317,8 +321,14 @@ assert.ok(pmTable.indexOf('<tr data-dt-row="1" data-idx="0"') >= 0,
 // cell formats through the base
 assert.ok(pmTable.indexOf('<td>1. mai &#39;26</td>') >= 0, 'short date in the Dato cell');
 assert.ok(pmTable.indexOf('<td>–</td>') >= 0, 'null score renders –');
-assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-orange)" title="2+ klasser under">0.90</span></td>') >= 0,
+assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-orange-text)" title="2+ klasser under">0.90</span></td>') >= 0,
     'rankingScore 0.9 renders 0.90 colored by its band (class A, far below)');
+assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-gold-text)">1</span></td>') >= 0,
+    'a 1st place renders gold in the Plass cell');
+assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-silver-text)">2</span></td>') >= 0,
+    'a 2nd place renders silver in the Plass cell');
+assert.ok(pmTable.indexOf('<td><span class="rank-value" style="color:var(--chart-bronze-text)">3</span></td>') >= 0,
+    'a 3rd place renders bronze in the Plass cell');
 // every header sortable, Dato carrying the initial aria-sort
 assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
 assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');

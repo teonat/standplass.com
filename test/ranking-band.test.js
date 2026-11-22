@@ -37,11 +37,14 @@ assert.strictEqual(RB.bandFor('A', null), null);
 assert.strictEqual(RB.bandFor('A', undefined), null);
 assert.strictEqual(RB.bandFor('A', 0), null, '0 rankingScore means no ranking (chartPoints excludes it too)');
 
-// band payload: the chart's color vars and legend labels
+// band payload: the chart's color vars (dots) and the text-safe twins
 assert.strictEqual(RB.bandFor('B', 98).color, 'var(--chart-green)');
+assert.strictEqual(RB.bandFor('B', 98).text, 'var(--chart-green-text)');
 assert.strictEqual(RB.bandFor('B', 98).label, 'Opprykksgrense nådd');
 assert.strictEqual(RB.bandFor('A', 84).color, 'var(--chart-orange)');
+assert.strictEqual(RB.bandFor('A', 84).text, 'var(--chart-orange-text)');
 assert.strictEqual(RB.bandFor('D', 90).color, 'var(--chart-purple)');
+assert.strictEqual(RB.bandFor('D', 90).text, 'var(--chart-purple-text)');
 
 // BANDS: exactly five, in the chart legend's order, labels verbatim
 assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.id; }),
@@ -49,13 +52,36 @@ assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.id; }),
 assert.deepStrictEqual(RB.BANDS.map(function (b) { return b.label; }),
     ['2+ klasser over', 'Opprykksgrense nådd', 'I klassen', 'Under klassen', '2+ klasser under']);
 
-// ── cellHtml: the shared table cell ──────────────────────────────────
+// ── cellHtml: the shared table cell (text-safe variants) ─────────────
 assert.strictEqual(RB.cellHtml(97.5, 'A'),
-    '<span class="rank-value" style="color:var(--chart-blue)" title="I klassen">97.50</span>');
+    '<span class="rank-value" style="color:var(--chart-blue-text)" title="I klassen">97.50</span>');
 assert.strictEqual(RB.cellHtml(98, 'B'),
-    '<span class="rank-value" style="color:var(--chart-green)" title="Opprykksgrense nådd">98.00</span>');
+    '<span class="rank-value" style="color:var(--chart-green-text)" title="Opprykksgrense nådd">98.00</span>');
 assert.strictEqual(RB.cellHtml(84.99, 'C'),
-    '<span class="rank-value" style="color:var(--chart-blue)" title="I klassen">84.99</span>');
+    '<span class="rank-value" style="color:var(--chart-blue-text)" title="I klassen">84.99</span>');
 assert.strictEqual(RB.cellHtml(90, 'Åpen'), '90.00', 'off-ladder: plain value, no color');
 assert.strictEqual(RB.cellHtml(null, 'A'), '–', 'no ranking renders –');
 assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no color');
+
+// ── positionCellHtml: absolute medals (never relative to the visible set) ──
+assert.strictEqual(RB.positionCellHtml(1),
+    '<span class="rank-value" style="color:var(--chart-gold-text)">1</span>');
+assert.strictEqual(RB.positionCellHtml(2),
+    '<span class="rank-value" style="color:var(--chart-silver-text)">2</span>');
+assert.strictEqual(RB.positionCellHtml(3),
+    '<span class="rank-value" style="color:var(--chart-bronze-text)">3</span>');
+assert.strictEqual(RB.positionCellHtml(4), '4', 'below the podium: plain');
+assert.strictEqual(RB.positionCellHtml('3'),
+    '<span class="rank-value" style="color:var(--chart-bronze-text)">3</span>', 'numeric strings still medal');
+assert.strictEqual(RB.positionCellHtml(null), '–');
+assert.strictEqual(RB.positionCellHtml('x'), '–', 'non-numeric renders – (num() convention)');
+
+// ── deltaCellHtml: signed deltas, sign is the signal ──────────────────
+assert.strictEqual(RB.deltaCellHtml(12),
+    '<span class="rank-value" style="color:var(--chart-green-text)">+12</span>');
+assert.strictEqual(RB.deltaCellHtml(1),
+    '<span class="rank-value" style="color:var(--chart-green-text)">+1</span>');
+assert.strictEqual(RB.deltaCellHtml(-3),
+    '<span class="rank-value" style="color:var(--chart-red-text)">-3</span>');
+assert.strictEqual(RB.deltaCellHtml(0), '0', 'zero → bare 0, no prefix, no color');
+assert.strictEqual(RB.deltaCellHtml(null), '–');

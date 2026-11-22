@@ -1,13 +1,14 @@
 // public/js/ranking-band.js
 //
-// Shared ranking-ladder logic: the class-relative performance bands
-// behind the person modal's chart dots, its legend, and the Ranking
-// cells in the felt/bane result tables and the modal's results table.
-// One source so the three presentations can never drift.
+// Shared result-value coloring: the class-relative ranking bands behind
+// the person modal's chart dots, its legend, and the Ranking cells in
+// the felt/bane result tables and the modal's results table — plus the
+// placement-medal cells (Plass columns) and the signed-delta cells
+// (klubbstatistikk). One source so the presentations can never drift.
 //
-// The model (owner-confirmed): klasseførende stevner give each result
-// a rankingssum (percentage) placing the performance on the ladder
-// A >= 97, B >= 85, C/D zone < 85. D is the entry class and
+// The ranking model (owner-confirmed): klasseførende stevner give each
+// result a rankingssum (percentage) placing the performance on the
+// ladder A >= 97, B >= 85, C/D zone < 85. D is the entry class and
 // auto-converts to C after a year, so C and D are ONE zone: a C
 // shooter scoring low is still in-zone (never a below-band), and a D
 // shooter at C level is in-class (no promotion band below B). The
@@ -21,7 +22,12 @@
 // rankingScore null/0 = no ranking (the chart already excludes 0 via
 // chartPoints). Off-ladder classes (age/gender, anything not A-D)
 // carry no band; consumers decide their own neutral presentation
-// (the chart paints its fallback blue, table cells show no dot).
+// (the chart paints its fallback blue, table cells show no color).
+//
+// Colors: each band/medal carries BOTH palettes — `color` (chart, for
+// dots via person-modal's dotColor) and `text` (the --chart-*-text
+// variants, tuned to pass WCAG text contrast on cards; see
+// test/chart-text-contrast.test.js).
 //
 // File pattern: mode-resolve.js — a tiny pure global-IIFE with a
 // Node require guard, no dependencies, loaded before its consumers.
@@ -30,11 +36,11 @@ var StandplassRankingBand = (function () {
 
     // Legend order. Labels are the chart legend's strings verbatim.
     var BANDS = [
-        { id: 'twoAbove',  color: 'var(--chart-purple)', label: '2+ klasser over' },
-        { id: 'promotion', color: 'var(--chart-green)',  label: 'Opprykksgrense nådd' },
-        { id: 'inClass',   color: 'var(--chart-blue)',   label: 'I klassen' },
-        { id: 'below',     color: 'var(--chart-red)',    label: 'Under klassen' },
-        { id: 'twoBelow',  color: 'var(--chart-orange)', label: '2+ klasser under' }
+        { id: 'twoAbove',  color: 'var(--chart-purple)',     text: 'var(--chart-purple-text)',     label: '2+ klasser over' },
+        { id: 'promotion', color: 'var(--chart-green)',      text: 'var(--chart-green-text)',      label: 'Opprykksgrense nådd' },
+        { id: 'inClass',   color: 'var(--chart-blue)',       text: 'var(--chart-blue-text)',       label: 'I klassen' },
+        { id: 'below',     color: 'var(--chart-red)',        text: 'var(--chart-red-text)',        label: 'Under klassen' },
+        { id: 'twoBelow',  color: 'var(--chart-orange)',     text: 'var(--chart-orange-text)',     label: '2+ klasser under' }
     ];
     var BY_ID = {};
     BANDS.forEach(function (b) { BY_ID[b.id] = b; });
@@ -53,20 +59,53 @@ var StandplassRankingBand = (function () {
 
     // The shared table cell for a Ranking column (raw HTML — consumers
     // must set the column's raw flag): the value itself carries the
-    // band color, with the band label as its title so the color is
-    // never the only signal. No escaping needed: the text is
-    // Number.toFixed output (digits, dot, minus only) and the color and
-    // label are this module's own static strings.
+    // band's TEXT color (contrast-safe variant), with the band label as
+    // its title so the color is never the only signal. No escaping
+    // needed: the text is Number.toFixed output (digits, dot, minus
+    // only) and the color and label are this module's own static
+    // strings.
     function cellHtml(rankingScore, cls) {
         if (rankingScore == null) { return '–'; }
         var text = Number(rankingScore).toFixed(2);
         var band = bandFor(cls, rankingScore);
         if (!band) { return text; }
-        return '<span class="rank-value" style="color:' + band.color
+        return '<span class="rank-value" style="color:' + band.text
             + '" title="' + band.label + '">' + text + '</span>';
     }
 
-    return { bandFor: bandFor, cellHtml: cellHtml, BANDS: BANDS };
+    // The shared table cell for a Plass/# column (raw HTML — set the
+    // column's raw flag). Medals are ABSOLUTE: the color keys on the
+    // row's position field (1/2/3), never on the visible set — a
+    // filter leaving only a 3rd place visible still shows bronze, the
+    // same as the chart's position dots. No title attribute: the
+    // number itself is the signal, color is reinforcement.
+    function positionCellHtml(position) {
+        var n = Number(position);
+        if (position == null || isNaN(n)) { return '–'; }
+        var color = n === 1 ? 'var(--chart-gold-text)'
+            : n === 2 ? 'var(--chart-silver-text)'
+            : n === 3 ? 'var(--chart-bronze-text)' : null;
+        if (!color) { return String(position); }
+        return '<span class="rank-value" style="color:' + color + '">' + String(position) + '</span>';
+    }
+
+    // The shared table cell for a signed-delta column (raw HTML — set
+    // the column's raw flag): positive green, negative red, zero bare
+    // and plain. The explicit sign is the accessibility signal; color
+    // is reinforcement (colorblind-safe). Same convention as the old
+    // formatSignedDelta: positives carry +, zeros render bare,
+    // negatives keep their own minus.
+    function deltaCellHtml(v) {
+        var n = Number(v);
+        if (v == null || isNaN(n)) { return v == null ? '–' : String(v); }
+        var text = n > 0 ? '+' + n : String(n);
+        if (n > 0) { return '<span class="rank-value" style="color:var(--chart-green-text)">' + text + '</span>'; }
+        if (n < 0) { return '<span class="rank-value" style="color:var(--chart-red-text)">' + text + '</span>'; }
+        return text;
+    }
+
+    return { bandFor: bandFor, cellHtml: cellHtml, positionCellHtml: positionCellHtml,
+             deltaCellHtml: deltaCellHtml, BANDS: BANDS };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
