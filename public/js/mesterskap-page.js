@@ -556,6 +556,7 @@ var StandplassMesterskapPage = (function () {
             var filtered = StandplassMestereData.filterPodiumRows(allRows, {
                 ovelse: filters.ovelse,
                 klasse: filters.klasse,
+                medal: filters.medal,
                 region: rf.region,
                 distrikt: rf.distrikt,
                 klubb: filters.klubb,
