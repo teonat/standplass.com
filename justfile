@@ -46,6 +46,10 @@ parse-details-year year:
 parse-details-sweep:
     SWEEP=true python3 .github/scripts/parse_result_files.py
 
+# One-off: patch regionOrganizationId into existing year JSONs (run once, after the full scan finishes)
+backfill-comp-regions:
+    python3 .github/scripts/backfill_comp_regions.py
+
 # Local dev server for public/, with the same /felt -> /felt.html rewrite Cloudflare does in production
 start:
     python3 dev-server.py
