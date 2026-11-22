@@ -1,0 +1,78 @@
+{
+  "0808e8dc-6a2b-41a0-c2bc-08d859126e0a": {
+    "name": "Sør-Trøndelag Skytterkrets",
+    "short": "Sør-Trøndelag"
+  },
+  "3b444426-1ea5-4c3c-c2af-08d859126e0a": {
+    "name": "Rogaland Skytterkrets",
+    "short": "Rogaland"
+  },
+  "3ed4e203-0cca-435e-c2c0-08d859126e0a": {
+    "name": "Vestfold Skytterkrets",
+    "short": "Vestfold"
+  },
+  "52f2d358-1d50-4d41-c2ba-08d859126e0a": {
+    "name": "Oslo Skytterkrets",
+    "short": "Oslo"
+  },
+  "67706903-3b5b-4d47-c2bb-08d859126e0a": {
+    "name": "Sogn og Fjordane Skyttarkrins",
+    "short": "Sogn og Fjordane"
+  },
+  "71d64744-41e2-4a12-c2c1-08d859126e0a": {
+    "name": "Østfold Skytterkrets",
+    "short": "Østfold"
+  },
+  "762d8c65-f58f-4625-c2b2-08d859126e0a": {
+    "name": "Buskerud Skytterkrets",
+    "short": "Buskerud"
+  },
+  "7f5f0897-418d-4ba3-c2b1-08d859126e0a": {
+    "name": "Østre Agder Skytterkrets",
+    "short": "Østre Agder"
+  },
+  "81e0c476-8b86-4793-c2b8-08d859126e0a": {
+    "name": "Nordland Skytterkrets",
+    "short": "Nordland"
+  },
+  "91edcc36-bdd6-4a06-c2bf-08d859126e0a": {
+    "name": "Vest-Agder Skytterkrets",
+    "short": "Vest-Agder"
+  },
+  "9ae2455a-996f-48fb-c2b9-08d859126e0a": {
+    "name": "Oppland Skytterkrets",
+    "short": "Oppland"
+  },
+  "ab6b44e9-02b2-4bae-c2b7-08d859126e0a": {
+    "name": "Nord-Trøndelag skytterkrets",
+    "short": "Nord-Trøndelag"
+  },
+  "b71cba91-9898-470f-c2b4-08d859126e0a": {
+    "name": "Hedmark Skytterkrets",
+    "short": "Hedmark"
+  },
+  "bdc3cc88-52bf-41e4-c2bd-08d859126e0a": {
+    "name": "Telemark Skytterkrets",
+    "short": "Telemark"
+  },
+  "c8c99a27-51f1-4340-c2b5-08d859126e0a": {
+    "name": "Hordaland Skytterkrets",
+    "short": "Hordaland"
+  },
+  "cc690c60-a753-447f-c2b6-08d859126e0a": {
+    "name": "Møre og Romsdal Skytterkrets",
+    "short": "Møre og Romsdal"
+  },
+  "dd103fee-d7ed-4751-c2b3-08d859126e0a": {
+    "name": "Finnmark Skytterkrets",
+    "short": "Finnmark"
+  },
+  "ee66c84b-4960-46b1-c2be-08d859126e0a": {
+    "name": "Troms Skytterkrets av Norges Sportsskytterforbund",
+    "short": "Troms"
+  },
+  "f3c073e8-0b7f-4de4-c2b0-08d859126e0a": {
+    "name": "Akershus Skytterkrets",
+    "short": "Akershus"
+  }
+}

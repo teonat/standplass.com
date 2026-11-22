@@ -50,6 +50,10 @@ parse-details-sweep:
 backfill-comp-regions:
     python3 .github/scripts/backfill_comp_regions.py
 
+# Refresh the committed krets reference data from the NSF API (rarely needed)
+update-kretser:
+    python3 .github/scripts/fetch_kretser.py
+
 # Local dev server for public/, with the same /felt -> /felt.html rewrite Cloudflare does in production
 start:
     python3 dev-server.py
