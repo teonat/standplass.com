@@ -9,7 +9,8 @@ import unittest
 
 import pdfplumber
 
-from result_file_parse import detect_family
+from result_file_parse import detect_family, parse_inrx, parse_result
+from result_file_parse import UnsupportedFormatError
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures')
 
@@ -47,6 +48,104 @@ class DetectFamily(unittest.TestCase):
 
     def test_text_without_markers_is_unknown(self):
         self.assertEqual(detect_family('arbitrary text with no markers'), 'unknown')
+
+
+def find_row(detail, ovelse, klasse, name):
+    for o in detail['ovelser']:
+        if o['navn'] == ovelse:
+            for c in o['classes']:
+                if c['klasse'] == klasse:
+                    for r in c['rows']:
+                        if r['name'] == name:
+                            return r
+    raise AssertionError(f'row not found: {ovelse} / {klasse} / {name}')
+
+
+class ParseInrXFeltOpenSections(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-felt.pdf'))
+
+    def test_felt_fin_klasse_a_row_1(self):
+        row = find_row(self.detail, 'Felt Fin', 'A', 'Gustav Tisthamar')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Bergen Pistolklubb')
+        self.assertEqual(row['series'], [
+            [9, 6], [10, 6], [10, 6], [11, 5], [10, 2],
+            [9, 3], [12, 6], [11, 4], [12, 2], [10, 3],
+        ])
+        self.assertEqual(row['ix'], 43)
+        self.assertEqual(row['sum'], 104)
+        self.assertEqual(row['oppr'], 'A')
+
+    def test_dnf_row_keeps_partial_series_and_has_no_pos(self):
+        row = find_row(self.detail, 'Felt Fin', 'A', 'Jarle Kvalvik')
+        self.assertEqual(row['status'], 'DNF')
+        self.assertNotIn('pos', row)
+        self.assertEqual(row['series'][0], [9, 6])
+        self.assertEqual(row['series'][5], [0, 0])
+        self.assertEqual(row['club'], 'Sartor Sportsskytterlag')
+
+    def test_dns_row(self):
+        row = find_row(self.detail, 'Felt Fin', 'B', 'Tor Kristian Holst')
+        self.assertEqual(row['status'], 'DNS')
+        self.assertNotIn('pos', row)
+
+    def test_max_felt_points(self):
+        self.assertEqual(
+            self.detail['maxFeltPoints'], {'group1': 107, 'group2': 94}
+        )
+
+    def test_generator_stamp(self):
+        self.assertEqual(self.detail['generator'], 'inrX 1.9.1.0')
+
+
+class ParseInrXBaneOpenSections(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-bane.pdf'))
+
+    def test_t96_fin_klasse_a_row_1(self):
+        row = find_row(self.detail, 'T96 Fin', 'A', 'Lars Erik Fjelldal')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Stavanger Pistolklubb')
+        self.assertEqual(len(row['series']), 16)
+        self.assertEqual(row['series'][0], [16, 5])
+        self.assertEqual(row['ix'], 51)
+        self.assertEqual(row['sum'], 213)
+        self.assertEqual(row['premie'], 125)
+
+    def test_dns_row_all_zero_series(self):
+        row = find_row(self.detail, 'T96 Fin', 'A', 'Mirvet Pupovic')
+        self.assertEqual(row['status'], 'DNS')
+        self.assertNotIn('pos', row)
+        self.assertEqual(row['series'], [[0, 0]] * 16)
+        self.assertEqual(row['sum'], 0)
+        self.assertNotIn('premie', row)
+
+    def test_multiple_ovelser(self):
+        navn = {o['navn'] for o in self.detail['ovelser']}
+        self.assertTrue({'T96 Fin', 'T96 Militær', 'T96 Sp-Pistol'} <= navn)
+
+
+class ParseResultDispatch(unittest.TestCase):
+    def test_dispatches_inrx_fixture(self):
+        path = os.path.join(FIXTURES, 'inrx-bane.pdf')
+        with pdfplumber.open(path) as pdf:
+            detail = parse_result(pdf)
+        self.assertTrue(detail['generator'].startswith('inrX'))
+        self.assertTrue(detail['ovelser'])
+
+    def test_unknown_family_raises(self):
+        class _Page:
+            def extract_text(self):
+                return 'no family markers in here'
+
+        class _Pdf:
+            pages = [_Page()]
+
+        with self.assertRaises(UnsupportedFormatError):
+            parse_result(_Pdf())
 
 
 if __name__ == '__main__':
