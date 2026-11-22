@@ -180,4 +180,85 @@ clubRows.forEach(function (r) {
         'team podium names never count as club medals: ' + r.club);
 });
 
+// ── programRank ────────────────────────────────────────────────────────
+// Specificity-ordered keyword scan: 'Sp-Revolver' contains 'revolver' but
+// is a spesial øvelse, so the sp- keywords are checked first.
+
+assert.strictEqual(MD.programRank('Felt Fin'), 1);
+assert.strictEqual(MD.programRank('Felt Grov'), 2);
+assert.strictEqual(MD.programRank('Felt Revolver'), 3);
+assert.strictEqual(MD.programRank('Felt Militær Rødpunkt'), 4);
+assert.strictEqual(MD.programRank('Felt Sp-Pistol'), 5);
+assert.strictEqual(MD.programRank('Felt Sp-Revolver'), 5);
+assert.strictEqual(MD.programRank('Mix-lag: Felt Sp-Revolver'), 5);
+assert.strictEqual(MD.programRank('Felt Spesialpistol'), 5);
+assert.strictEqual(MD.programRank('Felt Magnum-1'), 6);
+assert.strictEqual(MD.programRank('Felt Magnum-2'), 6);
+assert.strictEqual(MD.programRank('Felt Ungdom'), 90,
+    'øvelser outside the known families rank after them');
+
+// ── podiumRows ─────────────────────────────────────────────────────────
+
+var kmRows = MD.podiumRows(feltIndex, 'km');
+assert.strictEqual(kmRows.length, 6,
+    'c1 km (3) + c2 km (1) + c3 kmLag (1) + c4 km (1)');
+var fin = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin'; });
+assert.strictEqual(fin.length, 4);
+assert.ok(fin[0].klasse === 'M' && fin[0].isTeam,
+    'klasse M sorts before U, so the lag row leads Felt Fin');
+var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
+assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
+assert.strictEqual(teamRow.personId, null);
+assert.strictEqual(teamRow.club, null);
+assert.strictEqual(teamRow.medalRank, 2, 'Sølv');
+assert.ok(kmRows.slice(0, 4).every(function (r) { return r.ovelse === 'Felt Fin'; }),
+    'the four Felt Fin rows (rank 1) sort before Felt Grov (rank 2)');
+assert.ok(kmRows.slice(4).every(function (r) { return r.ovelse === 'Felt Grov'; }));
+assert.strictEqual(kmRows[0].region, 'Buskerud');
+assert.strictEqual(kmRows[0].date, '2025-06-11');
+assert.strictEqual(kmRows[0].organizer, 'Arrangør c3', 'kmRows[0] is c3\u2019s lag row');
+var uRows = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin' && !r.isTeam; });
+assert.deepStrictEqual(uRows.map(function (r) { return r.medal; }),
+    ['Gull', 'Sølv', 'Bronse'], 'medalRank tiebreak within øvelse+klasse');
+assert.strictEqual(uRows[2].club, null, 'club-less rows keep null club (Carl)');
+var grov = kmRows.filter(function (r) { return r.ovelse === 'Felt Grov'; });
+assert.strictEqual(grov.filter(function (r) { return r.klasse == null; }).length, 2,
+    'klasse-null rows sink below the classed ones');
+var nmRows = MD.podiumRows(feltIndex, 'nm');
+assert.strictEqual(nmRows.length, 2, 'c7 nm (1) + nmLag (1); dm/km sections ignored');
+assert.ok(nmRows.some(function (r) { return r.isTeam; }));
+var dmRows = MD.podiumRows(feltIndex, 'dm');
+assert.strictEqual(dmRows.length, 3, 'c5 dm (1) + dmLag (1) + c6 dm (1)');
+
+// ── filterPodiumRows ───────────────────────────────────────────────────
+
+var NOF = { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' };
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: ['Felt Grov'], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 2);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: ['U'], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 3);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: ['Buskerud'], distrikt: [], klubb: '', navn: '', type: '' }).length, 4);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: ['Østlandet Sør'], klubb: '', navn: '', type: '' }).length, 3,
+    'distrikt filter applies to row.distrikt (c3\u2019s lag row has none)');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: 'Bodø PK', navn: '', type: '' }).length, 1);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: 'ANNE', type: '' }).length, 2,
+    'navn is a case-insensitive substring match');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: 'hurum', type: '' }).length, 1,
+    'navn matches team names too');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: 'lag' }).length, 1);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: 'individuelt' }).length, 5);
+assert.deepStrictEqual(MD.filterPodiumRows(kmRows, { ovelse: ['Finnes Ikke'], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' }), [],
+    'stale filter values filter to nothing (a visible zero, never a crash)');
+assert.strictEqual(MD.filterPodiumRows(kmRows, NOF).length, 6,
+    'empty filters are no-ops');
+assert.strictEqual(MD.filterPodiumRows(kmRows, null).length, 6,
+    'a null filters object is an empty filter');
+
+// ── statsFor ────────────────────────────────────────────────────────────
+
+assert.deepStrictEqual(MD.statsFor(kmRows, 'km'),
+    { medaljer: 6, ovselser: 2, regioner: 2, klubber: 3 },
+    'regioner counts Buskerud+Nordland, klubber KSS+Brumunddal+Bodø');
+assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, null, 'nm has no region stat');
+assert.deepStrictEqual(MD.statsFor(nmRows, 'nm'),
+    { medaljer: 2, ovselser: 2, regioner: null, klubber: 1 });
+
 console.log('mestere-data.test.js: all assertions passed');
