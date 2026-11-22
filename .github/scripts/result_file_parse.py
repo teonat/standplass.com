@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 7
+PARSER_VERSION = 8
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -32,7 +32,7 @@ _MEDALS = ('Gull', 'Sølv', 'Bronse')
 _CLUB_ENDINGS = (
     'klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket', 'skyttere',
 )
-_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'gsl'}
+_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'ssl', 'gsl'}
 
 
 class UnsupportedFormatError(Exception):
@@ -53,6 +53,8 @@ def detect_family(text):
         return 'leon'
     if 'Stevnet er approbert' in text:
         return 't96'
+    if 'MLRes' in text or 'www.megalink.no' in text:
+        return 'megalink'
     if 'Dato/tid:' in text and (
         'Stevnenummer' in text or 'file:///C:/resultat' in text
     ):
@@ -81,6 +83,8 @@ def parse_result(pdf):
         return parse_leon(text)
     if family == 't96':
         return parse_t96(text)
+    if family == 'megalink':
+        return parse_megalink(text)
     if family == 'plain-NO':
         return parse_plain_no(text)
     if family == 'datotid':
@@ -837,6 +841,97 @@ def _parse_t96_row(line):
     row['sum'] = total
     row['premie'] = premie
     return row
+
+
+_MEGA_PERSON = re.compile(
+    r'^(\d+) (\d+) (.+) ([A-Z]\d*) (\d+s) (\d+) (\d+) (\d+)$'
+)
+_MEGA_GROUP = re.compile(r'^(\d+s) (\d+) (\d+) (\d+)$')
+_MEGA_END = re.compile(r'^(\d+s) (\d+) (\d+) (\d+) (\d+)- (\d+)x$')
+_MEGA_END_FUSED = re.compile(r'^(\d+s) (\d+) (\d+) (\d+) (\d+)-(\d+)x$')
+
+
+def parse_megalink(text):
+    """Parse the Megalink RESULTATER shape ('MLRes - www.megalink.no').
+
+    Persons print as a group of lines: the first carries placement,
+    start number, SURNAME-first name, club, class and the first timed
+    series group ('10s v1 v2 subtotal'); the last carries the total
+    ('552- 8x' — total, tiebreak dash, inner count; a two-digit count
+    fuses with the dash, '557-11x'). The championship
+    'Resultatliste med premiering' shape is a different grammar and
+    raises, so it quarantines with an explicit reason.
+    """
+    if 'INDIVIDUELL' not in text:
+        raise UnsupportedFormatError(
+            'megalink shape without an INDIVIDUELL resultater table '
+            '(championship premiering shape not supported)'
+        )
+    detail = {'generator': 'megalink'}
+    classes = {}
+    current = None
+
+    def finalize(person, total, ix):
+        groups = person['groups']
+        for v1, v2, sub in groups:
+            if v1 + v2 != sub:
+                return
+        if sum(sub for _, _, sub in groups) != total:
+            return
+        region = person['region']
+        surname = region[0].capitalize()
+        given, club = _split_name_club(region[1:])
+        if not given:
+            return
+        row = {'pos': person['pos'], 'name': f'{given} {surname}'}
+        if club:
+            row['club'] = club
+        row['series'] = [
+            [v, None] for v1, v2, _ in groups for v in (v1, v2)
+        ]
+        row['ix'] = ix
+        row['sum'] = total
+        bucket = classes.setdefault(person['klasse'], [])
+        bucket.append(row)
+
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        person = _MEGA_PERSON.match(line)
+        if person:
+            current = {
+                'pos': int(person.group(1)),
+                'region': person.group(3).split(),
+                'klasse': person.group(4),
+                'groups': [(
+                    int(person.group(6)), int(person.group(7)),
+                    int(person.group(8)),
+                )],
+            }
+            continue
+        if current is None:
+            continue
+        end = _MEGA_END.match(line) or _MEGA_END_FUSED.match(line)
+        if end:
+            current['groups'].append((
+                int(end.group(2)), int(end.group(3)), int(end.group(4)),
+            ))
+            finalize(current, int(end.group(5)), int(end.group(6)))
+            current = None
+            continue
+        group = _MEGA_GROUP.match(line)
+        if group:
+            current['groups'].append((
+                int(group.group(2)), int(group.group(3)),
+                int(group.group(4)),
+            ))
+    detail['ovelser'] = [
+        {'navn': 'Individuell',
+         'classes': [{'klasse': k, 'rows': rows}
+                     for k, rows in classes.items()]}
+    ] if classes else []
+    return detail
 
 
 def _champ_entry(entries, navn, klasse, rows_key):

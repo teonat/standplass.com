@@ -19,6 +19,7 @@ from result_file_parse import (
     parse_datotid,
     parse_inrx,
     parse_leon,
+    parse_megalink,
     parse_plain_no,
     parse_result,
     parse_t96,
@@ -64,6 +65,15 @@ class DetectFamily(unittest.TestCase):
             detect_family(fixture_text('t96-open.pdf')), 't96')
         self.assertEqual(
             detect_family(fixture_text('t96-km.pdf')), 't96')
+
+    def test_megalink_fixtures(self):
+        self.assertEqual(
+            detect_family(fixture_text('megalink-resultater.pdf')),
+            'megalink')
+        self.assertEqual(
+            detect_family(fixture_text('megalink-fused.pdf')), 'megalink')
+        self.assertEqual(
+            detect_family(fixture_text('megalink-nm.pdf')), 'megalink')
 
     def test_inrx_felt_fixture(self):
         self.assertEqual(detect_family(fixture_text('inrx-felt.pdf')), 'inrX')
@@ -813,9 +823,112 @@ class ParseT96Dispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseMegalink(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_megalink(fixture_text('megalink-resultater.pdf'))
+
+    def test_generator_and_ovelse(self):
+        self.assertEqual(self.detail['generator'], 'megalink')
+        self.assertEqual([o['navn'] for o in self.detail['ovelser']],
+                         ['Individuell'])
+
+    def test_row_pins(self):
+        row = find_row(self.detail, 'Individuell', 'C', 'Sigurd Nes')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Åsane Pk')
+        self.assertEqual(
+            row['series'],
+            [[96, None], [91, None], [91, None],
+             [93, None], [91, None], [90, None]],
+        )
+        self.assertEqual(row['ix'], 8)
+        self.assertEqual(row['sum'], 552)
+
+    def test_surname_first_names_are_flipped(self):
+        row = find_row(self.detail, 'Individuell', 'B',
+                       'Frank Henning Lillebuen')
+        self.assertEqual(row['club'], 'Bergen Pk')
+        self.assertEqual(row['sum'], 540)
+        self.assertEqual(row['ix'], 7)
+
+    def test_ssl_club_splits(self):
+        row = find_row(self.detail, 'Individuell', 'B', 'Arild Hårklau')
+        self.assertEqual(row['club'], 'Sartor SSL')
+
+    def test_group_arithmetic_holds(self):
+        for cls in self.detail['ovelser'][0]['classes']:
+            for row in cls['rows']:
+                self.assertEqual(
+                    sum(cell[0] for cell in row['series']),
+                    row['sum'], row['name'])
+
+    def test_row_count(self):
+        rows = [r for c in self.detail['ovelser'][0]['classes']
+                for r in c['rows']]
+        self.assertEqual(len(rows), 12)
+
+    def test_sums_equal_api_scores(self):
+        """sum = the Totalt column, API-verified for every matched row.
+        The 2 unmatched rows are missing-middle-name variants ('Tor
+        Ensrud' vs API 'Tor Magne Ensrud', 'Torgeir Ringstad' vs API
+        'Torgeir Blaker Ringstad')."""
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2021.json')))
+        comp = next(c for c in year['competitions']
+                    if 'ace609df' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        by_pid = {r['personId']: r for r in comp['results']}
+        checked = 0
+        for cls in self.detail['ovelser'][0]['classes']:
+            for row in cls['rows']:
+                if row.get('personId'):
+                    self.assertEqual(
+                        row['sum'], by_pid[row['personId']]['score'],
+                        row['name'])
+                    checked += 1
+        self.assertGreaterEqual(checked, 10)
+
+
+class ParseMegalinkFused(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_megalink(fixture_text('megalink-fused.pdf'))
+
+    def test_fused_total_and_ix_token(self):
+        # a two-digit x-count fuses with the total: '557-11x'
+        row = find_row(self.detail, 'Individuell', 'B',
+                       'Frank Henning Lillebuen')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['sum'], 557)
+        self.assertEqual(row['ix'], 11)
+
+
+class ParseMegalinkNmShape(unittest.TestCase):
+    def test_championship_shape_raises_unsupported(self):
+        with self.assertRaises(UnsupportedFormatError):
+            parse_megalink(fixture_text('megalink-nm.pdf'))
+
+
+class ParseMegalinkDispatch(unittest.TestCase):
+    def test_parse_result_routes_megalink(self):
+        with pdfplumber.open(os.path.join(
+                FIXTURES, 'megalink-resultater.pdf')) as pdf:
+            detail = parse_result(pdf)
+        self.assertEqual(detail['generator'], 'megalink')
+        self.assertTrue(detail['ovelser'])
+
+    def test_parse_result_quarantines_nm_shape(self):
+        with pdfplumber.open(os.path.join(FIXTURES, 'megalink-nm.pdf')) as pdf:
+            with self.assertRaises(UnsupportedFormatError):
+                parse_result(pdf)
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_7(self):
-        self.assertEqual(PARSER_VERSION, 7)
+    def test_parser_version_is_8(self):
+        self.assertEqual(PARSER_VERSION, 8)
 
 
 class ParseResultDispatch(unittest.TestCase):
