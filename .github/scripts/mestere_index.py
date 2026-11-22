@@ -108,14 +108,25 @@ def _team_podium(rows):
             elif r.get('pos') in POS_TO_MEDAL:
                 medal, team = POS_TO_MEDAL[r['pos']], name
         if medal and team:
-            podium.append({'medal': medal, 'team': team})
+            entry = {'medal': medal, 'team': team}
+            if r.get('sum') is not None:
+                entry['sum'] = r['sum']
+            podium.append(entry)
     return podium
 
 
 def _team_champions(teams):
-    """inrX lag teams already carry {medal, team} from parse time."""
-    return [{'medal': t['medal'], 'team': t['team']}
-            for t in teams if t.get('medal') in MEDALS]
+    """inrX lag teams already carry {medal, team} from parse time; the
+    team's own sum flows through when the PDF printed one."""
+    out = []
+    for t in teams:
+        if t.get('medal') not in MEDALS:
+            continue
+        entry = {'medal': t['medal'], 'team': t['team']}
+        if t.get('sum') is not None:
+            entry['sum'] = t['sum']
+        out.append(entry)
+    return out
 
 
 def _sections_from_classes(ovelse_name, classes, podium_fn, region=None):

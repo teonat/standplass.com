@@ -115,8 +115,10 @@ class NmClassification(MestereIndexBase):
         self.assertEqual(lag['ovelse'], 'Felt Grov')
         self.assertEqual(lag['klasse'], 'Å')
         self.assertEqual(lag['podium'],
-                         [{'medal': 'Gull', 'team': 'Fredrikstad SS'},
-                          {'medal': 'Sølv', 'team': 'Bærum PK'}])
+                         [{'medal': 'Gull', 'team': 'Fredrikstad SS',
+                           'sum': 300},
+                          {'medal': 'Sølv', 'team': 'Bærum PK',
+                           'sum': 298}])
 
 
 class KmDmClassification(MestereIndexBase):
@@ -155,9 +157,9 @@ class KmDmClassification(MestereIndexBase):
         self.assertEqual(section['ovelse'], 'Felt Fin')
         self.assertEqual(section['klasse'], 'Mix')
         self.assertEqual(section['podium'], [
-            {'medal': 'Gull', 'team': 'SSSK10'},
-            {'medal': 'Sølv', 'team': 'Oppdal8'},
-            {'medal': 'Bronse', 'team': 'TPK3'},
+            {'medal': 'Gull', 'team': 'SSSK10', 'sum': 205},
+            {'medal': 'Sølv', 'team': 'Oppdal8', 'sum': 200},
+            {'medal': 'Bronse', 'team': 'TPK3', 'sum': 190},
         ])
 
     def test_datotid_fused_navn_km_section(self):
@@ -281,7 +283,7 @@ class KmDmClassification(MestereIndexBase):
                 ],
                 'lag': [
                     {'navn': 'KM Lag: Hurtig Fin', 'klasse': 'Å', 'teams': [
-                        {'medal': 'Gull', 'team': 'GPK 1'},
+                        {'medal': 'Gull', 'team': 'GPK 1', 'sum': 287},
                     ]},
                 ],
             },
@@ -294,7 +296,7 @@ class KmDmClassification(MestereIndexBase):
                          {'medal': 'Gull', 'name': 'X', 'personId': 'p1',
                           'club': 'C', 'sum': 285})
         self.assertEqual(entry['kmLag'][0]['podium'],
-                         [{'medal': 'Gull', 'team': 'GPK 1'}])
+                         [{'medal': 'Gull', 'team': 'GPK 1', 'sum': 287}])
 
 
 class RegionsAndClubs(MestereIndexBase):

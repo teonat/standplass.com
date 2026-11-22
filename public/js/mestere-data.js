@@ -172,7 +172,11 @@ var StandplassMestereData = (function () {
     var UNKNOWN_RANK = 90;
 
     function programRank(ovelse) {
-        var name = String(ovelse == null ? '' : ovelse).toLowerCase();
+        // A standalone 'sp' token ('Hurtig Sp Revolver' — bane prints it
+        // without the hyphen) normalizes to 'sp-' so the same keyword
+        // catches it.
+        var name = String(ovelse == null ? '' : ovelse).toLowerCase()
+            .replace(/\bsp(?![\w-])/g, 'sp-');
         for (var i = 0; i < PROGRAM_KEYWORDS.length; i++) {
             if (name.indexOf(PROGRAM_KEYWORDS[i][0]) !== -1) {
                 return PROGRAM_KEYWORDS[i][1];
@@ -191,7 +195,8 @@ var StandplassMestereData = (function () {
     // pre-sorted into the order the mesterskap pages open with:
     // øvelse program rank, klasse (Norwegian collation, nulls last),
     // medal rank, then name. Team rows carry the team string as name;
-    // they have no personId/club/sum.
+    // they have no personId/club, but keep their lag sum when the
+    // index carries one.
     function podiumRows(index, scope) {
         var rows = [];
         var sectionKeys = [scope, scope + 'Lag'];
@@ -209,7 +214,7 @@ var StandplassMestereData = (function () {
                             name: isTeam ? row.team : row.name,
                             personId: isTeam ? null : (row.personId || null),
                             club: isTeam ? null : (row.club || null),
-                            sum: isTeam ? null : (row.sum == null ? null : row.sum),
+                            sum: row.sum == null ? null : row.sum,
                             isTeam: isTeam,
                             region: comp.region || null,
                             distrikt: comp.distrikt || null,

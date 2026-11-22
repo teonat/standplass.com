@@ -38,7 +38,7 @@ var feltIndex = {
         comp('c3', {
             region: 'Buskerud',
             kmLag: [sec('Felt Fin', 'M', [
-                { medal: 'Sølv', team: 'Hurum SKL' }
+                { medal: 'Sølv', team: 'Hurum SKL', sum: 300 }
             ])]
         }),
         comp('c4', {
@@ -196,6 +196,9 @@ assert.strictEqual(MD.programRank('Felt Magnum-1'), 6);
 assert.strictEqual(MD.programRank('Felt Magnum-2'), 6);
 assert.strictEqual(MD.programRank('Felt Ungdom'), 90,
     'øvelser outside the known families rank after them');
+assert.strictEqual(MD.programRank('Hurtig Sp Revolver'), 5,
+    'space-separated Sp is spesial too (bane prints it without the hyphen)');
+assert.strictEqual(MD.programRank('Hurtig Sp Pistol'), 5);
 
 // ── podiumRows ─────────────────────────────────────────────────────────
 
@@ -210,6 +213,7 @@ var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
 assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
 assert.strictEqual(teamRow.personId, null);
 assert.strictEqual(teamRow.club, null);
+assert.strictEqual(teamRow.sum, 300, 'team rows keep their lag sum');
 assert.strictEqual(teamRow.medalRank, 2, 'Sølv');
 assert.ok(kmRows.slice(0, 4).every(function (r) { return r.ovelse === 'Felt Fin'; }),
     'the four Felt Fin rows (rank 1) sort before Felt Grov (rank 2)');

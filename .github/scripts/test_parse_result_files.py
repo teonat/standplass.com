@@ -351,7 +351,8 @@ class MestereIndex(unittest.TestCase):
         self.assertEqual(gull['name'], 'Tore Vrålstad')
         self.assertTrue(gull['personId'])
         lag = next(s for s in entry['kmLag'] if s['ovelse'] == 'Hurtig Sp Pistol')
-        self.assertEqual(lag['podium'][0], {'medal': 'Gull', 'team': 'GPK 1'})
+        self.assertEqual(lag['podium'][0],
+                         {'medal': 'Gull', 'team': 'GPK 1', 'sum': 1689})
 
     def test_nm_comp_over_blinken_pdf_creates_nm_sections(self):
         index = build_mestere_index('felt', '2025', root=self.root)
