@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 12
+PARSER_VERSION = 13
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -263,6 +263,12 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
     """Pop the known tail off a row; returns None when it does not fit.
 
     Returns (premie, oppr, ix, sum, series_cells, region_tokens).
+
+    Some inrX versions print an omsk column the header names 'Omsk' —
+    or omits from the header entirely while rows still carry it — as a
+    single letter, sometimes followed by a count ('A 4'). The letter is
+    tolerated wherever the header declared it or not; the count has no
+    schema slot and is dropped.
     """
     rest = list(tokens)
     premie = None
@@ -273,7 +279,16 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
             return None
         premie = int(match.group(1))
         rest.pop()
-    if has_oppr and not rest[-1].isdigit():
+    if len(rest[-1]) == 1 and rest[-1].isalpha():
+        oppr = rest[-1]
+        rest.pop()
+    elif (rest[-1].isdigit() and len(rest) >= 2
+          and len(rest[-2]) == 1 and rest[-2].isalpha()):
+        # 'A 4 <premie>': the count rides between letter and prize
+        rest.pop()
+        oppr = rest[-1]
+        rest.pop()
+    elif has_oppr and not rest[-1].isdigit():
         oppr = rest[-1]
         rest.pop()
     if len(rest) < n_series + 3:  # region (>=1 word) + series + ix + sum

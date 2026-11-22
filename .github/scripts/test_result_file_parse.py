@@ -392,6 +392,84 @@ class ParseInrXMedalRows(unittest.TestCase):
         self.assertEqual(pos['club'], 'Øvre Eiker SK')
 
 
+class ParseInrxOmskTail(unittest.TestCase):
+    """inrX 1.9.x felt-NM files print trailing columns the row grammar
+    rejected: an omsk column the header may name 'Omsk' (the parser
+    only knew 'Oppr') or omit entirely while rows still carry the
+    letter, sometimes with a count ('A 4'), star-prefixed prizes
+    ('*2229') and prize-less letter tails ('… 55 C'). Every normal row
+    failed the tail grammar and was silently dropped — only the DNS/DNF
+    listing parsed — so whole championships produced empty podiums and
+    vanished from the mestere index (the felt-NM Fin/Grov/Revolver/
+    Militær comps).
+
+    Fixture: comp 02afbbe1 (felt 2024, NM Feltpistol - Finpistol),
+    inrX 1.9.0.0 — 473 starters, all in the Felt Fin øvelse."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-omsk-tail.pdf'))
+
+    def ovelse(self):
+        return next(o for o in self.detail['ovelser']
+                    if o['navn'] == 'Felt Fin')
+
+    def test_letter_between_sum_and_premie_parses(self):
+        # class U headers print 'iX Sum Premie' — no oppr column —
+        # yet the rows carry the letter anyway
+        row = find_row(self.detail, 'Felt Fin', 'U', 'Nikolai Rico Hansen')
+        self.assertEqual(row['medal'], 'Gull')
+        self.assertEqual(row['name'], 'Nikolai Rico Hansen')
+        self.assertEqual(row['club'], 'Kongsvinger Sportsskyttere')
+        self.assertEqual(row['ix'], 18)
+        self.assertEqual(row['sum'], 95)
+        self.assertEqual(row['oppr'], 'B')
+        self.assertEqual(row['premie'], 315)
+        self.assertEqual(row['series'][0], [9, 0])
+
+    def test_letter_without_premie_parses(self):
+        # '… 5 55 C': the prize is simply not printed for low rows
+        row = find_row(self.detail, 'Felt Fin', 'U', 'Marco Hardeland')
+        self.assertEqual(row['pos'], 4)
+        self.assertEqual(row['sum'], 55)
+        self.assertEqual(row['oppr'], 'C')
+        self.assertNotIn('premie', row)
+
+    def test_omsk_count_pair_with_star_prize(self):
+        # 'A 4 *2229': letter + count + star-prefixed prize; the count
+        # has no schema slot and is dropped, the star is stripped
+        row = find_row(self.detail, 'Felt Fin', 'M', 'Simon Øyvind Sørfosbog')
+        self.assertEqual(row['medal'], 'Gull')
+        self.assertEqual(row['sum'], 107)
+        self.assertEqual(row['oppr'], 'A')
+        self.assertEqual(row['premie'], 2229)
+
+    def test_omsk_count_pair_with_plain_prize(self):
+        # 'B 2 600': the count reads as its own token between the
+        # letter and the prize — the prize stays the last token
+        row = find_row(self.detail, 'Felt Fin', 'K', 'Kasia Røe')
+        self.assertEqual(row['medal'], 'Sølv')
+        self.assertEqual(row['sum'], 102)
+        self.assertEqual(row['oppr'], 'B')
+        self.assertEqual(row['premie'], 600)
+
+    def test_dnf_rows_still_parse(self):
+        row = find_row(self.detail, 'Felt Fin', 'M', 'Gustav Tisthamar')
+        self.assertEqual(row['status'], 'DNF')
+        self.assertEqual(row['sum'], 49)
+
+    def test_full_coverage_deltakere(self):
+        # the comp prints 'Deltakere / Starter: 473 / 473' and Felt Fin
+        # is the whole person program — the silent-drop signature this
+        # fixture pins must never come back
+        classes = self.ovelse()['classes']
+        counts = {c['klasse']: len(c['rows']) for c in classes}
+        self.assertEqual(counts, {'U': 9, 'Jk': 4, 'Jm': 4, 'K': 57,
+                                   'M': 220, 'V55': 105, 'V65': 49,
+                                   'V73': 25})
+        self.assertEqual(sum(counts.values()), 473)
+
+
 class ParsePlainNo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1179,8 +1257,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_12(self):
-        self.assertEqual(PARSER_VERSION, 12)
+    def test_parser_version_is_13(self):
+        self.assertEqual(PARSER_VERSION, 13)
 
 
 class ParseResultDispatch(unittest.TestCase):
