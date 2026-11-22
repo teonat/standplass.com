@@ -205,7 +205,12 @@ class KmDmClassification(MestereIndexBase):
                          ['25m Grov', '25m'])
         self.assertEqual([s['ovelse'] for s in entry['dm']],
                          ['25m Spesialrevolver'])
-        self.assertEqual(index['warnings'], [])
+        self.assertIsNone(entry['region'])
+        # no classification warnings — only the designed region-less
+        # note for a comp with no krets
+        self.assertEqual([w for w in index['warnings']
+                          if 'region' not in w], [])
+        self.assertEqual(len(index['warnings']), 1)
 
     def test_relisting_pattern_non_t96(self):
         d = detail('r1', [
@@ -255,6 +260,111 @@ class KmDmClassification(MestereIndexBase):
                           'club': 'C', 'sum': 285})
         self.assertEqual(entry['kmLag'][0]['podium'],
                          [{'medal': 'Gull', 'team': 'GPK 1'}])
+
+
+class RegionsAndClubs(MestereIndexBase):
+    ROGALAND = '3b444426-1ea5-4c3c-c2af-08d859126e0a'
+    SOR_TRONDELAG = '0808e8dc-6a2b-41a0-c2bc-08d859126e0a'
+
+    def test_navn_region_wins_and_warns(self):
+        d = detail('r1', [
+            {'navn': '1F Finfelt Dato/tid: 11.06.2022 1100 '
+                    'Mesterskap: KM Nordland Deltakere: 49', 'classes': [
+                {'klasse': 'M', 'rows': [
+                    row('A', pos=1), row('B', pos=2),
+                ]},
+            ]},
+        ])
+        comp_rogaland = dict(comp('r1'),
+                             regionOrganizationId=self.ROGALAND)
+        index = self.build('felt', 2022, [comp_rogaland], {'r1': d})
+        entry = index['comps'][0]
+        self.assertEqual(entry['region'], 'Nordland')
+        self.assertEqual(entry['distrikt'], 'Nord-Norge')
+        self.assertEqual(len(index['warnings']), 1)
+        self.assertIn('Nordland', index['warnings'][0])
+        self.assertIn('Rogaland', index['warnings'][0])
+
+    def test_region_falls_back_to_comp(self):
+        d = detail('r2', [
+            {'navn': 'KM: Felt Grov', 'classes': [
+                {'klasse': 'M', 'rows': [row('A', pos=1)]},
+            ]},
+        ])
+        index = self.build('felt', 2022, [comp('r2')], {'r2': d})
+        entry = index['comps'][0]
+        self.assertIsNone(entry['region'])
+        self.assertIsNone(entry['distrikt'])
+        self.assertTrue(any('region' in w for w in index['warnings']))
+
+        comp_rogaland = dict(comp('r2'),
+                             regionOrganizationId=self.ROGALAND)
+        index = self.build('felt', 2022, [comp_rogaland], {'r2': d})
+        entry = index['comps'][0]
+        self.assertEqual(entry['region'], 'Rogaland')
+        self.assertEqual(entry['distrikt'], 'Syd-Norge')
+        self.assertEqual(index['warnings'], [])
+
+    def test_dm_navn_region_is_distrikt(self):
+        d = detail('r3', [
+            {'navn': 'Felt Fin Dato/tid: 11.06.2022 1100 '
+                    'Mesterskap: DM Midt-Norge Deltakere: 49', 'classes': [
+                {'klasse': 'M', 'rows': [row('A', pos=1)]},
+            ]},
+        ])
+        comp_st = dict(comp('r3'),
+                       regionOrganizationId=self.SOR_TRONDELAG)
+        index = self.build('felt', 2022, [comp_st], {'r3': d})
+        entry = index['comps'][0]
+        self.assertEqual(entry['distrikt'], 'Midt-Norge')
+        self.assertEqual(entry['region'], 'Sør-Trøndelag')
+
+    def test_dashed_navn_region_normalizes(self):
+        d = detail('r4', [
+            {'navn': 'Felt Fin (DM - Østlandet-Nord)', 'classes': [
+                {'klasse': 'M', 'rows': [row('A', pos=1)]},
+            ]},
+        ])
+        index = self.build('felt', 2022, [comp('r4')], {'r4': d})
+        entry = index['comps'][0]
+        self.assertEqual(entry['distrikt'], 'Østlandet Nord')
+
+    def test_nm_only_entries_carry_no_region(self):
+        d = detail('r5', [
+            {'navn': 'Felt Grov', 'classes': [
+                {'klasse': 'M', 'rows': [
+                    row('A', pos=1), row('B', pos=2), row('C', pos=3),
+                ]},
+            ]},
+        ])
+        comp_nm = dict(comp('r5'),
+                       competitionTypeName='Norgesmesterskap',
+                       regionOrganizationId=self.ROGALAND)
+        index = self.build('felt', 2022, [comp_nm], {'r5': d})
+        entry = index['comps'][0]
+        self.assertNotIn('region', entry)
+        self.assertNotIn('distrikt', entry)
+        self.assertEqual(index['warnings'], [])
+
+    def test_canonical_club_via_person_id(self):
+        comp_api = comp('c1', results=[
+            {'name': 'Kari Nordmann', 'personId': 'p1',
+             'club': 'API Klubb'},
+        ])
+        d = detail('c1', [
+            {'navn': 'KM: Felt Grov', 'classes': [
+                {'klasse': 'M', 'rows': [
+                    row('Kari Nordmann', pos=1, club='PDF-klubb',
+                        personId='p1', sum_=300),
+                    row('Ola Nordmann', pos=2, club='PDF-klubb',
+                        sum_=290),
+                ]},
+            ]},
+        ])
+        index = self.build('felt', 2025, [comp_api], {'c1': d})
+        podium = index['comps'][0]['km'][0]['podium']
+        self.assertEqual(podium[0]['club'], 'API Klubb')
+        self.assertEqual(podium[1]['club'], 'PDF-klubb')
 
 
 class Exclusions(MestereIndexBase):

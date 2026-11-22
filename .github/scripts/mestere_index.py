@@ -25,13 +25,20 @@ Rules (spec: 2026-11-22-result-details-frontend-design.md):
 
 Podiums are rank 1–3: rows carrying a parse-time medal field pass
 through, rows with pos 1/2/3 map to Gull/Sølv/Bronse. Ties print as
-the file prints them; nothing is re-derived. Championship-ish øvelse
-names that match no rule are collected as warnings (the census signal
-for extending the pattern set) instead of passing silently.
+the file prints them; nothing is re-derived. Podium clubs are
+canonicalized through the comp's API results when the row carries a
+personId. Entries with km/dm sections carry a krets region and
+distrikt: the region named inside øvelse navns wins over the comp's
+regionOrganizationId, with disagreements collected as warnings.
+Championship-ish øvelse names that match no rule are collected as
+warnings (the census signal for extending the pattern set) instead
+of passing silently.
 """
 import json
 import os
 import re
+
+from org_regions import DISTRIKTER, normalize_region, resolve_region
 
 DATA_DIR = 'public/data'
 MEDALS = ('Gull', 'Sølv', 'Bronse')
@@ -58,8 +65,11 @@ def mestere_path(branch, year, root='.'):
         os.path.join(root, DATA_DIR, branch, f'mestere-{year}.json'))
 
 
-def _person_podium(rows):
-    """Rank 1–3 rows → podium entries; medal field or pos 1/2/3."""
+def _person_podium(rows, club_map=None):
+    """Rank 1–3 rows → podium entries; medal field or pos 1/2/3.
+    The club is canonicalized through the comp's API results when
+    the row carries a personId (PDF-printed club as fallback)."""
+    club_map = club_map or {}
     podium = []
     for r in rows:
         medal = r.get('medal')
@@ -71,8 +81,9 @@ def _person_podium(rows):
         if r.get('personId'):
             entry['personId'] = r['personId']
         entry['name'] = r['name']
-        if r.get('club'):
-            entry['club'] = r['club']
+        club = club_map.get(r.get('personId')) or r.get('club')
+        if club:
+            entry['club'] = club
         if r.get('sum') is not None:
             entry['sum'] = r['sum']
         podium.append(entry)
@@ -125,12 +136,18 @@ def _classify(detail, comp):
     """(sections dict, warnings) for one comp's detail file."""
     out = {k: [] for k in SCOPE_KEYS}
     warnings = []
+    club_map = {r['personId']: r['club']
+                for r in comp.get('results') or []
+                if r.get('personId') and r.get('club')}
+
+    def person_podium(rows):
+        return _person_podium(rows, club_map)
 
     # Rule 2: inrX-extracted championship sections always flow.
     for scope in ('km', 'dm'):
         champ = detail.get(scope) or {}
         for section in champ.get('sections', []):
-            podium = _person_podium(section.get('rows', []))
+            podium = person_podium(section.get('rows', []))
             if podium:
                 out[scope].append({
                     'ovelse': re.sub(rf'^{scope.upper()}: ', '',
@@ -162,7 +179,7 @@ def _classify(detail, comp):
                     navn[len('Lag: '):], classes, _team_podium))
             else:
                 out['nm'].extend(_sections_from_classes(
-                    navn, classes, _person_podium))
+                    navn, classes, person_podium))
             continue
 
         m = _PREFIX.match(navn)
@@ -178,7 +195,7 @@ def _classify(detail, comp):
                                                'podium': podium})
             else:
                 out[scope].extend(_sections_from_classes(
-                    name, classes, _person_podium))
+                    name, classes, person_podium))
             continue
 
         fused = _FUSED.match(navn)
@@ -195,7 +212,7 @@ def _classify(detail, comp):
                 navn_region = relist.group('region')
         if scope_name:
             out[scope_name].extend(_sections_from_classes(
-                ovelse_name, classes, _person_podium, region=navn_region))
+                ovelse_name, classes, person_podium, region=navn_region))
             continue
 
         scoped = _SCOPED.match(navn)
@@ -205,12 +222,62 @@ def _classify(detail, comp):
             name = scoped.group('name').strip()
             ovelse_name = f'{prefix} {name}' if name else prefix
             out[scoped.group('scope').lower()].extend(_sections_from_classes(
-                ovelse_name, classes, _person_podium))
+                ovelse_name, classes, person_podium))
             continue
 
         if _CHAMPIONSHIPISH.search(navn):
             warnings.append(f'unclassified championship-ish øvelse: {navn}')
     return out, warnings
+
+
+def _match_name(name, candidates):
+    """The candidate whose normalized form equals name's, or None."""
+    norm = normalize_region(name)
+    for candidate in candidates:
+        if normalize_region(candidate) == norm:
+            return candidate
+    return None
+
+
+def _entry_region(sections, comp):
+    """(region, distrikt, warnings) for an entry's km/dm sections.
+
+    The region named inside øvelse navns wins over the comp's
+    regionOrganizationId: km navns name a krets, dm navns a distrikt.
+    A navn/comp disagreement warns but does not override. NM-only
+    entries carry no region at all."""
+    warnings = []
+    if not any(sections.get(k) for k in ('km', 'kmLag', 'dm', 'dmLag')):
+        return None, None, warnings
+    navn_krets = next((s['region'] for k in ('km', 'kmLag')
+                       for s in sections.get(k, [])
+                       if s.get('region')), None)
+    navn_distrikt = next((s['region'] for k in ('dm', 'dmLag')
+                          for s in sections.get(k, [])
+                          if s.get('region')), None)
+    comp_region, comp_distrikt = resolve_region(
+        comp.get('regionOrganizationId'))
+    region = distrikt = None
+    if navn_krets:
+        region = _match_name(navn_krets, DISTRIKTER) or navn_krets
+        distrikt = DISTRIKTER.get(region)
+    if navn_distrikt:
+        distrikt = _match_name(
+            navn_distrikt, set(DISTRIKTER.values())) or navn_distrikt
+    if comp_region:
+        if region is None:
+            region = comp_region
+        elif normalize_region(region) != normalize_region(comp_region):
+            warnings.append(f'region disagreement: øvelse says {region}, '
+                            f'comp region is {comp_region}')
+    if comp_distrikt and distrikt is None:
+        distrikt = comp_distrikt
+    if distrikt is None and region is not None:
+        distrikt = DISTRIKTER.get(region)
+    if region is None:
+        warnings.append('championship comp without region: '
+                        f'{comp.get("title") or comp["id"]}')
+    return region, distrikt, warnings
 
 
 def build_mestere_index(branch, year, root='.'):
@@ -241,12 +308,18 @@ def build_mestere_index(branch, year, root='.'):
                 continue
             sections, comp_warnings = _classify(detail, comp)
             warnings.extend(comp_warnings)
+            region, distrikt, region_warnings = _entry_region(
+                sections, comp)
+            warnings.extend(region_warnings)
             entry = {
                 'compId': comp['id'],
                 'date': (comp.get('startDate') or '')[:10],
                 'title': comp.get('title'),
                 'organizer': comp.get('organizationName'),
             }
+            if any(sections.get(k) for k in ('km', 'kmLag', 'dm', 'dmLag')):
+                entry['region'] = region
+                entry['distrikt'] = distrikt
             for key in SCOPE_KEYS:
                 if sections[key]:
                     entry[key] = sections[key]
