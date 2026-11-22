@@ -42,8 +42,9 @@ The "Opprett innebygging" button on the felt, bane and terminliste pages
 generates this snippet, carrying over your current `klubb`, `club` and
 `mode` settings — other filters are not carried.
 
-The remaining pages (klubb, nasjonalt, norgesfelt, klubbstatistikk) are
-standalone-only for now; making them embeddable is planned.
+The remaining pages (klubb, nasjonalt, norgesfelt, klubbstatistikk,
+mesterskap) are standalone-only for now; making them embeddable is
+planned.
 
 ## Deployment
 
