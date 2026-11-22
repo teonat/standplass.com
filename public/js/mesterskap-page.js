@@ -246,6 +246,7 @@ var StandplassMesterskapPage = (function () {
         var scope = config.scope;
         var urlState = config.urlState;
         var CURRENT_YEAR = new Date().getUTCFullYear();
+        var FW = StandplassFilterWidgets;
 
         var initial = resolveInitial(urlState.getSearch(), CURRENT_YEAR);
         var gren = initial.gren;
@@ -253,6 +254,8 @@ var StandplassMesterskapPage = (function () {
 
         var statusEl = root.getElementById('mesterskap-status');
         var contentEl = root.getElementById('mesterskap-content');
+        var filterbarEl = root.getElementById('mesterskap-filterbar');
+        var statsEl = root.getElementById('mesterskap-stats');
         var feltBtn = root.getElementById('mesterskap-toggle-felt');
         var baneBtn = root.getElementById('mesterskap-toggle-bane');
         var yearSelect = root.getElementById('mesterskap-year-select');
@@ -315,6 +318,16 @@ var StandplassMesterskapPage = (function () {
             load();
         });
 
+        // ── Filter state ─────────────────────────────────────────────
+        // Survives year switches (stale values filter to a visible zero,
+        // never a silent blank); reset on gren switches — the øvelse
+        // universe differs between felt and bane entirely.
+        var allRows = [];
+        var filters = resolveFilters(urlState.getSearch());
+        var emptyFilters = function () {
+            return { ovelse: [], klasse: [], krets: [], klubb: '', navn: '', type: '' };
+        };
+
         // Felt/bane toggle, reflecting a ?gren=bane initial state.
         function reflectGren() {
             feltBtn.classList.toggle('program-btn--active', gren === 'felt');
@@ -326,6 +339,12 @@ var StandplassMesterskapPage = (function () {
             gren = next;
             reflectGren();
             personModal.reset({ initialMetric: gren === 'bane' ? 'score' : 'rankingScore' });
+            filters = emptyFilters();
+            if (barBuilt) {
+                navnInput.value = '';
+                typeSelect.value = '';
+                rebuildWidgets();
+            }
             setUrlParam('gren', gren);
             load();
         }
@@ -333,36 +352,226 @@ var StandplassMesterskapPage = (function () {
         feltBtn.addEventListener('click', function () { if (gren !== 'felt') { setGren('felt'); } });
         baneBtn.addEventListener('click', function () { if (gren !== 'bane') { setGren('bane'); } });
 
-        // One table per page; sort state survives year/gren re-renders —
-        // the same session-state policy as the klubb leaderboard cards.
+        // ── The filter bar (built once, items follow the loaded year) ─
+
+        var barBuilt = false;
+        var navnInput = null;
+        var typeSelect = null;
+        var dropdowns = [];   // every checkbox dropdown, for Nullstill
+        var combos = [];      // the klubb combo
+
+        function distinctSorted(key) {
+            var seen = {};
+            allRows.forEach(function (r) { if (r[key] != null) { seen[r[key]] = true; } });
+            return Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'no'); });
+        }
+
+        // km offers the kretser that actually hosted; dm offers every
+        // krets (the finder — selecting yours maps to your distrikt,
+        // even when that distrikt hosted nothing this year).
+        function kretsNames() {
+            if (scope === 'km') { return distinctSorted('region'); }
+            return Object.keys(StandplassKretsDistrikter.distriktFor)
+                .sort(function (a, b) { return a.localeCompare(b, 'no'); });
+        }
+
+        function wireDropdown(param, labelAll, itemsFn, selKey) {
+            var dropdown;
+            dropdown = FW.makeCheckboxDropdown({
+                btn: root.getElementById('mesterskap-' + param + '-btn'),
+                panel: root.getElementById('mesterskap-' + param + '-panel'),
+                list: root.getElementById('mesterskap-' + param + '-list'),
+                clearAllBtn: root.getElementById('mesterskap-' + param + '-clear'),
+                selectAllBtn: root.getElementById('mesterskap-' + param + '-select'),
+                labelNone: labelAll,
+                getItems: function () {
+                    return itemsFn().map(function (n) { return { id: n, name: n }; });
+                },
+                getSelected: function () { return filters[selKey]; },
+                onToggle: function (id, name, checked) {
+                    if (checked) { filters[selKey].push(id); }
+                    else {
+                        filters[selKey] = filters[selKey].filter(function (x) { return x !== id; });
+                    }
+                    dropdown.rebuild();
+                    applyFilters();
+                },
+                onClearAll: function () {
+                    filters[selKey] = [];
+                    dropdown.rebuild();
+                    applyFilters();
+                },
+                onSelectAll: function () {
+                    filters[selKey] = itemsFn().slice();
+                    dropdown.rebuild();
+                    applyFilters();
+                }
+            });
+            dropdowns.push(dropdown);
+            return dropdown;
+        }
+
+        var klubbCombo = null;
+
+        function ensureFilterBar() {
+            if (barBuilt) { return; }
+            barBuilt = true;
+            filterbarEl.innerHTML = filterBarMarkup(scope);
+            filterbarEl.hidden = false;
+
+            wireDropdown('ovelse', 'Alle øvelser', function () { return distinctSorted('ovelse'); }, 'ovelse');
+            wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
+            if (scope !== 'nm') {
+                wireDropdown('krets', 'Alle kretser', kretsNames, 'krets');
+            }
+
+            klubbCombo = FW.makeTagComboHandlers({
+                input: root.getElementById('mesterskap-klubb-input'),
+                list: root.getElementById('mesterskap-klubb-list'),
+                tagsEl: root.getElementById('mesterskap-klubb-tags'),
+                clear: root.getElementById('mesterskap-klubb-clear'),
+                getItems: function (q) {
+                    var lower = (q || '').toLowerCase();
+                    return distinctSorted('club')
+                        .filter(function (c) { return c !== filters.klubb; })
+                        .filter(function (c) { return !lower || c.toLowerCase().indexOf(lower) >= 0; })
+                        .map(function (c) { return { id: c, name: c }; });
+                },
+                getSelected: function () {
+                    return filters.klubb ? [{ id: filters.klubb, name: filters.klubb }] : [];
+                },
+                onSelect: function (id) {
+                    filters.klubb = id;
+                    klubbCombo.rebuild();
+                    applyFilters();
+                },
+                onRemove: function () {
+                    filters.klubb = '';
+                    klubbCombo.rebuild();
+                    applyFilters();
+                },
+                onClearAll: function () {
+                    filters.klubb = '';
+                    klubbCombo.rebuild();
+                    applyFilters();
+                }
+            });
+            combos.push(klubbCombo);
+
+            navnInput = root.getElementById('mesterskap-navn');
+            navnInput.value = filters.navn;
+            var navnTimer = null;
+            navnInput.addEventListener('input', function () {
+                clearTimeout(navnTimer);
+                navnTimer = setTimeout(function () {
+                    filters.navn = navnInput.value.trim();
+                    applyFilters();
+                }, 200);
+            });
+
+            typeSelect = root.getElementById('mesterskap-type');
+            typeSelect.value = filters.type;
+            typeSelect.addEventListener('change', function () {
+                filters.type = typeSelect.value;
+                applyFilters();
+            });
+
+            // Rader: the cap applies to the one scroll region on the
+            // page; the var lives on the main element it sits inside.
+            FW.wireRowsSelect({
+                select: root.getElementById('mesterskap-rows'),
+                contentEl: root.getElementById('mesterskap-root')
+            });
+
+            FW.wireClearAllFilters(root.getElementById('mesterskap-clear-filters'), [
+                function () { filters.ovelse = []; },
+                function () { filters.klasse = []; },
+                function () { filters.krets = []; },
+                function () { filters.klubb = ''; },
+                function () { filters.navn = ''; navnInput.value = ''; },
+                function () { filters.type = ''; typeSelect.value = ''; }
+            ], dropdowns.concat(combos), applyFilters);
+        }
+
+        function rebuildWidgets() {
+            dropdowns.forEach(function (w) { w.rebuild(); });
+            combos.forEach(function (w) { w.rebuild(); });
+        }
+
+        // The URL always carries gren/ar; filter params only when set.
+        function syncUrl() {
+            var qs = new URLSearchParams(urlState.getSearch());
+            qs.set('gren', gren);
+            qs.set('ar', String(ar));
+            ['ovelse', 'class', 'krets', 'klubb', 'name', 'type'].forEach(function (k) {
+                qs.delete(k);
+            });
+            filterParams(filters).forEach(function (p) { qs.set(p[0], p[1]); });
+            urlState.setSearch(qs.toString());
+        }
+
+        // dm's krets selection maps to distrikter before filtering.
+        function activeRegionFilters() {
+            if (scope === 'km') { return { region: filters.krets, distrikt: [] }; }
+            if (scope === 'dm') {
+                var map = StandplassKretsDistrikter.distriktFor;
+                var out = [];
+                filters.krets.forEach(function (k) {
+                    if (map[k] && out.indexOf(map[k]) === -1) { out.push(map[k]); }
+                });
+                return { region: [], distrikt: out };
+            }
+            return { region: [], distrikt: [] };
+        }
+
+        function applyFilters() {
+            syncUrl();
+            var rf = activeRegionFilters();
+            var filtered = StandplassMestereData.filterPodiumRows(allRows, {
+                ovelse: filters.ovelse,
+                klasse: filters.klasse,
+                region: rf.region,
+                distrikt: rf.distrikt,
+                klubb: filters.klubb,
+                navn: filters.navn,
+                type: filters.type
+            });
+            renderStats(filtered);
+            renderTable(filtered);
+        }
+
+        function plural(n, one, many) {
+            return n + ' ' + (n === 1 ? one : many);
+        }
+
+        function renderStats(rows) {
+            var s = StandplassMestereData.statsFor(rows, scope);
+            var parts = [
+                plural(s.medaljer, 'medalje', 'medaljer'),
+                plural(s.ovselser, 'øvelse', 'øvelser')
+            ];
+            if (scope === 'km') { parts.push(plural(s.regioner, 'krets', 'kretser')); }
+            if (scope === 'dm') { parts.push(plural(s.regioner, 'distrikt', 'distrikter')); }
+            parts.push(plural(s.klubber, 'klubb', 'klubber'));
+            statsEl.textContent = parts.join(' · ');
+        }
+
+        // One table per page; sort state survives filter and year/gren
+        // re-renders — the same session-state policy as the klubb
+        // leaderboard cards.
         var tableSort = null;
         var spec = null;
         var TABLE_ID = 'mesterskap-podium';
 
-        function load() {
-            statusEl.textContent = 'Laster mesterskapsdata…';
-            contentEl.innerHTML = '';
-            fetcher.fetchMestere('/data/' + gren + '/mestere', ar)
-                .then(function (index) {
-                    statusEl.textContent = '';
-                    var rows = StandplassMestereData.podiumRows(index || {}, scope);
-                    if (!rows.length) {
-                        contentEl.innerHTML = emptyYearCard(gren, ar, false);
-                        return;
-                    }
-                    spec = tableSpecFor(rows, scope);
-                    render();
-                })
-                .catch(function () {
-                    statusEl.textContent = '';
-                    contentEl.innerHTML = emptyYearCard(gren, ar, true);
-                });
-        }
-
-        function render() {
-            if (!spec || !contentEl.querySelector('table[data-dt-id="' + TABLE_ID + '"]')) { return; }
-            contentEl.querySelector('#mesterskap-table-host').innerHTML =
-                StandplassDataTable.renderTable(TABLE_ID, spec, tableState(tableSort));
+        function renderTable(rows) {
+            if (!rows.length) {
+                spec = null;
+                contentEl.innerHTML = '<p class="ranking-empty">Ingen rader matcher de valgte filtrene.</p>';
+                return;
+            }
+            spec = tableSpecFor(rows, scope);
+            contentEl.innerHTML = StandplassDataTable.renderTable(
+                TABLE_ID, spec, tableState(tableSort));
             wire();
         }
 
@@ -384,6 +593,32 @@ var StandplassMesterskapPage = (function () {
                     if (btn) { btn.focus(); }
                 }
             }, tableState(tableSort));
+        }
+
+        function load() {
+            statusEl.textContent = 'Laster mesterskapsdata…';
+            contentEl.innerHTML = '';
+            fetcher.fetchMestere('/data/' + gren + '/mestere', ar)
+                .then(function (index) {
+                    statusEl.textContent = '';
+                    allRows = StandplassMestereData.podiumRows(index || {}, scope);
+                    if (!allRows.length) {
+                        filterbarEl.hidden = true;
+                        statsEl.hidden = true;
+                        contentEl.innerHTML = emptyYearCard(gren, ar, false);
+                        return;
+                    }
+                    ensureFilterBar();
+                    statsEl.hidden = false;
+                    rebuildWidgets();
+                    applyFilters();
+                })
+                .catch(function () {
+                    statusEl.textContent = '';
+                    filterbarEl.hidden = true;
+                    statsEl.hidden = true;
+                    contentEl.innerHTML = emptyYearCard(gren, ar, true);
+                });
         }
 
         load();
