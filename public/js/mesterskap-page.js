@@ -94,8 +94,10 @@ var StandplassMesterskapPage = (function () {
         var out = [];
         out.push(dropdownGroup('ovelse', 'Øvelse', 'Alle øvelser'));
         out.push(dropdownGroup('klasse', 'Klasse', 'Alle klasser'));
-        if (scope !== 'nm') {
+        if (scope === 'km') {
             out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
+        }
+        if (scope !== 'nm') {
             out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
         }
         out.push('<div class="filter-group">'
@@ -348,6 +350,9 @@ var StandplassMesterskapPage = (function () {
         // universe differs between felt and bane entirely.
         var allRows = [];
         var filters = resolveFilters(urlState.getSearch());
+        // krets is km-only (the championship's own krets); a stale
+        // ?krets= param on dm/nm never round-trips.
+        if (scope !== 'km') { filters.krets = []; }
         var emptyFilters = function () {
             return { ovelse: [], klasse: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
         };
@@ -388,15 +393,6 @@ var StandplassMesterskapPage = (function () {
             var seen = {};
             allRows.forEach(function (r) { if (r[key] != null) { seen[r[key]] = true; } });
             return Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'no'); });
-        }
-
-        // km offers the kretser that actually hosted; dm offers every
-        // krets (the finder — selecting yours maps to your distrikt,
-        // even when that distrikt hosted nothing this year).
-        function kretsNames() {
-            if (scope === 'km') { return distinctSorted('region'); }
-            return Object.keys(StandplassKretsDistrikter.distriktFor)
-                .sort(function (a, b) { return a.localeCompare(b, 'no'); });
         }
 
         function wireDropdown(param, labelAll, itemsFn, selKey) {
@@ -444,8 +440,10 @@ var StandplassMesterskapPage = (function () {
 
             wireDropdown('ovelse', 'Alle øvelser', function () { return distinctSorted('ovelse'); }, 'ovelse');
             wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
+            if (scope === 'km') {
+                wireDropdown('krets', 'Alle kretser', function () { return distinctSorted('region'); }, 'krets');
+            }
             if (scope !== 'nm') {
-                wireDropdown('krets', 'Alle kretser', kretsNames, 'krets');
                 wireDropdown('distrikt', 'Alle distrikter', function () { return distinctSorted('distrikt'); }, 'distrikt');
             }
 
@@ -535,20 +533,14 @@ var StandplassMesterskapPage = (function () {
             urlState.setSearch(qs.toString());
         }
 
-        // Rows carry both their krets and distrikt (stamped from the
-        // comp), so the distrikt filter is direct on every scope that
-        // has one; dm's krets selection additionally maps to distrikter
-        // (the finder) and merges with it.
+        // The region filters read the rows' stamped championship
+        // fields directly: krets scopes to the km championship's own
+        // krets (km-only), distrikt to the distrikt on km and dm.
         function activeRegionFilters() {
-            var region = scope === 'km' ? filters.krets : [];
-            var distrikt = filters.distrikt.slice();
-            if (scope === 'dm') {
-                var map = StandplassKretsDistrikter.distriktFor;
-                filters.krets.forEach(function (k) {
-                    if (map[k] && distrikt.indexOf(map[k]) === -1) { distrikt.push(map[k]); }
-                });
-            }
-            return { region: region, distrikt: distrikt };
+            return {
+                region: scope === 'km' ? filters.krets : [],
+                distrikt: scope !== 'nm' ? filters.distrikt : []
+            };
         }
 
         function applyFilters() {

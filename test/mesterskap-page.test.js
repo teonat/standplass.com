@@ -113,10 +113,10 @@ assert.ok(nmBar.indexOf('mesterskap-krets') === -1,
 assert.ok(nmBar.indexOf('mesterskap-distrikt') === -1,
     'nm has no distrikt filter (national)');
 var dmBar = MP.filterBarMarkup('dm');
-assert.ok(dmBar.indexOf('mesterskap-krets-btn') !== -1,
-    'dm keeps the krets filter (the krets→distrikt finder)');
 assert.ok(dmBar.indexOf('mesterskap-distrikt-btn') !== -1,
-    'dm also has the direct distrikt filter');
+    'dm has the direct distrikt filter');
+assert.ok(dmBar.indexOf('mesterskap-krets') === -1,
+    'dm has no krets filter — the finder showed the whole distrikt under a krets label (owner ruling 2026-11-22)');
 assert.ok(/id="mesterskap-type"[^>]*>[\s\S]*?<option value="">Alle<\/option>[\s\S]*?<option value="individuelt">Individuelt<\/option>[\s\S]*?<option value="lag">Lag<\/option>/.test(kmBar),
     'the Type select offers Alle/Individuelt/Lag');
 assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/.test(kmBar),
