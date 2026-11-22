@@ -15,7 +15,7 @@ Rules (spec: 2026-11-22-result-details-frontend-design.md):
    '<ovelse> Dato/tid: … Mesterskap: <KM|DM> <region> Deltakere' →
    scope section; '(<KM|DM> - <region>)' re-listings → scope section;
    '25m <KM|DM> - <disc>' labels → scope section named '25m <disc>'
-   (bare → '25m').
+   (a bare label takes the comp's single API øvelse name, else '25m').
    The region named inside a navn is recorded on the section
    ('region'); resolving entries' krets/distrikt is layered on top
    of that separately.
@@ -132,6 +132,15 @@ def _sections_from_classes(ovelse_name, classes, podium_fn, region=None):
     return sections
 
 
+def _comp_discipline(comp):
+    """The comp's single distinct API øvelse name, when unambiguous —
+    bare championship labels ('25m KM -') print no discipline, and
+    single-øvelse comps (silhuett) can be named from their results."""
+    disciplines = {r['discipline'] for r in comp.get('results') or []
+                   if r.get('discipline')}
+    return disciplines.pop() if len(disciplines) == 1 else None
+
+
 def _classify(detail, comp):
     """(sections dict, warnings) for one comp's detail file."""
     out = {k: [] for k in SCOPE_KEYS}
@@ -217,10 +226,13 @@ def _classify(detail, comp):
 
         scoped = _SCOPED.match(navn)
         if scoped:
-            # '25m KM - Grov' → '25m Grov'; bare '25m KM -' → '25m'
+            # '25m KM - Grov' → '25m Grov'; a bare '25m KM -' prints
+            # no discipline, so it takes the comp's single API øvelse
+            # name when unambiguous (silhuett comps), else the prefix
             prefix = scoped.group('prefix')
             name = scoped.group('name').strip()
-            ovelse_name = f'{prefix} {name}' if name else prefix
+            ovelse_name = f'{prefix} {name}' if name else (
+                _comp_discipline(comp) or prefix)
             out[scoped.group('scope').lower()].extend(_sections_from_classes(
                 ovelse_name, classes, person_podium))
             continue

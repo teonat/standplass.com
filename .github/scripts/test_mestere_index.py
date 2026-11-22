@@ -212,6 +212,41 @@ class KmDmClassification(MestereIndexBase):
                           if 'region' not in w], [])
         self.assertEqual(len(index['warnings']), 1)
 
+    def test_bare_25m_label_resolves_via_comp_discipline(self):
+        comp_silhuett = comp('s2', results=[
+            {'name': 'A', 'personId': 'p1',
+             'discipline': '25m silhuettpistol'},
+            {'name': 'B', 'personId': 'p2',
+             'discipline': '25m silhuettpistol'},
+        ])
+        d = detail('s2', [
+            {'navn': '25m KM -', 'classes': [
+                {'klasse': 'Åpen', 'rows': [
+                    row('A', pos=1), row('B', pos=2), row('C', pos=3),
+                ]},
+            ]},
+        ])
+        index = self.build('bane', 2025, [comp_silhuett], {'s2': d})
+        entry = index['comps'][0]
+        self.assertEqual([s['ovelse'] for s in entry['km']],
+                         ['25m silhuettpistol'])
+
+    def test_bare_25m_label_falls_back_when_comp_is_multi_discipline(self):
+        comp_multi = comp('s3', results=[
+            {'name': 'A', 'personId': 'p1', 'discipline': '25m grovpistol'},
+            {'name': 'B', 'personId': 'p2', 'discipline': '25m finpistol'},
+        ])
+        d = detail('s3', [
+            {'navn': '25m KM -', 'classes': [
+                {'klasse': 'Åpen', 'rows': [
+                    row('A', pos=1), row('B', pos=2), row('C', pos=3),
+                ]},
+            ]},
+        ])
+        index = self.build('bane', 2025, [comp_multi], {'s3': d})
+        entry = index['comps'][0]
+        self.assertEqual([s['ovelse'] for s in entry['km']], ['25m'])
+
     def test_relisting_pattern_non_t96(self):
         d = detail('r1', [
             {'navn': 'Spesialpistol (KM - Hordaland)', 'classes': [
