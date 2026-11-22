@@ -54,16 +54,15 @@ assert.deepStrictEqual(
     }),
     { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
 );
-// the bulk-untick state ([] = nothing ticked) serializes falsy -- the URL
-// sync's truthy check drops the param, so a shared link reopens unfiltered.
-// Deliberate: an all-unticked filter is a transient exploration state,
-// not something to deep-link someone else into.
-assert.strictEqual(
+// the unfiltered state (empty filter lists) serializes to no params —
+// an all-unticked or never-touched filter never writes p_* clutter,
+// and a shared link reopens unfiltered.
+assert.deepStrictEqual(
     StandplassPersonModal.buildPersonFilterParams({
         selectedYears: [2026], activeYear: 2026, types: [], discs: [], classes: [],
         metric: 'rankingScore', defaultMetric: 'rankingScore'
-    }).p_disc,
-    ''
+    }),
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
 );
 
 var entries = [
@@ -163,12 +162,14 @@ var filtered = StandplassPersonModal.getFilteredEntries(merged, { types: null, d
 assert.strictEqual(filtered.length, 1);
 assert.strictEqual(filtered[0].discipline, 'Grovfelt');
 
-var noneSelected = StandplassPersonModal.getFilteredEntries(merged, { types: null, discs: [], classes: null });
-assert.strictEqual(noneSelected.length, 0, 'an empty array means "none selected", not "no filter"');
+// nothing picked = everything shown: empty filter lists are no
+// restriction, so unticking every box is the unfiltered state
+var emptyIsAll = StandplassPersonModal.getFilteredEntries(merged, { types: [], discs: [], classes: [] });
+assert.strictEqual(emptyIsAll.length, 2, 'empty filter lists mean unfiltered, not "nothing"');
 
 assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Grovfelt', ['Grovfelt', 'Fellesfelt']), ['Grovfelt']);
-assert.strictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), null, 'unmatched initial value falls back to no filter, never a false empty state');
-assert.strictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), null);
+assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter('Stang', ['Grovfelt', 'Fellesfelt']), [], 'unmatched initial value falls back to unfiltered');
+assert.deepStrictEqual(StandplassPersonModal.resolveInitialFilter(null, ['Grovfelt']), []);
 
 var overlapEntries = [
     { date: '2025-05-01', rankingScore: 90 }, { date: '2025-05-01', rankingScore: 90 }, { date: '2025-06-01', rankingScore: 80 }

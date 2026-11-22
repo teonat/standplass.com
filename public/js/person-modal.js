@@ -34,10 +34,9 @@ var StandplassPersonModal = (function () {
 
     // Reads the p_year/p_type/p_disc/p_class/p_metric params a deep link may
     // carry (KSS: nsf-ui.js's tryOpenFromUrl) -- a plain row click never
-    // reads these, it always starts from defaults (see buildPersonFilterParams
-    // below for why a *default* selection never writes them in the first
-    // place, so a bookmarked URL with none of these present is exactly
-    // equivalent to "defaults", not "explicitly empty").
+    // reads these, it always starts from defaults. For p_type/p_disc/
+    // p_class, an absent param and an empty list are the same thing --
+    // unfiltered -- so the caller normalizes both to [] at init.
     function parsePersonFilterParams(search) {
         var params = new URLSearchParams(search);
         function splitList(key) {
@@ -65,11 +64,15 @@ var StandplassPersonModal = (function () {
     // discs, classes, metric, defaultMetric }.
     function buildPersonFilterParams(state) {
         var isDefaultYears = state.selectedYears.length === 1 && state.selectedYears[0] === state.activeYear;
+        // Empty filter list = unfiltered, so it writes no param (same as
+        // null): a bookmark never carries p_type=p_disc=p_class clutter
+        // for the default view.
+        function list(v) { return v && v.length ? v.join(',') : null; }
         return {
             p_year: isDefaultYears ? null : state.selectedYears.slice().sort(function (a, b) { return a - b; }).join(','),
-            p_type: state.types === null ? null : state.types.join(','),
-            p_disc: state.discs === null ? null : state.discs.join(','),
-            p_class: state.classes === null ? null : state.classes.join(','),
+            p_type: list(state.types),
+            p_disc: list(state.discs),
+            p_class: list(state.classes),
             p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null
         };
     }
@@ -83,8 +86,11 @@ var StandplassPersonModal = (function () {
         return out.sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
     }
 
+    // Nothing picked = everything shown (the felt/terminliste filter
+    // convention): an empty or null list is no restriction, a non-empty
+    // list is the only values that pass.
     function matchesSet(value, set) {
-        if (set === null) { return true; }
+        if (set === null || !set.length) { return true; }
         return set.indexOf(value) >= 0;
     }
 
@@ -97,13 +103,13 @@ var StandplassPersonModal = (function () {
     }
 
     // wanted: a single value from the clicked row (e.g. a discipline name);
-    // known: every distinct value actually present in the data. Falls back to
-    // null (no filter) rather than [] (filter to nothing) if wanted isn't a
-    // real value -- an unmatched initial filter must never look like "no
-    // results".
+    // known: every distinct value actually present in the data. An empty
+    // list is the unfiltered state, so both "nothing wanted" and "wanted
+    // isn't a real value" fall back to [] -- an unmatched initial filter
+    // just opens unfiltered.
     function resolveInitialFilter(wanted, known) {
-        if (!wanted) { return null; }
-        return known.indexOf(wanted) >= 0 ? [wanted] : null;
+        if (!wanted) { return []; }
+        return known.indexOf(wanted) >= 0 ? [wanted] : [];
     }
 
     // --- Chart: pure math/data-transform helpers + SVG string rendering,

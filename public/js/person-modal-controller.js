@@ -128,10 +128,13 @@ var StandplassPersonModalController = (function () {
             var mySeq = ++personOpenSeq;
             var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
             var entriesByYear = {};
+            // Value filters use the felt/terminliste convention: nothing
+            // picked = everything shown. [] (or a normalized null from the
+            // URL parse) is the unfiltered state.
             var filters = {
-                types: (urlFilters && urlFilters.types) || null,
-                discs: (urlFilters && urlFilters.discs) || null,
-                classes: (urlFilters && urlFilters.classes) || null
+                types: (urlFilters && urlFilters.types) || [],
+                discs: (urlFilters && urlFilters.discs) || [],
+                classes: (urlFilters && urlFilters.classes) || []
             };
             if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
 
@@ -255,8 +258,8 @@ var StandplassPersonModalController = (function () {
                     + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>';
             }
 
-            function toggleSetValue(current, known, v, checked) {
-                var base = current === null ? known.slice() : current.slice();
+            function toggleSetValue(current, v, checked) {
+                var base = (current || []).slice();
                 if (checked) { if (base.indexOf(v) < 0) { base.push(v); } } else { base = base.filter(function (x) { return x !== v; }); }
                 return base;
             }
@@ -266,9 +269,10 @@ var StandplassPersonModalController = (function () {
             //         onToggle(v, checked), onClearAll(), onSelectAll?() }
             // The bulk pair sits above the list: "Merk alle" (when
             // selectAllLabel is passed) ticks every box, "Fjern alle"
-            // unticks every box. getSelected() returns null for the
-            // unfiltered everything-state — the widget renders that as
-            // all boxes ticked.
+            // unticks every box. Nothing picked means everything shown,
+            // so a null/empty selection renders as zero boxes ticked —
+            // and "Merk alle" is how you set up everything-EXCEPT
+            // filtering: tick all, then untick the one you don't want.
             function mountFilterDropdown(opts) {
                 var container = id(opts.suffix);
                 if (liveDropdowns[opts.suffix]) { liveDropdowns[opts.suffix].destroy(); }
@@ -285,12 +289,14 @@ var StandplassPersonModalController = (function () {
                     list: container.querySelector('.checkbox-dropdown-list'), clearAllBtn: container.querySelector('.checkbox-dropdown-clear-all'),
                     selectAllBtn: container.querySelector('.checkbox-dropdown-select-all'),
                     labelNone: opts.labelNone,
-                    // What the closed button says with zero boxes ticked
-                    // — reachable via the bulk untick and by hand.
-                    labelEmpty: opts.labelEmpty || 'Ingen valgt',
+                    // Only the year dropdown passes labelEmpty — its zero
+                    // state genuinely means nothing. The value filters'
+                    // zero state means everything, which labelNone already
+                    // says truthfully.
+                    labelEmpty: opts.labelEmpty,
                     searchable: !!opts.searchable,
                     getItems: function () { return opts.items.map(function (i) { return { id: i, name: i }; }); },
-                    getSelected: function () { var s = opts.getSelected(); return s === null ? opts.items : s; },
+                    getSelected: function () { var s = opts.getSelected(); return s == null ? [] : s; },
                     onToggle: function (v, name, checked) { opts.onToggle(v, checked); dropdown.rebuild(); },
                     onClearAll: function () { opts.onClearAll(); dropdown.rebuild(); },
                     onSelectAll: opts.onSelectAll ? function () { opts.onSelectAll(); dropdown.rebuild(); } : null
@@ -324,20 +330,22 @@ var StandplassPersonModalController = (function () {
                     },
                     // The year dropdown's bulk button is its reset: back to
                     // the single default year, not an untick-all — zero
-                    // years would leave nothing to show at all.
+                    // years would leave nothing to show at all. Its zero
+                    // state IS "nothing", so it gets the honest
+                    // labelEmpty; the value filters' zero state means
+                    // everything and keeps labelNone.
                     onClearAll: function () { selectedYears = [cfg.defaultYear]; refresh(); },
+                    labelEmpty: 'Ingen valgt',
                     clearLabel: 'Kun ' + cfg.defaultYear
                 });
             }
 
             function wireValueDerivedFilters() {
-                // Bulk semantics: "Merk alle" sets the null state (the
-                // canonical everything — all boxes ticked, no filtering,
-                // no URL param), "Fjern alle" sets the empty state (no
-                // boxes ticked, nothing matches, the table shows its
-                // "Ingen resultater." message). The empty state is
-                // deliberately not deep-linkable — it serializes to no
-                // param, so a shared link reopens unfiltered.
+                // Bulk semantics (nothing picked = everything shown):
+                // "Fjern alle" unticks every box — the unfiltered state,
+                // no URL param. "Merk alle" ticks every box — the view
+                // stays everything until an untick narrows it, which is
+                // the shortcut for everything-EXCEPT filtering.
                 if (knownValues('competitionType').length > 1) {
                     mountFilterDropdown({
                         suffix: '-person-type-filter',
@@ -346,9 +354,9 @@ var StandplassPersonModalController = (function () {
                         labelNone: 'Alle stevnetyper',
                         clearLabel: 'Fjern alle',
                         selectAllLabel: 'Merk alle',
-                        onToggle: function (v, checked) { filters.types = toggleSetValue(filters.types, knownValues('competitionType'), v, checked); refresh(); },
+                        onToggle: function (v, checked) { filters.types = toggleSetValue(filters.types, v, checked); refresh(); },
                         onClearAll: function () { filters.types = []; refresh(); },
-                        onSelectAll: function () { filters.types = null; refresh(); }
+                        onSelectAll: function () { filters.types = knownValues('competitionType'); refresh(); }
                     });
                 }
                 if (knownValues('discipline').length > 1) {
@@ -360,9 +368,9 @@ var StandplassPersonModalController = (function () {
                         clearLabel: 'Fjern alle',
                         selectAllLabel: 'Merk alle',
                         searchable: true,
-                        onToggle: function (v, checked) { filters.discs = toggleSetValue(filters.discs, knownValues('discipline'), v, checked); refresh(); },
+                        onToggle: function (v, checked) { filters.discs = toggleSetValue(filters.discs, v, checked); refresh(); },
                         onClearAll: function () { filters.discs = []; refresh(); },
-                        onSelectAll: function () { filters.discs = null; refresh(); }
+                        onSelectAll: function () { filters.discs = knownValues('discipline'); refresh(); }
                     });
                 }
                 if (knownValues('class').length > 1) {
@@ -373,9 +381,9 @@ var StandplassPersonModalController = (function () {
                         labelNone: 'Alle klasser',
                         clearLabel: 'Fjern alle',
                         selectAllLabel: 'Merk alle',
-                        onToggle: function (v, checked) { filters.classes = toggleSetValue(filters.classes, knownValues('class'), v, checked); refresh(); },
+                        onToggle: function (v, checked) { filters.classes = toggleSetValue(filters.classes, v, checked); refresh(); },
                         onClearAll: function () { filters.classes = []; refresh(); },
-                        onSelectAll: function () { filters.classes = null; refresh(); }
+                        onSelectAll: function () { filters.classes = knownValues('class'); refresh(); }
                     });
                 }
             }
