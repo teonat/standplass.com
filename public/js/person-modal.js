@@ -144,12 +144,12 @@ var StandplassPersonModal = (function () {
             return 'var(--chart-blue)';
         }
         if (metric === 'rankingScore') {
-            var v = Number(entry.rankingScore);
-            var cls = entry.class || '';
-            if (cls === 'A') { return v >= 97 ? 'var(--chart-blue)' : v >= 85 ? 'var(--chart-red)' : 'var(--chart-orange)'; }
-            if (cls === 'B') { return v >= 97 ? 'var(--chart-green)' : v >= 85 ? 'var(--chart-blue)' : 'var(--chart-red)'; }
-            if (cls === 'C') { return v >= 97 ? 'var(--chart-purple)' : v >= 85 ? 'var(--chart-green)' : 'var(--chart-blue)'; }
-            if (cls === 'D') { return v >= 85 ? 'var(--chart-purple)' : 'var(--chart-blue)'; }
+            // Ladder logic lives in ranking-band.js, shared with the
+            // Ranking cells in the result tables. The fallback is
+            // chart-specific: every dot must paint, so off-ladder
+            // entries get the neutral blue rather than no color.
+            var band = StandplassRankingBand.bandFor(entry.class, entry.rankingScore);
+            return band ? band.color : 'var(--chart-blue)';
         }
         return 'var(--chart-blue)';
     }
@@ -195,10 +195,12 @@ var StandplassPersonModal = (function () {
                 + '</div>';
         }
         if (metric !== 'rankingScore') { return ''; }
+        // Generated from the shared band list (ranking-band.js) so the
+        // legend can never drift from the dots or the table cells.
         return '<div class="chart-legend">'
-            + legendDot('var(--chart-purple)', '2+ klasser over') + legendDot('var(--chart-green)', 'Opprykksgrense nådd')
-            + legendDot('var(--chart-blue)', 'I klassen') + legendDot('var(--chart-red)', 'Under klassen')
-            + legendDot('var(--chart-orange)', '2+ klasser under')
+            + StandplassRankingBand.BANDS.map(function (b) {
+                return legendDot(b.color, b.label);
+            }).join('')
             + '</div>';
     }
 
@@ -543,12 +545,13 @@ var StandplassPersonModal = (function () {
                 format: function (v) { return v || ''; } },
             { key: 'class', label: 'Klasse', sortable: true, defaultDir: 'asc',
                 format: function (v) { return v || ''; } },
-            { key: 'position', label: 'Plass', sortable: true, defaultDir: 'asc',
-                format: function (v) { return v == null ? '–' : v; } },
+            { key: 'position', label: 'Plass', sortable: true, defaultDir: 'asc', raw: true,
+                cell: function (row) { return StandplassRankingBand.positionCellHtml(row.position); } },
             { key: 'score', label: 'Poeng', sortable: true, defaultDir: 'desc',
                 format: function (v) { return v == null ? '–' : v; } },
             { key: 'rankingScore', label: 'Ranking', sortable: true, defaultDir: 'desc',
-                format: function (v) { return v == null ? '–' : Number(v).toFixed(2); } }
+                raw: true,
+                cell: function (row) { return StandplassRankingBand.cellHtml(row.rankingScore, row.class); } }
         ];
     }
 

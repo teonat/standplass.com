@@ -24,6 +24,32 @@
     --chart-gold:   #f0c93a;
     --chart-silver: #d1d5db;
     --chart-bronze: #d4915c;
+    --chart-blue-text:   #6ba6ed;
+    --chart-purple-text: #c084fc;
+    --chart-green-text:  #4ade80;
+    --chart-red-text:    #f87171;
+    --chart-orange-text: #fb923c;
+    --chart-gold-text:   #f0c93a;
+    --chart-silver-text: #d1d5db;
+    --chart-bronze-text: #d4915c;
+  }
+
+  /* Club-scoped dark fallback: the kss preset carries the host's
+     navy-tinted dark palette, not standplass's warm darks. Ties the
+     global rule above on specificity — source order decides, so this
+     must stay after it. */
+  [data-club="kss"]:not([data-mode="light"]),
+  :host([data-club="kss"]:not([data-mode="light"])) {
+    --surface-page:  #12121f;
+    --surface-card:  #1e1e30;
+    --surface-dark:  #252538;
+    --text:         #e2e8f0;
+    --text-muted:   #94a3b8;
+    --border-faint:  rgba(255, 255, 255, 0.06);
+    --border:        rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --surface-base:  rgba(255, 255, 255, 0.03);
+    --surface-hover: rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -49,13 +75,44 @@
   --chart-gold:   #f0c93a;
   --chart-silver: #d1d5db;
   --chart-bronze: #d4915c;
+  --chart-blue-text:   #6ba6ed;
+  --chart-purple-text: #c084fc;
+  --chart-green-text:  #4ade80;
+  --chart-red-text:  #f87171;
+  --chart-orange-text: #fb923c;
+  --chart-gold-text:   #f0c93a;
+  --chart-silver-text: #d1d5db;
+  --chart-bronze-text: #d4915c;
+}
+
+/* Club-scoped dark: the kss preset carries the host's dark palette —
+   navy-tinted, not standplass's warm darks. Two-attribute selectors
+   out-specify the global dark block above, so the preset composes with
+   the mode system rather than replacing it. */
+[data-club="kss"][data-mode="dark"], :host([data-club="kss"][data-mode="dark"]) {
+  --surface-page:  #12121f;
+  --surface-card:  #1e1e30;
+  --surface-dark:  #252538;
+  --text:         #e2e8f0;
+  --text-muted:   #94a3b8;
+  --border-faint:  rgba(255, 255, 255, 0.06);
+  --border:        rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --surface-base:  rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.05);
 }
 
 /* ── Brand axis: kss ─────────────────────────────────────────────── */
 /* Never overridden by mode — an embedded view using this preset in dark
    mode still shows navy/gold, exactly like a club site's own light/dark
-   toggle never changes its brand colors. */
-[data-club="kss"] {
+   toggle never changes its brand colors. The :host() twin of the
+   selector: in the web-component path the preset attribute also sits on
+   the host element (embed.js mirrors it there so styles.css's :host
+   rule paints the host surface/text from the preset), and only :host()
+   forms reach the host from a stylesheet adopted inside the shadow root.
+   On regular pages the :host() form matches nothing, like every other
+   :host() selector in this file. */
+[data-club="kss"], :host([data-club="kss"]) {
   --brand-primary:       #1a1a2e;
   --brand-primary-light: #16213e;
   --brand-accent:        #e8b923;
@@ -70,4 +127,20 @@
   --brand-accent-border-active: rgba(232,185,35,0.45);
   --brand-accent-border-cta:    rgba(232,185,35,0.50);
   --font-family: 'Inter', system-ui, sans-serif;
+
+  /* Neutral axis: the host site's own palette, verbatim. The preset is
+     standplass's support of the host's theme, so an embed must sit on the
+     host's surfaces/text/borders, not on standplass's warm defaults —
+     in both modes, since the visitor's mode is the host's. */
+  --surface-page:   #f5f6f8;
+  --surface-card:   #ffffff;
+  --surface-dark:   #1a1a2e;
+  --text:           #1e2228;
+  --text-muted:     #5c6470;
+  --surface-base:   rgba(26, 26, 46, 0.03);
+  --surface-hover:  rgba(26, 26, 46, 0.05);
+  --border-faint:   rgba(26, 26, 46, 0.06);
+  --border:         rgba(26, 26, 46, 0.10);
+  --border-strong:  rgba(26, 26, 46, 0.15);
+  --font-display:   'Inter', system-ui, sans-serif;
 }

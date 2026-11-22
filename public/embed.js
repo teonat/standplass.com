@@ -158,7 +158,7 @@ var StandplassEmbed = (function () {
     // that don't run until every one of these has already loaded.
     var DEPENDENCY_PATHS = [
         '/js/format.js', '/js/data-fetch-cache.js', '/js/data-table.js',
-        '/js/pagination.js', '/js/person-modal.js', '/js/person-modal-controller.js',
+        '/js/pagination.js', '/js/ranking-band.js', '/js/person-modal.js', '/js/person-modal-controller.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
         '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',
         '/js/nsf-orgs.js', '/js/klubb-discipline-groups.js', '/js/terminliste-page.js'
@@ -342,7 +342,20 @@ var StandplassEmbed = (function () {
                 wrapper.setAttribute('aria-label', VIEWS[view].title);
 
                 var club = el.getAttribute('club');
-                if (club) { wrapper.setAttribute('data-club', club); }
+                if (club) {
+                    // On the wrapper (themes.css's plain [data-club]
+                    // selectors match it inside the shadow tree) AND on the
+                    // host element itself: styles.css's :host rule paints
+                    // the embed's outer surface and text color from vars
+                    // resolved on the HOST, and everything inside the
+                    // shadow tree that doesn't re-apply var(--text) inherits
+                    // that host-resolved color. Without the attribute here,
+                    // a club preset recolors only content that explicitly
+                    // uses its vars, leaving standplass's own surface and
+                    // inherited text behind it.
+                    wrapper.setAttribute('data-club', club);
+                    el.setAttribute('data-club', club);
+                }
 
                 // Hidden until styles are attached and markup is populated
                 // below -- unlike today's iframe (which blocks on its own
