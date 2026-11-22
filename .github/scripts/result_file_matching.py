@@ -27,6 +27,7 @@ def normalize(s):
 def _lookups(api_results):
     by_combined = {}
     by_name = {}
+    club_words = {}
     for result in api_results:
         person_id = result.get('personId')
         if not person_id:
@@ -35,10 +36,11 @@ def _lookups(api_results):
         club = result.get('club') or ''
         by_combined.setdefault(normalize(f'{name} {club}'), set()).add(person_id)
         by_name.setdefault(normalize(name), set()).add(person_id)
-    return by_combined, by_name
+        club_words[person_id] = set(normalize(club).split())
+    return by_combined, by_name, club_words
 
 
-def _match(name, club, by_combined, by_name):
+def _match(name, club, by_combined, by_name, club_words):
     if club:
         ids = by_combined.get(normalize(f'{name} {club}'))
     else:
@@ -50,6 +52,20 @@ def _match(name, club, by_combined, by_name):
     ids = by_name.get(normalize(name), set())
     if len(ids) == 1:
         return next(iter(ids))
+    if not ids and ' ' in name.strip():
+        # The name/club split can strand the club's place word at the
+        # end of the name (PDF 'Kristiansand Garnisons Pistolklubb' vs
+        # API club 'Kristiansand Pistolskyttere'). Trim exactly one
+        # trailing word, and only accept it when that word occurs in
+        # the candidate's API club — a misspelled surname never does.
+        words = name.strip().split()
+        trimmed = ' '.join(words[:-1])
+        dropped = normalize(words[-1])
+        trimmed_ids = by_name.get(normalize(trimmed), set())
+        if len(trimmed_ids) == 1:
+            person_id = next(iter(trimmed_ids))
+            if dropped in club_words.get(person_id, set()):
+                return person_id
     return None
 
 
@@ -72,9 +88,11 @@ def _iter_person_rows(detail):
 def attach_person_ids(detail, api_results):
     """Set personId on matched rows, in place. Lag members match on the
     name alone (they carry no club), so an ambiguous name stays unmatched."""
-    by_combined, by_name = _lookups(api_results)
+    by_combined, by_name, club_words = _lookups(api_results)
     for row in _iter_person_rows(detail):
-        person_id = _match(row.get('name'), row.get('club'), by_combined, by_name)
+        person_id = _match(
+            row.get('name'), row.get('club'), by_combined, by_name, club_words
+        )
         if person_id:
             row['personId'] = person_id
 

@@ -236,6 +236,46 @@ class ParseInrXBaneKmLagSections(unittest.TestCase):
         self.assertIn('Hurtig Sp Pistol', navn)
 
 
+class ParseInrXLagRobustness(unittest.TestCase):
+    def test_fused_team_cells_parse_with_tight_tolerance(self):
+        """inrX 1.6.3 lag tables print team cells so close that the
+        default text extraction fuses them ('24/13' + '22/3' ->
+        '24/1322/3'); the tight x_tolerance keeps them apart."""
+        with pdfplumber.open(os.path.join(FIXTURES, 'inrx-felt-fused.pdf')) as pdf:
+            detail = parse_result(pdf)
+        lag = find_champ_lag(detail, 'km', 'KM Lag: Felt Magnum-2')
+        team = lag['teams'][0]
+        self.assertEqual(team['team'], 'Rena')
+        self.assertEqual(team['medal'], 'Gull')
+        self.assertEqual(len(team['series']), 10)
+        self.assertEqual(team['series'][0], [24, 13])
+        self.assertEqual(team['series'][1], [22, 3])
+        self.assertEqual(team['ix'], 91)
+        self.assertEqual(team['sum'], 243)
+        self.assertEqual(
+            [m['name'] for m in team['members']],
+            ['Arne Che Sveen', 'Karl Egil Hanevik', 'Arne Granerud'],
+        )
+        second = lag['teams'][1]
+        self.assertEqual(second['team'], 'Brumunddal')
+        self.assertEqual(second['pos'], 2)
+        self.assertEqual(len(second['series']), 10)
+
+    def test_member_line_before_any_team_is_skipped_not_crashed(self):
+        text = '\n'.join([
+            'KM Lag: X :: Klasse Å 1 2 3 4 5 6 iX Sum',
+            'Ola Nordmann (Å) 11 574',
+            'Gull GPK 1 99 98 97 96 95 94 11 574',
+            'Per Hansen (Å) 5 200',
+        ])
+        detail = parse_inrx(text)
+        lag = detail['km']['lag'][0]
+        self.assertEqual(len(lag['teams']), 1)
+        team = lag['teams'][0]
+        self.assertEqual(team['team'], 'GPK 1')
+        self.assertEqual([m['name'] for m in team['members']], ['Per Hansen'])
+
+
 class ParsePlainNo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -275,8 +315,8 @@ class ParsePlainNoDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_2(self):
-        self.assertEqual(PARSER_VERSION, 2)
+    def test_parser_version_is_3(self):
+        self.assertEqual(PARSER_VERSION, 3)
 
 
 class ParseResultDispatch(unittest.TestCase):
@@ -289,7 +329,7 @@ class ParseResultDispatch(unittest.TestCase):
 
     def test_unknown_family_raises(self):
         class _Page:
-            def extract_text(self):
+            def extract_text(self, **kwargs):
                 return 'no family markers in here'
 
         class _Pdf:

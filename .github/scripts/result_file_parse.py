@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -57,8 +57,15 @@ def detect_family(text):
 
 
 def parse_result(pdf):
-    """Dispatch an open pdfplumber PDF to its family parser."""
-    text = '\n'.join(page.extract_text() or '' for page in pdf.pages)
+    """Dispatch an open pdfplumber PDF to its family parser.
+
+    Text extraction uses a tight x_tolerance: some generators print
+    table cells nearly touching, and the default tolerance fuses them
+    into unparseable tokens ('24/13' '22/3' -> '24/1322/3').
+    """
+    text = '\n'.join(
+        page.extract_text(x_tolerance=1) or '' for page in pdf.pages
+    )
     family = detect_family(text)
     if family == 'inrX':
         return parse_inrx(text)
@@ -260,6 +267,8 @@ def _parse_lag_line(line, n_series, entry):
     """Parse a Lag-table line: a member line or a team-totals line."""
     member = _LAG_MEMBER.match(line)
     if member:
+        if not entry['teams']:
+            return  # member line before any team row: skip, never crash
         entry['teams'][-1]['members'].append({
             'name': member.group('name').strip(),
             'klasse': member.group('klasse'),

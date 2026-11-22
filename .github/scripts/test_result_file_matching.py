@@ -109,6 +109,26 @@ class AttachPersonIds(unittest.TestCase):
         row = detail['ovelser'][0]['classes'][0]['rows'][0]
         self.assertEqual(row['personId'], 'p9')
 
+    def test_stranded_club_place_word_still_matches_on_trimmed_name(self):
+        # the PDF prints 'Kristiansand Garnisons Pistolklubb' while the
+        # API registers 'Kristiansand Pistolskyttere': the split strands
+        # the club's place word at the end of the name, and the club
+        # strings differ — only the trimmed name can match, guarded by
+        # the dropped word appearing in the candidate's API club
+        api = [
+            {'personId': 'p1', 'name': 'Ole Thomas Furuseth',
+             'club': 'Kristiansand Pistolskyttere', 'discipline': 'd', 'class': 'A'},
+            {'personId': 'p2', 'name': 'Anette Christensen',
+             'club': 'Åsane Pistolklubb', 'discipline': 'd', 'class': 'B'},
+        ]
+        detail = ovelse_detail([
+            {'name': 'Ole Thomas Furuseth Kristiansand',
+             'club': 'Garnisons Pistolklubb', 'series': [], 'ix': 1, 'sum': 2},
+        ])
+        attach_person_ids(detail, api)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertEqual(row['personId'], 'p1')
+
 
 class MatchStats(unittest.TestCase):
     def test_counts_across_ovelser_sections_and_lag_members(self):
