@@ -11,7 +11,11 @@
      scheme and the browser's prefers-color-scheme. Without the
      attribute the embed follows prefers-color-scheme — that axis is
      covered on every other page. The compact terminliste is
-     org-scoped, hence the klubb attribute. -->
+     org-scoped, hence the klubb attribute. The club="kss" pair layers
+     the club preset on top of each mode: the preset must carry the
+     host site's full neutral palette per mode (cool grays in light,
+     navy-tinted darks) — including the embed's own outer surface,
+     which styles.css paints from the host element. -->
 <link rel="stylesheet" href="rig.css">
 </head>
 <body>
@@ -38,6 +42,12 @@
 
 <h2>Terminliste, kompakt (mode="light")</h2>
 <standplass-results view="terminliste" compact klubb="Kongsvinger Sportsskyttere" mode="light"></standplass-results>
+
+<h2>Terminliste, kompakt (club="kss", mode="dark")</h2>
+<standplass-results view="terminliste" compact klubb="Kongsvinger Sportsskyttere" club="kss" mode="dark"></standplass-results>
+
+<h2>Terminliste, kompakt (club="kss", mode="light")</h2>
+<standplass-results view="terminliste" compact klubb="Kongsvinger Sportsskyttere" club="kss" mode="light"></standplass-results>
 
 <script src="rig.js"></script>
 </body>
