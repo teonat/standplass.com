@@ -3,9 +3,9 @@
 
 Orchestrates the parsers in result_file_parse.py and the person matcher
 in result_file_matching.py over the competitions in the scraped year
-JSONs, writing detail files under public/data/detaljer/ and slim KM/DM
-indexes per year. Detail files are additive: existing year JSONs are
-never modified.
+JSONs, writing detail files under public/data/detaljer/ and the
+per-year mestere (championship) indexes. Detail files are additive:
+existing year JSONs are never modified.
 
 Run tests directly:
 
@@ -31,6 +31,7 @@ import pdfplumber
 # fallback geometry or quarantine — the spam adds nothing to output.
 logging.getLogger('pdfminer').setLevel(logging.ERROR)
 
+from mestere_index import build_mestere_index, mestere_path
 from result_file_parse import PARSER_VERSION, UnsupportedFormatError, parse_result
 from result_file_matching import attach_person_ids, match_stats
 
@@ -118,101 +119,6 @@ def cache_put(url, content, etag, root='.'):
         f.write(content)
     with open(pdf[:-4] + '.etag', 'w', encoding='utf-8') as f:
         f.write(etag)
-
-
-def index_path(branch, year, root='.'):
-    """Path of a year's slim KM/DM champions index."""
-    return os.path.normpath(os.path.join(
-        root, DATA_DIR, branch, f'km-dm-{year}.json'
-    ))
-
-
-_MEDALS = ('Gull', 'Sølv', 'Bronse')
-
-
-def _person_champions(rows):
-    champions = []
-    for row in rows:
-        if row.get('medal') not in _MEDALS:
-            continue
-        entry = {'medal': row['medal']}
-        if row.get('personId'):
-            entry['personId'] = row['personId']
-        entry['name'] = row['name']
-        if row.get('club'):
-            entry['club'] = row['club']
-        champions.append(entry)
-    return champions
-
-
-def _team_champions(teams):
-    return [
-        {'medal': team['medal'], 'team': team['team']}
-        for team in teams
-        if team.get('medal') in _MEDALS
-    ]
-
-
-def build_km_index(branch, year, root='.'):
-    """Slim per-year index of championship results, champions only.
-
-    Reads the branch's detail files for the year and the year JSON
-    for comp metadata (title, date, organizer). Comps without
-    championship sections are excluded.
-    """
-    year_file = os.path.join(root, DATA_DIR, branch, f'{year}.json')
-    comps = {}
-    if os.path.exists(year_file):
-        with open(year_file, encoding='utf-8') as f:
-            data = json.load(f)
-        comps = {c['id']: c for c in data.get('competitions', [])}
-    detaljer_dir = os.path.join(root, DATA_DIR, 'detaljer', branch, year)
-    entries = []
-    if os.path.isdir(detaljer_dir):
-        for name in sorted(os.listdir(detaljer_dir)):
-            if not name.endswith('.json'):
-                continue
-            with open(os.path.join(detaljer_dir, name), encoding='utf-8') as f:
-                detail = json.load(f)
-            if detail.get('generator') == 'quarantined':
-                continue
-            comp = comps.get(detail.get('compId'))
-            if comp is None:
-                continue
-            entry = {
-                'compId': comp['id'],
-                'date': (comp.get('startDate') or '')[:10],
-                'title': comp.get('title'),
-                'organizer': comp.get('organizationName'),
-            }
-            for scope in ('km', 'dm'):
-                champ = detail.get(scope) or {}
-                sections = []
-                for section in champ.get('sections', []):
-                    champions = _person_champions(section.get('rows', []))
-                    if champions:
-                        sections.append({
-                            'ovelse': re.sub(rf'^{scope.upper()}: ', '', section['navn']),
-                            'klasse': section['klasse'],
-                            'champions': champions,
-                        })
-                if sections:
-                    entry[scope] = sections
-                lags = []
-                for lag in champ.get('lag', []):
-                    champions = _team_champions(lag.get('teams', []))
-                    if champions:
-                        lags.append({
-                            'ovelse': re.sub(rf'^{scope.upper()} Lag: ', '', lag['navn']),
-                            'klasse': lag['klasse'],
-                            'champions': champions,
-                        })
-                if lags:
-                    entry[scope + 'Lag'] = lags
-            if any(k in entry for k in ('km', 'dm', 'kmLag', 'dmLag')):
-                entries.append(entry)
-    entries.sort(key=lambda e: (e.get('date') or '', e.get('title') or ''))
-    return {'year': int(year), 'comps': entries}
 
 
 def write_detail(path, detail):
@@ -338,28 +244,67 @@ def fetch_conditional(url, etag):
 _default_fetch_conditional = fetch_conditional
 
 
+def _detaljer_scopes(opts, root='.'):
+    """(branch, year) pairs that have detail files on disk, narrowed
+    by the opts' branch/year filters when given."""
+    detaljer = os.path.join(root, DATA_DIR, 'detaljer')
+    scopes = []
+    if os.path.isdir(detaljer):
+        for branch in sorted(os.listdir(detaljer)):
+            bdir = os.path.join(detaljer, branch)
+            if not os.path.isdir(bdir):
+                continue
+            for year in sorted(os.listdir(bdir)):
+                if os.path.isdir(os.path.join(bdir, year)):
+                    scopes.append((branch, year))
+    if opts.get('branch'):
+        scopes = [s for s in scopes if s[0] == opts['branch']]
+    if opts.get('year'):
+        scopes = [s for s in scopes if s[1] == str(opts['year'])]
+    return scopes
+
+
 def _write_indexes(targets, summary, root, dry_run):
-    """Regenerate the slim KM/DM indexes for every (branch, year) the
-    targets touched; write only when the content actually changes so
-    daily runs produce no churn. A year whose comps all lost their
-    championship sections has its index emptied rather than left
-    stale, but years that never had an index get no empty file."""
+    """Regenerate the per-year mestere indexes for every (branch,
+    year) the targets touched; write only when the content actually
+    changes so daily runs produce no churn. A year whose comps all
+    lost their championship sections has its index emptied rather
+    than left stale, but years that never had an index get no empty
+    file. Classification warnings surface as a count in the run
+    summary, not in the published file."""
     summary['indexes_written'] = 0
+    summary['mestere_warnings'] = 0
     if dry_run:
         return
     scopes = sorted({(branch, year) for branch, year, _ in targets})
     for branch, year in scopes:
-        index = build_km_index(branch, year, root=root)
-        path = index_path(branch, year, root=root)
-        if not index['comps'] and not os.path.exists(path):
+        index = build_mestere_index(branch, year, root=root)
+        summary['mestere_warnings'] += len(index['warnings'])
+        path = mestere_path(branch, year, root=root)
+        published = {'year': index['year'], 'comps': index['comps']}
+        if not published['comps'] and not os.path.exists(path):
             continue
         existing = None
         if os.path.exists(path):
             with open(path, encoding='utf-8') as f:
                 existing = json.load(f)
-        if existing != index:
-            write_detail(path, index)
+        if existing != published:
+            write_detail(path, published)
             summary['indexes_written'] += 1
+
+
+def _new_summary():
+    return {
+        'parsed': 0,
+        'quarantined': 0,
+        'skipped_non_pdf': 0,
+        'up_to_date': 0,
+        'failed': 0,
+        'matched': 0,
+        'unmatched': 0,
+        'by_family': {},
+        'quarantine_list': [],
+    }
 
 
 def run_sweep(opts, *, fetch_conditional=None, root='.'):
@@ -426,21 +371,19 @@ def run(opts, *, fetch_pdf=None, root='.'):
 
     Downloads go through the injectable fetch_pdf (the default hits
     the network with the house user agent); identical URLs are fetched
-    once per run and written to every branch that lists them.
+    once per run and written to every branch that lists them. With
+    opts['indexes_only'] nothing is fetched — the mestere indexes
+    are rebuilt from the detail files already on disk.
     """
+    if opts.get('indexes_only'):
+        summary = _new_summary()
+        targets = [(branch, year, None)
+                   for branch, year in _detaljer_scopes(opts, root)]
+        _write_indexes(targets, summary, root, opts.get('dry_run'))
+        return summary
     if fetch_pdf is None:
         fetch_pdf = _default_fetch_pdf
-    summary = {
-        'parsed': 0,
-        'quarantined': 0,
-        'skipped_non_pdf': 0,
-        'up_to_date': 0,
-        'failed': 0,
-        'matched': 0,
-        'unmatched': 0,
-        'by_family': {},
-        'quarantine_list': [],
-    }
+    summary = _new_summary()
     fetch_cache = {}
 
     def cached_fetch(url):
@@ -497,6 +440,8 @@ def main():
         'year': year_filter,
         'branch': os.environ.get('BRANCH') or None,
         'dry_run': os.environ.get('DRY_RUN', 'false').lower() == 'true',
+        'indexes_only':
+            os.environ.get('INDEXES_ONLY', 'false').lower() == 'true',
     }
     if os.environ.get('SWEEP', 'false').lower() == 'true':
         # the weekly sweep covers every year — replacements can hit
@@ -525,6 +470,8 @@ def main():
     print(f'person match: {matched}/{person_rows} ({rate:.1f}%)')
     for generator, count in sorted(summary['by_family'].items()):
         print(f'  {generator}: {count}')
+    if summary.get('mestere_warnings'):
+        print(f"mestere warnings: {summary['mestere_warnings']}")
     for branch, year, comp_id, reason in summary['quarantine_list']:
         print(f'  quarantined {branch}/{year}/{comp_id}: {reason}')
     if summary['failed']:

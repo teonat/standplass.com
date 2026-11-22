@@ -46,6 +46,10 @@ parse-details-year year:
 parse-details-sweep:
     SWEEP=true python3 .github/scripts/parse_result_files.py
 
+# Rebuild mestere indexes only -- offline, no fetching (run after classification changes)
+parse-details-indexes:
+    INDEXES_ONLY=true python3 .github/scripts/parse_result_files.py
+
 # One-off: patch regionOrganizationId into existing year JSONs (run once, after the full scan finishes)
 backfill-comp-regions:
     python3 .github/scripts/backfill_comp_regions.py

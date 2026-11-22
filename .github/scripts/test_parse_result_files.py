@@ -9,11 +9,10 @@ import os
 import tempfile
 import unittest
 
+from mestere_index import build_mestere_index, mestere_path
 from parse_result_files import (
     PARSER_VERSION,
-    build_km_index,
     detail_path,
-    index_path,
     run,
     run_sweep,
     should_reparse,
@@ -51,6 +50,13 @@ BANE_PDF_RESULTS = [
     {'name': 'Mirvet Pupovic', 'club': 'Sandnes Pistolklubb',
      'personId': 'p2', 'class': 'A', 'discipline': 'T96 Fin'},
 ]
+
+BLINKEN_NM_URL = ('https://nsfstorage.blob.core.windows.net/'
+                  'resultfiles/blinken-nm.pdf')
+T96_KM_URL = ('https://nsfstorage.blob.core.windows.net/'
+              'resultfiles/t96-km.pdf')
+# Sogn og Fjordane Skyttarkrins (kretser.json) — the felt DM comp's krets
+SOGN_FJORDANE_GUID = '67706903-3b5b-4d47-c2bb-08d859126e0a'
 
 
 class DetailPath(unittest.TestCase):
@@ -257,7 +263,7 @@ class RunOrchestrator(unittest.TestCase):
             detail_path('felt', '2021', 'c-old', root=self.root)))
 
 
-class KmDmIndex(unittest.TestCase):
+class MestereIndex(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory()
@@ -277,8 +283,16 @@ class KmDmIndex(unittest.TestCase):
         cls.felt_comp_id = felt_comp['id']
         cls.bane_km_comp_id = bane_km_comp['id']
         cls.plain_comp_id = plain_comp['id']
-        write_year(root, 'felt', '2025', [felt_comp])
-        write_year(root, 'bane', '2025', [bane_km_comp, plain_comp])
+        felt_comp['regionOrganizationId'] = SOGN_FJORDANE_GUID
+        nm_comp = make_comp('nm-blinken', BLINKEN_NM_URL)
+        nm_comp['competitionTypeName'] = 'Norgesmesterskap'
+        nm_comp['startDate'] = '2025-08-16T00:00:00'
+        cls.nm_comp_id = 'nm-blinken'
+        t96_comp = make_comp('t96-km', T96_KM_URL)
+        t96_comp['competitionTypeName'] = 'Åpent stevne m/KM'
+        cls.t96_comp_id = 't96-km'
+        write_year(root, 'felt', '2025', [felt_comp, nm_comp])
+        write_year(root, 'bane', '2025', [bane_km_comp, plain_comp, t96_comp])
 
         def fetch(url):
             if 'f2fd227a' in url:
@@ -287,6 +301,10 @@ class KmDmIndex(unittest.TestCase):
                 return fixture_bytes('inrx-bane-km.pdf'), '"e2"'
             if 'b499f82caac9' in url:
                 return fixture_bytes('inrx-bane.pdf'), '"e3"'
+            if 'blinken-nm' in url:
+                return fixture_bytes('blinken-felt.pdf'), '"e4"'
+            if 't96-km' in url:
+                return fixture_bytes('t96-km.pdf'), '"e5"'
             raise AssertionError(f'unexpected url {url}')
 
         cls.summary = run({'full_scan': True, 'year': '2025', 'branch': None,
@@ -298,45 +316,71 @@ class KmDmIndex(unittest.TestCase):
         cls._tmp.cleanup()
 
     def test_run_wrote_both_indexes(self):
-        self.assertTrue(os.path.exists(index_path('felt', '2025', root=self.root)))
-        self.assertTrue(os.path.exists(index_path('bane', '2025', root=self.root)))
+        self.assertTrue(os.path.exists(mestere_path('felt', '2025', root=self.root)))
+        self.assertTrue(os.path.exists(mestere_path('bane', '2025', root=self.root)))
         self.assertGreaterEqual(self.summary.get('indexes_written', 0), 2)
 
-    def test_index_path_shape(self):
+    def test_mestere_path_shape(self):
         self.assertEqual(
-            index_path('felt', '2025'),
-            'public/data/felt/km-dm-2025.json',
+            mestere_path('felt', '2025'),
+            'public/data/felt/mestere-2025.json',
         )
 
     def test_felt_dm_champions_with_person_ids(self):
-        index = build_km_index('felt', '2025', root=self.root)
+        index = build_mestere_index('felt', '2025', root=self.root)
         entry = next(c for c in index['comps'] if c['compId'] == self.felt_comp_id)
         self.assertEqual(entry['title'], 'Feltstemne FGMR DM i FGMR')
         self.assertTrue(entry['organizer'])
         self.assertEqual(entry['date'], entry['date'][:10])
         section = next(s for s in entry['dm']
                        if s['ovelse'] == 'Felt Fin' and s['klasse'] == 'M')
-        self.assertEqual([c['medal'] for c in section['champions']],
+        self.assertEqual([p['medal'] for p in section['podium']],
                          ['Gull', 'Sølv', 'Bronse'])
-        gull = section['champions'][0]
+        gull = section['podium'][0]
         self.assertEqual(gull['name'], 'Kjell Jomar Heltne')
         self.assertEqual(gull['club'], 'Florø Pistolklubb')
         self.assertTrue(gull['personId'])
         self.assertNotIn('series', section)
 
     def test_bane_km_and_lag_champions(self):
-        index = build_km_index('bane', '2025', root=self.root)
+        index = build_mestere_index('bane', '2025', root=self.root)
         entry = next(c for c in index['comps'] if c['compId'] == self.bane_km_comp_id)
         section = next(s for s in entry['km']
                        if s['ovelse'] == 'Hurtig Sp Pistol' and s['klasse'] == 'Å')
-        gull = section['champions'][0]
+        gull = section['podium'][0]
         self.assertEqual(gull['name'], 'Tore Vrålstad')
         self.assertTrue(gull['personId'])
         lag = next(s for s in entry['kmLag'] if s['ovelse'] == 'Hurtig Sp Pistol')
-        self.assertEqual(lag['champions'][0], {'medal': 'Gull', 'team': 'GPK 1'})
+        self.assertEqual(lag['podium'][0], {'medal': 'Gull', 'team': 'GPK 1'})
+
+    def test_nm_comp_over_blinken_pdf_creates_nm_sections(self):
+        index = build_mestere_index('felt', '2025', root=self.root)
+        entry = next(c for c in index['comps'] if c['compId'] == self.nm_comp_id)
+        self.assertEqual({s['ovelse'] for s in entry['nm']},
+                         {'Fin felt', 'Grov felt', 'Militær felt',
+                          'Revolver felt'})
+        section = next(s for s in entry['nm']
+                       if s['ovelse'] == 'Fin felt' and s['klasse'] == 'A')
+        self.assertEqual(
+            section['podium'],
+            [{'medal': 'Gull', 'name': 'Eirik Djønne', 'club': 'Odda PK',
+              'sum': 107},
+             {'medal': 'Sølv', 'name': 'Daniel Hagenes', 'club': 'Åsane PK',
+              'sum': 107},
+             {'medal': 'Bronse', 'name': 'Morten Sleire',
+              'club': 'Kvam Pistolklubb', 'sum': 102}])
+        # a class with no rank 1-3 rows produces no section
+        self.assertNotIn(('Grov felt', 'D'),
+                         {(s['ovelse'], s['klasse']) for s in entry['nm']})
+
+    def test_t96_relistings_never_classified_as_km(self):
+        index = build_mestere_index('bane', '2025', root=self.root)
+        comp_ids = {c['compId'] for c in index['comps']}
+        self.assertNotIn(self.t96_comp_id, comp_ids)
+        self.assertEqual([w for w in index['warnings'] if 'T96' in w], [])
 
     def test_comp_without_championships_excluded(self):
-        index = build_km_index('bane', '2025', root=self.root)
+        index = build_mestere_index('bane', '2025', root=self.root)
         comp_ids = {c['compId'] for c in index['comps']}
         self.assertNotIn(self.plain_comp_id, comp_ids)
         self.assertEqual(index['year'], 2025)
@@ -348,8 +392,26 @@ class KmDmIndex(unittest.TestCase):
         summary = run({'full_scan': True, 'year': '2025', 'branch': None,
                        'dry_run': False}, fetch_pdf=fetch, root=self.root)
         self.assertEqual(summary['parsed'], 0)
-        self.assertEqual(summary['up_to_date'], 3)
+        self.assertEqual(summary['up_to_date'], 5)
         self.assertEqual(summary['indexes_written'], 0)
+
+    def test_indexes_only_rebuilds_without_fetching(self):
+        for branch in ('felt', 'bane'):
+            os.remove(mestere_path(branch, '2025', root=self.root))
+
+        def no_fetch(url):
+            raise AssertionError('indexes-only mode must not fetch anything')
+
+        summary = run({'full_scan': True, 'year': '2025', 'branch': None,
+                       'dry_run': False, 'indexes_only': True},
+                      fetch_pdf=no_fetch, root=self.root)
+        self.assertEqual(summary['parsed'], 0)
+        self.assertEqual(summary['up_to_date'], 0)
+        self.assertEqual(summary['indexes_written'], 2)
+        self.assertTrue(os.path.exists(
+            mestere_path('felt', '2025', root=self.root)))
+        self.assertTrue(os.path.exists(
+            mestere_path('bane', '2025', root=self.root)))
 
     def test_sweep_rewrites_index_when_pdf_replaced(self):
         def conditional(url, etag):
@@ -361,13 +423,15 @@ class KmDmIndex(unittest.TestCase):
                             fetch_conditional=conditional, root=self.root)
         self.assertEqual(summary['re-parsed'], 1)
         self.assertEqual(summary['indexes_written'], 1)
-        with open(index_path('felt', '2025', root=self.root),
+        with open(mestere_path('felt', '2025', root=self.root),
                   encoding='utf-8') as f:
             index = json.load(f)
         # the replacement carries no championship sections, so the
         # comp must leave the index — a stale entry must not survive
-        self.assertEqual(index['comps'], [])
-        with open(index_path('bane', '2025', root=self.root),
+        comp_ids = {c['compId'] for c in index['comps']}
+        self.assertNotIn(self.felt_comp_id, comp_ids)
+        self.assertIn(self.nm_comp_id, comp_ids)
+        with open(mestere_path('bane', '2025', root=self.root),
                   encoding='utf-8') as f:
             self.assertEqual(json.load(f)['comps'][0]['compId'],
                              self.bane_km_comp_id)
@@ -381,7 +445,7 @@ class KmDmIndex(unittest.TestCase):
 
             run({'full_scan': True, 'year': '2025', 'branch': 'felt',
                  'dry_run': False}, fetch_pdf=fetch, root=root)
-            path = index_path('felt', '2025', root=root)
+            path = mestere_path('felt', '2025', root=root)
             self.assertTrue(os.path.exists(path))
             os.remove(path)
 
