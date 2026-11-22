@@ -115,9 +115,15 @@ def _team_podium(rows):
     return podium
 
 
-def _team_champions(teams):
-    """inrX lag teams already carry {medal, team} from parse time; the
-    team's own sum flows through when the PDF printed one."""
+def _team_champions(teams, club_map=None):
+    """inrX lag teams already carry {medal, team, members} from parse
+    time; the team's own sum flows through when the PDF printed one.
+    The team's club resolves through the first member whose personId
+    the comp's API results carry — PDF team names are often
+    abbreviations ('GPK 1'), and members matched to persons give the
+    canonical club. No resolvable member → no club; the frontend then
+    falls back to the club embedded in the lag name."""
+    club_map = club_map or {}
     out = []
     for t in teams:
         if t.get('medal') not in MEDALS:
@@ -125,6 +131,11 @@ def _team_champions(teams):
         entry = {'medal': t['medal'], 'team': t['team']}
         if t.get('sum') is not None:
             entry['sum'] = t['sum']
+        for m in t.get('members') or []:
+            club = club_map.get(m.get('personId'))
+            if club:
+                entry['club'] = club
+                break
         out.append(entry)
     return out
 
@@ -176,7 +187,7 @@ def _classify(detail, comp):
                     'podium': podium,
                 })
         for lag in champ.get('lag', []):
-            podium = _team_champions(lag.get('teams', []))
+            podium = _team_champions(lag.get('teams', []), club_map)
             if podium:
                 out[scope + 'Lag'].append({
                     'ovelse': re.sub(rf'^{scope.upper()} Lag: ', '',

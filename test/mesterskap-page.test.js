@@ -33,7 +33,7 @@ var pageIndex = {
         comp('c3', {
             region: 'Buskerud',
             kmLag: [sec('Felt Fin', 'M', [
-                { medal: 'Sølv', team: 'Hurum SKL', sum: 305 }
+                { medal: 'Sølv', team: 'GPK 1', sum: 305 }
             ])]
         }),
         comp('c4', {
@@ -69,10 +69,11 @@ assert.strictEqual(MP.grenDisplayName('bane'), 'baneskyting');
 
 // ── resolveFilters / filterParams: the URL filter codec ────────────────
 
-var EMPTY_FILTERS = { ovelse: [], klasse: [], krets: [], klubb: '', navn: '', type: '' };
+var EMPTY_FILTERS = { ovelse: [], klasse: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
 assert.deepStrictEqual(MP.resolveFilters(''), EMPTY_FILTERS);
 assert.deepStrictEqual(MP.resolveFilters('?ovelse=Felt%20Fin,Felt%20Grov'), {
-    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], krets: [], klubb: '', navn: '', type: ''
+    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], krets: [], distrikt: [],
+    klubb: '', navn: '', type: ''
 }, 'øvelse is a comma-joined, per-element-encoded list');
 assert.strictEqual(MP.resolveFilters('?type=lag').type, 'lag');
 assert.strictEqual(MP.resolveFilters('?type=ugyldig').type, '',
@@ -80,7 +81,8 @@ assert.strictEqual(MP.resolveFilters('?type=ugyldig').type, '',
 
 var full = {
     ovelse: ['Felt Fin', 'Felt Militær Rødpunkt'], klasse: ['U'],
-    krets: ['Buskerud'], klubb: 'Bodø PK', navn: 'anne', type: 'individuelt'
+    krets: ['Buskerud'], distrikt: ['Nord-Norge'],
+    klubb: 'Bodø PK', navn: 'anne', type: 'individuelt'
 };
 var sp = new URLSearchParams();
 MP.filterParams(full).forEach(function (p) { sp.set(p[0], p[1]); });
@@ -88,8 +90,8 @@ assert.deepStrictEqual(MP.resolveFilters('?' + sp.toString()), full,
     'resolveFilters inverts filterParams (names with spaces and æ/ø round-trip)');
 assert.deepStrictEqual(MP.filterParams(EMPTY_FILTERS), [],
     'empty filters produce no params');
-assert.deepStrictEqual(MP.filterParams({ ovelse: ['Felt Fin'], klasse: [], krets: [], klubb: '', navn: '', type: 'lag' }),
-    [['ovelse', 'Felt%20Fin'], ['type', 'lag']],
+assert.deepStrictEqual(MP.filterParams({ ovelse: ['Felt Fin'], klasse: [], krets: [], distrikt: ['Vest-Norge'], klubb: '', navn: '', type: 'lag' }),
+    [['ovelse', 'Felt%20Fin'], ['distrikt', 'Vest-Norge'], ['type', 'lag']],
     'only non-empty values are written; klasse writes the class param');
 
 // ── filterBarMarkup: the scope-aware filter row ─────────────────────────
@@ -98,16 +100,23 @@ var kmBar = MP.filterBarMarkup('km');
 ['mesterskap-ovelse-btn', 'mesterskap-ovelse-panel', 'mesterskap-ovelse-list',
  'mesterskap-klasse-btn', 'mesterskap-klasse-list',
  'mesterskap-krets-btn', 'mesterskap-krets-list',
+ 'mesterskap-distrikt-btn', 'mesterskap-distrikt-list',
  'mesterskap-klubb-input', 'mesterskap-klubb-tags', 'mesterskap-klubb-clear',
  'mesterskap-navn', 'mesterskap-type', 'mesterskap-rows',
  'mesterskap-clear-filters'
 ].forEach(function (id) { assert.ok(kmBar.indexOf('id="' + id + '"') !== -1, 'km bar has ' + id); });
-assert.ok(kmBar.indexOf('checkbox-dropdown') !== -1, 'øvelse/klasse/krets use checkbox dropdowns');
+assert.ok(kmBar.indexOf('checkbox-dropdown') !== -1, 'øvelse/klasse/krets/distrikt use checkbox dropdowns');
 assert.ok(kmBar.indexOf('autocomplete-list') !== -1, 'klubb uses the tag-combo pattern');
-assert.ok(MP.filterBarMarkup('nm').indexOf('mesterskap-krets') === -1,
+var nmBar = MP.filterBarMarkup('nm');
+assert.ok(nmBar.indexOf('mesterskap-krets') === -1,
     'nm has no krets filter');
-assert.ok(MP.filterBarMarkup('dm').indexOf('mesterskap-krets-btn') !== -1,
+assert.ok(nmBar.indexOf('mesterskap-distrikt') === -1,
+    'nm has no distrikt filter (national)');
+var dmBar = MP.filterBarMarkup('dm');
+assert.ok(dmBar.indexOf('mesterskap-krets-btn') !== -1,
     'dm keeps the krets filter (the krets→distrikt finder)');
+assert.ok(dmBar.indexOf('mesterskap-distrikt-btn') !== -1,
+    'dm also has the direct distrikt filter');
 assert.ok(/id="mesterskap-type"[^>]*>[\s\S]*?<option value="">Alle<\/option>[\s\S]*?<option value="individuelt">Individuelt<\/option>[\s\S]*?<option value="lag">Lag<\/option>/.test(kmBar),
     'the Type select offers Alle/Individuelt/Lag');
 assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/.test(kmBar),
@@ -119,34 +128,41 @@ var rows = global.StandplassMestereData.podiumRows(pageIndex, 'km');
 assert.strictEqual(rows.length, 5);
 
 var spec = MP.tableSpecFor(rows, 'km');
+function col(key) {
+    return spec.columns.filter(function (c) { return c.key === key; })[0];
+}
 assert.deepStrictEqual(spec.columns.map(function (c) { return c.key; }),
-    ['ovelseRank', 'klasse', 'medalRank', 'name', 'club', 'sum', 'region', 'date', 'organizer']);
-assert.strictEqual(spec.columns[0].label, 'Øvelse');
-assert.strictEqual(spec.columns[0].cell(rows[0]), rows[0].ovelse,
+    ['name', 'ovelseRank', 'klasse', 'medalRank', 'club', 'sum', 'region', 'date', 'organizer'],
+    'Navn leads — the person is the row\u2019s identity (owner ruling)');
+assert.strictEqual(col('ovelseRank').label, 'Øvelse');
+assert.strictEqual(col('ovelseRank').cell(rows[0]), rows[0].ovelse,
     'Øvelse displays the name, sorts by ovelseRank');
-assert.strictEqual(spec.columns[2].label, 'Medalje');
-assert.strictEqual(spec.columns[2].cell(rows[0]), rows[0].medal,
+assert.strictEqual(col('medalRank').label, 'Medalje');
+assert.strictEqual(col('medalRank').cell(rows[0]), rows[0].medal,
     'Medalje displays the name, sorts by medalRank');
-assert.strictEqual(spec.columns[6].label, 'Krets', 'km carries the krets context column');
-assert.strictEqual(spec.columns[6].defaultHidden, true,
+assert.strictEqual(col('region').label, 'Krets', 'km carries the krets context column');
+assert.strictEqual(col('region').defaultHidden, true,
     'the region column hides behind the group row');
 assert.ok(spec.columns.every(function (c) { return c.key !== 'distrikt'; }),
     'km has no distrikt column');
-var link = spec.columns[3].cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
+var link = col('name').cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
 assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
     'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
 var teamRow = rows.filter(function (r) { return r.isTeam; })[0];
-var teamCell = spec.columns[3].cell(teamRow);
-assert.ok(teamCell.indexOf('Hurum SKL') !== -1,
+var teamCell = col('name').cell(teamRow);
+assert.ok(teamCell.indexOf('GPK 1') !== -1,
     'team rows render the team name, no link');
 assert.ok(teamCell.indexOf('mesterskap-lag-tag') !== -1,
     'team rows are visibly marked as lag');
-assert.strictEqual(spec.columns[5].cell(teamRow), '305',
+assert.strictEqual(col('sum').cell(teamRow), '305',
     'team rows show their lag sum');
-assert.strictEqual(spec.columns[4].cell(teamRow), '–', 'team rows show – for club');
-assert.strictEqual(spec.columns[5].cell({ sum: null }), '–', 'missing sum renders –');
+assert.strictEqual(col('club').cell(teamRow), 'GPK',
+    'team rows without a resolved club show the club from the lag name (team number stripped)');
+assert.strictEqual(col('club').cell({ isTeam: false, club: null, name: 'X' }), '–',
+    'person rows without a club show –');
+assert.strictEqual(col('sum').cell({ sum: null }), '–', 'missing sum renders –');
 var escRow = { medal: 'Gull', name: 'A <B>', klasse: 'U', medalRank: 1, ovelseRank: 1, ovelse: 'X', isTeam: false };
-assert.ok(spec.columns[3].cell(escRow).indexOf('A &lt;B&gt;') !== -1,
+assert.ok(col('name').cell(escRow).indexOf('A &lt;B&gt;') !== -1,
     'non-person names escape');
 assert.ok(spec.wrapClass.indexOf('club-stats-list-scroll') !== -1,
     'the table sits in a contained scroll region');

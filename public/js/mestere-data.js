@@ -190,13 +190,24 @@ var StandplassMestereData = (function () {
         return i === -1 ? null : i + 1;
     }
 
+    // The club inside a lag name: team names carry the club with a
+    // trailing team number, spaced ('GPK 1') or fused ('SSSK10').
+    // Names without digits are already the club. Display-level
+    // derivation only — the row's club field stays null for team rows
+    // (club filters and stats stay individual-only by ruling).
+    function teamClub(team) {
+        return String(team == null ? '' : team)
+            .replace(/\s*\d+$/, '')
+            .trim();
+    }
+
     // One row per podium finish for the scope, individual and lag
     // sections together, each stamped with its comp's context and
     // pre-sorted into the order the mesterskap pages open with:
     // øvelse program rank, klasse (Norwegian collation, nulls last),
-    // medal rank, then name. Team rows carry the team string as name;
-    // they have no personId/club, but keep their lag sum when the
-    // index carries one.
+    // medal rank, then name. Team rows carry the team string as name
+    // and no personId; their club is the index's member-resolved
+    // canonical club when present, and they keep their lag sum.
     function podiumRows(index, scope) {
         var rows = [];
         var sectionKeys = [scope, scope + 'Lag'];
@@ -213,7 +224,7 @@ var StandplassMestereData = (function () {
                             medalRank: medalRank(row.medal),
                             name: isTeam ? row.team : row.name,
                             personId: isTeam ? null : (row.personId || null),
-                            club: isTeam ? null : (row.club || null),
+                            club: row.club || null,
                             sum: row.sum == null ? null : row.sum,
                             isTeam: isTeam,
                             region: comp.region || null,
@@ -300,7 +311,8 @@ var StandplassMestereData = (function () {
         programRank: programRank,
         podiumRows: podiumRows,
         filterPodiumRows: filterPodiumRows,
-        statsFor: statsFor
+        statsFor: statsFor,
+        teamClub: teamClub
     };
 })();
 

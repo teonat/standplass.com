@@ -298,6 +298,35 @@ class KmDmClassification(MestereIndexBase):
         self.assertEqual(entry['kmLag'][0]['podium'],
                          [{'medal': 'Gull', 'team': 'GPK 1', 'sum': 287}])
 
+    def test_inrx_team_podium_gets_club_from_members(self):
+        # PDF team names are often abbreviations ('GPK 1'); the comp's
+        # API results resolve members to canonical clubs, so the team's
+        # club comes from its first resolvable member. No resolvable
+        # member → no club (the frontend falls back to the lag name).
+        d = detail('i2', generator='inrX 1.9.1.0', ovelser=[], **{
+            'km': {
+                'sections': [],
+                'lag': [
+                    {'navn': 'KM Lag: Hurtig Fin', 'klasse': 'Å', 'teams': [
+                        {'medal': 'Gull', 'team': 'GPK 1', 'sum': 287, 'members': [
+                            {'name': 'A', 'klasse': 'Å', 'ix': 1, 'sum': 100, 'personId': 'p1'},
+                            {'name': 'B', 'klasse': 'Å', 'ix': 2, 'sum': 99},
+                        ]},
+                        {'medal': 'Sølv', 'team': 'TPK3', 'sum': 280, 'members': []},
+                    ]},
+                ],
+            },
+        })
+        index = self.build('bane', 2025,
+                          [comp('i2', results=[
+                              {'personId': 'p1', 'club': 'Gjøvik Pistolklubb'},
+                          ])],
+                          {'i2': d})
+        podium = index['comps'][0]['kmLag'][0]['podium']
+        self.assertEqual(podium[0], {'medal': 'Gull', 'team': 'GPK 1', 'sum': 287,
+                                     'club': 'Gjøvik Pistolklubb'})
+        self.assertEqual(podium[1], {'medal': 'Sølv', 'team': 'TPK3', 'sum': 280})
+
 
 class RegionsAndClubs(MestereIndexBase):
     ROGALAND = '3b444426-1ea5-4c3c-c2af-08d859126e0a'

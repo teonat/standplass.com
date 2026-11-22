@@ -38,7 +38,7 @@ var feltIndex = {
         comp('c3', {
             region: 'Buskerud',
             kmLag: [sec('Felt Fin', 'M', [
-                { medal: 'Sølv', team: 'Hurum SKL', sum: 300 }
+                { medal: 'Sølv', team: 'Hurum SKL', sum: 300, club: 'Hurum SKL' }
             ])]
         }),
         comp('c4', {
@@ -200,6 +200,18 @@ assert.strictEqual(MD.programRank('Hurtig Sp Revolver'), 5,
     'space-separated Sp is spesial too (bane prints it without the hyphen)');
 assert.strictEqual(MD.programRank('Hurtig Sp Pistol'), 5);
 
+// ── teamClub ───────────────────────────────────────────────────────────
+// The club inside a lag name: strip a trailing team number, spaced
+// ('GPK 1') or fused ('SSSK10'). Names without digits pass through.
+
+assert.strictEqual(MD.teamClub('Hurum SKL'), 'Hurum SKL');
+assert.strictEqual(MD.teamClub('Fredrikstad SS'), 'Fredrikstad SS');
+assert.strictEqual(MD.teamClub('Brumunddal PK 2'), 'Brumunddal PK');
+assert.strictEqual(MD.teamClub('GPK 1'), 'GPK');
+assert.strictEqual(MD.teamClub('SSSK10'), 'SSSK');
+assert.strictEqual(MD.teamClub('Oppdal8'), 'Oppdal');
+assert.strictEqual(MD.teamClub(null), '');
+
 // ── podiumRows ─────────────────────────────────────────────────────────
 
 var kmRows = MD.podiumRows(feltIndex, 'km');
@@ -212,7 +224,7 @@ assert.ok(fin[0].klasse === 'M' && fin[0].isTeam,
 var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
 assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
 assert.strictEqual(teamRow.personId, null);
-assert.strictEqual(teamRow.club, null);
+assert.strictEqual(teamRow.club, 'Hurum SKL', 'team rows carry the member-resolved club when the index has one');
 assert.strictEqual(teamRow.sum, 300, 'team rows keep their lag sum');
 assert.strictEqual(teamRow.medalRank, 2, 'Sølv');
 assert.ok(kmRows.slice(0, 4).every(function (r) { return r.ovelse === 'Felt Fin'; }),
@@ -259,8 +271,10 @@ assert.strictEqual(MD.filterPodiumRows(kmRows, null).length, 6,
 // ── statsFor ────────────────────────────────────────────────────────────
 
 assert.deepStrictEqual(MD.statsFor(kmRows, 'km'),
-    { medaljer: 6, ovselser: 2, regioner: 2, klubber: 3 },
-    'regioner counts Buskerud+Nordland, klubber KSS+Brumunddal+Bodø');
+    { medaljer: 6, ovselser: 2, regioner: 2, klubber: 4 },
+    'regioner counts Buskerud+Nordland; klubber include the lag club (KSS+Brumunddal+Bodø+Hurum)');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: 'Hurum SKL', navn: '', type: '' }).length, 1,
+    'the klubb filter matches lag rows via their resolved club');
 assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, null, 'nm has no region stat');
 assert.deepStrictEqual(MD.statsFor(nmRows, 'nm'),
     { medaljer: 2, ovselser: 2, regioner: null, klubber: 1 });

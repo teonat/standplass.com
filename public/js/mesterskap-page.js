@@ -35,7 +35,7 @@ var StandplassMesterskapPage = (function () {
         return { gren: gren, ar: ar };
     }
 
-    // The filter URL codec. Params: ovelse, class, krets are
+    // The filter URL codec. Params: ovelse, class, krets, distrikt are
     // comma-joined, per-element-encoded lists (the felt/bane disc
     // convention); klubb, name, type are single values. resolveFilters
     // parses, filterParams inverts — the page writes pairs via
@@ -48,6 +48,7 @@ var StandplassMesterskapPage = (function () {
             ovelse: StandplassFormat.decodeIdList(params.get('ovelse')),
             klasse: StandplassFormat.decodeIdList(params.get('class')),
             krets: StandplassFormat.decodeIdList(params.get('krets')),
+            distrikt: StandplassFormat.decodeIdList(params.get('distrikt')),
             klubb: params.get('klubb') || '',
             navn: params.get('name') || '',
             type: type
@@ -60,6 +61,7 @@ var StandplassMesterskapPage = (function () {
         if (f.ovelse && f.ovelse.length) { out.push(['ovelse', StandplassFormat.encodeIdList(f.ovelse)]); }
         if (f.klasse && f.klasse.length) { out.push(['class', StandplassFormat.encodeIdList(f.klasse)]); }
         if (f.krets && f.krets.length) { out.push(['krets', StandplassFormat.encodeIdList(f.krets)]); }
+        if (f.distrikt && f.distrikt.length) { out.push(['distrikt', StandplassFormat.encodeIdList(f.distrikt)]); }
         if (f.klubb) { out.push(['klubb', f.klubb]); }
         if (f.navn) { out.push(['name', f.navn]); }
         if (f.type) { out.push(['type', f.type]); }
@@ -94,6 +96,7 @@ var StandplassMesterskapPage = (function () {
         out.push(dropdownGroup('klasse', 'Klasse', 'Alle klasser'));
         if (scope !== 'nm') {
             out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
+            out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
         }
         out.push('<div class="filter-group">'
             + '<label>Klubb</label>'
@@ -171,16 +174,20 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The dense podium table: one row per medal, everything else a
-    // column or a filter. Øvelse and Medalje display names but sort by
+    // column or a filter. Navn leads (owner ruling — the person is the
+    // row's identity). Øvelse and Medalje display names but sort by
     // their rank fields (the base compares cells as strings — a name
-    // key cannot sort Gull first). The region column (krets on km,
-    // distrikt on dm) is defaultHidden behind its group row; nm carries
-    // neither column nor grouping. hideBelow tiers follow the
-    // norgesfelt search table (700/900).
+    // key cannot sort Gull first). Team rows show the club embedded in
+    // the lag name in their Klubb cell (display-only — row.club stays
+    // null, so club filters and stats stay individual-only). The
+    // region column (krets on km, distrikt on dm) is defaultHidden
+    // behind its group row; nm carries neither column nor grouping.
+    // hideBelow tiers follow the norgesfelt search table (700/900).
     function tableSpecFor(rows, scope) {
         rows = rows || [];
         var regionKey = scope === 'km' ? 'region' : scope === 'dm' ? 'distrikt' : null;
         var columns = [
+            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true, cell: personCell },
             {
                 key: 'ovelseRank', label: 'Øvelse', sortable: true, defaultDir: 'asc', hideBelow: 700,
                 cell: function (row) { return row.ovelse; }
@@ -193,10 +200,13 @@ var StandplassMesterskapPage = (function () {
                 key: 'medalRank', label: 'Medalje', align: 'center', sortable: true, defaultDir: 'asc',
                 cellClass: 'medal-cell', cell: function (row) { return row.medal; }
             },
-            { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true, cell: personCell },
             {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
-                cell: function (row) { return row.club == null ? '–' : row.club; }
+                cell: function (row) {
+                    if (row.club != null) { return row.club; }
+                    if (row.isTeam) { return StandplassMestereData.teamClub(row.name); }
+                    return '–';
+                }
             }
         ];
         if (rows.some(function (r) { return r.sum != null; })) {
@@ -339,7 +349,7 @@ var StandplassMesterskapPage = (function () {
         var allRows = [];
         var filters = resolveFilters(urlState.getSearch());
         var emptyFilters = function () {
-            return { ovelse: [], klasse: [], krets: [], klubb: '', navn: '', type: '' };
+            return { ovelse: [], klasse: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
         };
 
         // Felt/bane toggle, reflecting a ?gren=bane initial state.
@@ -436,6 +446,7 @@ var StandplassMesterskapPage = (function () {
             wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
             if (scope !== 'nm') {
                 wireDropdown('krets', 'Alle kretser', kretsNames, 'krets');
+                wireDropdown('distrikt', 'Alle distrikter', function () { return distinctSorted('distrikt'); }, 'distrikt');
             }
 
             klubbCombo = FW.makeTagComboHandlers({
@@ -500,6 +511,7 @@ var StandplassMesterskapPage = (function () {
                 function () { filters.ovelse = []; },
                 function () { filters.klasse = []; },
                 function () { filters.krets = []; },
+                function () { filters.distrikt = []; },
                 function () { filters.klubb = ''; },
                 function () { filters.navn = ''; navnInput.value = ''; },
                 function () { filters.type = ''; typeSelect.value = ''; }
@@ -516,25 +528,27 @@ var StandplassMesterskapPage = (function () {
             var qs = new URLSearchParams(urlState.getSearch());
             qs.set('gren', gren);
             qs.set('ar', String(ar));
-            ['ovelse', 'class', 'krets', 'klubb', 'name', 'type'].forEach(function (k) {
+            ['ovelse', 'class', 'krets', 'distrikt', 'klubb', 'name', 'type'].forEach(function (k) {
                 qs.delete(k);
             });
             filterParams(filters).forEach(function (p) { qs.set(p[0], p[1]); });
             urlState.setSearch(qs.toString());
         }
 
-        // dm's krets selection maps to distrikter before filtering.
+        // Rows carry both their krets and distrikt (stamped from the
+        // comp), so the distrikt filter is direct on every scope that
+        // has one; dm's krets selection additionally maps to distrikter
+        // (the finder) and merges with it.
         function activeRegionFilters() {
-            if (scope === 'km') { return { region: filters.krets, distrikt: [] }; }
+            var region = scope === 'km' ? filters.krets : [];
+            var distrikt = filters.distrikt.slice();
             if (scope === 'dm') {
                 var map = StandplassKretsDistrikter.distriktFor;
-                var out = [];
                 filters.krets.forEach(function (k) {
-                    if (map[k] && out.indexOf(map[k]) === -1) { out.push(map[k]); }
+                    if (map[k] && distrikt.indexOf(map[k]) === -1) { distrikt.push(map[k]); }
                 });
-                return { region: [], distrikt: out };
             }
-            return { region: [], distrikt: [] };
+            return { region: region, distrikt: distrikt };
         }
 
         function applyFilters() {
