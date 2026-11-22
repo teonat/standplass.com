@@ -15,6 +15,7 @@ Run tests directly:
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import sys
@@ -24,6 +25,11 @@ from datetime import datetime, timezone
 import requests
 
 import pdfplumber
+
+# Some organizer PDFs carry malformed font descriptors; pdfminer warns
+# about each one on every page. The affected files parse with
+# fallback geometry or quarantine — the spam adds nothing to output.
+logging.getLogger('pdfminer').setLevel(logging.ERROR)
 
 from result_file_parse import PARSER_VERSION, UnsupportedFormatError, parse_result
 from result_file_matching import attach_person_ids, match_stats
