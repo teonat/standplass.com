@@ -823,6 +823,56 @@ class ParseT96Dispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseBlinkenClassColumn(unittest.TestCase):
+    """Some Blinken versions print a person-class column (M/K/Å/V55…)
+    between name and club; the club-anchored split used to leave it
+    glued to the name, breaking person matching for the whole file.
+    Fixture: comp f6a4c5c4 (felt 2022), blinken 3.0.18 layout."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-class.pdf'))
+
+    def test_class_token_stripped_from_names(self):
+        row = find_row(self.detail, 'Militær felt', 'B', 'Ove Humlestøl')
+        self.assertEqual(row['club'], 'Sartor SSL')
+        row = find_row(self.detail, 'Militær felt', 'C', 'Anette Christensen')
+        self.assertEqual(row['club'], 'Åsane PK')
+
+    def test_no_fused_class_tokens_remain(self):
+        pat = __import__('re').compile(r'^(?:M|K|J|U|Å|V\d{2,3})$')
+        for o in self.detail['ovelser']:
+            for c in o['classes']:
+                for r in c['rows']:
+                    parts = r['name'].split()
+                    self.assertFalse(
+                        len(parts) >= 2 and pat.fullmatch(parts[-1]),
+                        r['name'])
+
+    def test_øvelse_level_klasse_untouched(self):
+        classes = {c['klasse'] for c in
+                   self.detail['ovelser'][0]['classes']}
+        self.assertTrue(classes & {'A', 'B', 'C', 'D'})
+
+    def test_matched_person_ids(self):
+        """Post-fix membership: 41 of 51 rows match; the misses are the
+        missing-middle-name ceiling (e.g. PDF 'Ove Humlestøl' vs API
+        'Ove Ingar Humlestøl') and PDF-only people."""
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'felt', '2022.json')))
+        comp = next(c for c in year['competitions']
+                    if '82600911' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        rows = [r for o in self.detail['ovelser']
+                for c in o['classes'] for r in c['rows']]
+        matched = sum(1 for r in rows if r.get('personId'))
+        self.assertGreaterEqual(matched, 40)
+        row = find_row(self.detail, 'Militær felt', 'C', 'Anette Christensen')
+        self.assertTrue(row.get('personId'))
+
+
 class ParseMegalink(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -927,8 +977,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_8(self):
-        self.assertEqual(PARSER_VERSION, 8)
+    def test_parser_version_is_9(self):
+        self.assertEqual(PARSER_VERSION, 9)
 
 
 class ParseResultDispatch(unittest.TestCase):

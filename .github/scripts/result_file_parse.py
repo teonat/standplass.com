@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 8
+PARSER_VERSION = 9
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -559,6 +559,26 @@ def parse_blinken(text):
     return detail
 
 
+_BLINKEN_PERSON_CLASS = re.compile(r'^(?:M|K|J|U|Å|V\d{2,3})$')
+
+
+def _strip_blinken_person_class(name):
+    """Strip a fused person-class token from a Blinken row name.
+
+    Some Blinken versions print a person-class column (M/K/Å/V55…)
+    between the name and the club. The club-anchored split leaves
+    that token glued to the name ('Ove Humlestøl M'), which breaks
+    person matching for the whole file. Only a token that leaves at
+    least one name word is stripped, and only in blinken rows — the
+    øvelse-level klasse (A–D) is parsed from the table header and is
+    never affected.
+    """
+    parts = name.split()
+    if len(parts) >= 2 and _BLINKEN_PERSON_CLASS.fullmatch(parts[-1]):
+        return ' '.join(parts[:-1])
+    return name
+
+
 def _parse_blinken_row(line, n_series):
     """Parse one Blinken table row; None for lines that are not rows.
 
@@ -617,6 +637,7 @@ def _parse_blinken_row(line, n_series):
         series = [int(t) for t in tokens[-count:-1]]
         row['ix'] = int(tokens[-1])
     name, club = _split_name_club(tokens[:-count])
+    name = _strip_blinken_person_class(name)
     if not name:
         return None
     row['name'] = name
