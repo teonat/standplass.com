@@ -64,15 +64,11 @@ assert.strictEqual(RB.cellHtml(null, 'A'), '–', 'no ranking renders –');
 assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no color');
 
 // ── positionCellHtml: absolute medals (never relative to the visible set) ──
-assert.strictEqual(RB.positionCellHtml(1),
-    '<span class="rank-value" style="color:var(--chart-gold-text)">1</span>');
-assert.strictEqual(RB.positionCellHtml(2),
-    '<span class="rank-value" style="color:var(--chart-silver-text)">2</span>');
-assert.strictEqual(RB.positionCellHtml(3),
-    '<span class="rank-value" style="color:var(--chart-bronze-text)">3</span>');
+assert.strictEqual(RB.positionCellHtml(1), '<span class="medal medal--gold">1</span>');
+assert.strictEqual(RB.positionCellHtml(2), '<span class="medal medal--silver">2</span>');
+assert.strictEqual(RB.positionCellHtml(3), '<span class="medal medal--bronze">3</span>');
 assert.strictEqual(RB.positionCellHtml(4), '4', 'below the podium: plain');
-assert.strictEqual(RB.positionCellHtml('3'),
-    '<span class="rank-value" style="color:var(--chart-bronze-text)">3</span>', 'numeric strings still medal');
+assert.strictEqual(RB.positionCellHtml('3'), '<span class="medal medal--bronze">3</span>', 'numeric strings still medal');
 assert.strictEqual(RB.positionCellHtml(null), '–');
 assert.strictEqual(RB.positionCellHtml('x'), '–', 'non-numeric renders – (num() convention)');
 

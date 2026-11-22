@@ -74,19 +74,20 @@ var StandplassRankingBand = (function () {
     }
 
     // The shared table cell for a Plass/# column (raw HTML — set the
-    // column's raw flag). Medals are ABSOLUTE: the color keys on the
+    // column's raw flag). Medals are ABSOLUTE: the badge keys on the
     // row's position field (1/2/3), never on the visible set — a
     // filter leaving only a 3rd place visible still shows bronze, the
-    // same as the chart's position dots. No title attribute: the
-    // number itself is the signal, color is reinforcement.
+    // same as the chart's position dots. Badge presentation (the
+    // comp-modal-badge pattern) rather than colored text: a
+    // 4.5:1-safe text color is too dark and muted to read as a medal
+    // in light mode, but a chip tinted with the bright medal hue does.
+    // No title attribute: the number itself is the signal.
     function positionCellHtml(position) {
         var n = Number(position);
         if (position == null || isNaN(n)) { return '–'; }
-        var color = n === 1 ? 'var(--chart-gold-text)'
-            : n === 2 ? 'var(--chart-silver-text)'
-            : n === 3 ? 'var(--chart-bronze-text)' : null;
-        if (!color) { return String(position); }
-        return '<span class="rank-value" style="color:' + color + '">' + String(position) + '</span>';
+        var cls = n === 1 ? 'medal--gold' : n === 2 ? 'medal--silver' : n === 3 ? 'medal--bronze' : null;
+        if (!cls) { return String(position); }
+        return '<span class="medal ' + cls + '">' + String(position) + '</span>';
     }
 
     // The shared table cell for a signed-delta column (raw HTML — set

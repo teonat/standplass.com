@@ -62,3 +62,46 @@ HUES.forEach(function (hue) {
     assert.deepStrictEqual(darkText.slice().sort(), darkChart.slice().sort(),
         'dark --chart-' + hue + '-text equals the dark chart values');
 });
+
+// ── Medal badges: text contrast against the TINTED chip background ────
+// The chips tint the card with the bright medal hue at an alpha; the
+// -text color must clear 4.5:1 against that composite, worst-case card.
+var MEDALS = {
+    gold: { textVar: 'chart-gold-text' },
+    silver: { textVar: 'chart-silver-text' },
+    bronze: { textVar: 'chart-bronze-text' }
+};
+function hexOf(v) { return v; }
+Object.keys(MEDALS).forEach(function (metal) {
+    var spec = MEDALS[metal];
+    var lightBadge = new RegExp('\\.medal--' + metal + '\\s*\\{[^}]*' +
+        'background:\\s*rgba\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*([\\d.]+)\\)[^}]*' +
+        'color:\\s*var\\(--' + spec.textVar + '\\)', 'm').exec(styles);
+    assert.ok(lightBadge, '.medal--' + metal + ' light rule parses (tint + text var)');
+    var lightText = extractVars(styles, spec.textVar)[0];
+    LIGHT_SURFACES.forEach(function (surface) {
+        var bg = mixHex(surface, [Number(lightBadge[1]), Number(lightBadge[2]), Number(lightBadge[3])], Number(lightBadge[4]));
+        var r = ratio(lightText, bg);
+        assert.ok(r >= 4.5, metal + ' badge text ' + lightText + ' on tint ' + bg + ' over ' + surface
+            + ' is ' + r.toFixed(2) + ':1 (need >= 4.5)');
+    });
+    var darkBadge = new RegExp('\\[data-mode="dark"\\]\\s*\\.medal--' + metal + '\\s*\\{[^}]*' +
+        'background:\\s*rgba\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*([\\d.]+)\\)', 'm').exec(styles);
+    assert.ok(darkBadge, '.medal--' + metal + ' dark rule parses');
+    var darkTextValues = extractVars(themes, spec.textVar);
+    DARK_SURFACES.forEach(function (surface) {
+        darkTextValues.forEach(function (textHex) {
+            var bg = mixHex(surface, [Number(darkBadge[1]), Number(darkBadge[2]), Number(darkBadge[3])], Number(darkBadge[4]));
+            var r = ratio(textHex, bg);
+            assert.ok(r >= 4.5, metal + ' dark badge text ' + textHex + ' on tint ' + bg + ' over ' + surface
+                + ' is ' + r.toFixed(2) + ':1 (need >= 4.5)');
+        });
+    });
+});
+
+function mixHex(base, tintRgb, alpha) {
+    var b = [parseInt(base.substr(1, 2), 16), parseInt(base.substr(3, 2), 16), parseInt(base.substr(5, 2), 16)];
+    return '#' + b.map(function (v, i) {
+        return ('0' + Math.round(v * (1 - alpha) + tintRgb[i] * alpha).toString(16)).slice(-2);
+    }).join('');
+}

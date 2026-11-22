@@ -49,7 +49,7 @@
   --chart-green-text:  #177e3e;
   --chart-red-text:    #b91c1c;
   --chart-orange-text: #b0530a;
-  --chart-gold-text:   #8a6c00;
+  --chart-gold-text:   #856700;
   --chart-silver-text: #666f7c;
   --chart-bronze-text: #94541a;
   --text:        #1c1f26;
@@ -1479,6 +1479,26 @@ tr[data-idx] { cursor: pointer; }
     border-radius: 50%;
     display: inline-block;
 }
+/* Placement medals (ranking-band.js's positionCellHtml): the
+   comp-modal-badge pattern applied to podium placements — the number
+   in a chip tinted with the BRIGHT medal hue, so gold reads as gold
+   even in light mode (a 4.5:1-safe text color alone is too dark and
+   muted to read as a medal). Text color = the --chart-*-text variant;
+   the tint/text pairs are contrast-pinned by
+   test/chart-text-contrast.test.js. */
+.medal {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.medal--gold   { background: rgba(232, 185, 35, 0.18); border: 1px solid rgba(232, 185, 35, 0.45); color: var(--chart-gold-text); }
+.medal--silver { background: rgba(200, 208, 216, 0.18); border: 1px solid rgba(200, 208, 216, 0.50); color: var(--chart-silver-text); }
+.medal--bronze { background: rgba(184, 115, 51, 0.18); border: 1px solid rgba(184, 115, 51, 0.40); color: var(--chart-bronze-text); }
+[data-mode="dark"] .medal--gold   { background: rgba(240, 201, 58, 0.16); border-color: rgba(240, 201, 58, 0.35); }
+[data-mode="dark"] .medal--silver { background: rgba(209, 213, 219, 0.16); border-color: rgba(209, 213, 219, 0.30); }
+[data-mode="dark"] .medal--bronze { background: rgba(212, 145, 92, 0.16); border-color: rgba(212, 145, 92, 0.35); }
 /* Line swatches (multi-series charts): a short line segment in the series
    color, dashed for dashed series — distinguishes metric, not color. */
 .chart-legend-swatch {
