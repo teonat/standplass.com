@@ -1615,6 +1615,27 @@ tr[data-idx] { cursor: pointer; }
    default setting (15 rows). overflow-y: auto, never hidden: browser
    find-in-page (Ctrl+F) must be able to scroll the region to matches. */
 .club-stats-list-scroll { overflow-y: auto; max-height: var(--club-stats-rows-max, 33.5rem); }
+/* Sticky headers on every one of these caps — the terminliste
+   treatment. border-collapse: collapse does not move a sticky th's
+   borders with it, so separate + spacing 0 (identical rendering for
+   these tables' simple bottom borders). --surface-base is a
+   translucent tint, not a surface — rows scrolling under the header
+   would bleed through it — so the tint is composited over an opaque
+   base. Caps inside a card composite over the card's --surface-card;
+   the norgesfelt search table's cap sits bare on the page, so it
+   composites over --surface-page instead (the tint rendered over
+   that same page background before — the resting look is unchanged,
+   only scrolling rows stop showing through). */
+.club-stats-list-scroll .ranking-table { border-collapse: separate; border-spacing: 0; }
+.club-stats-list-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-page);
+}
+.ranking-card .club-stats-list-scroll thead th {
+    background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
+}
 
 /* ── Data-table base affordances ──────────────────────────────────── */
 /* Rendered by public/js/data-table.js. All colors are mode-flipping
