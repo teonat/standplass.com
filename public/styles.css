@@ -1636,6 +1636,28 @@ tr[data-idx] { cursor: pointer; }
 .ranking-card .club-stats-list-scroll thead th {
     background: linear-gradient(var(--surface-base), var(--surface-base)) var(--surface-card);
 }
+/* Full-bleed caps. Cards lay their body out as a full-bleed header bar
+   plus inset content: .club-stats-section > .ranking-card-header ~ *
+   pads every sibling after the header 1.125rem in from the card edges.
+   On a scroll cap that inset becomes a gap between the pinned header
+   band and the scrollbar — visible since the headers went opaque for
+   the sticky treatment above. Caps opt out of the body inset and go
+   edge-to-edge with the card instead (the terminliste cap's shape);
+   the inset moves into the first/last cells (card inset + the cell's
+   own 0.5rem) so text alignment is pixel-identical. Overview toplist
+   cards (club-stats-toplist) never had the body inset — untouched. */
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll {
+    padding-left: 0;
+    padding-right: 0;
+}
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table th:first-child,
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table td:first-child {
+    padding-left: calc(1.125rem + 0.5rem);
+}
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table th:last-child,
+.club-stats-section > .ranking-card-header ~ .club-stats-list-scroll .ranking-table td:last-child {
+    padding-right: calc(1.125rem + 0.5rem);
+}
 
 /* ── Data-table base affordances ──────────────────────────────────── */
 /* Rendered by public/js/data-table.js. All colors are mode-flipping
