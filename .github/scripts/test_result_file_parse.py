@@ -493,10 +493,9 @@ class ParseBlinken(unittest.TestCase):
 
     def test_rows_match_api_person_ids(self):
         """Blinken prints abbreviated clubs ('Odda PK' where the API has
-        'Odda Pistolklubb'), so matching rides the name-unique
-        fallback. The 19 unmatched rows: the glued 'NOP-<city>' club
-        rows (name+club fused by the suffix heuristic), DNS/DNF
-        participants the API omits, and 'Ole-Christian' hyphen-style
+        'Odda Pistolklubb'), so matching rides the name-unique fallback
+        and the club-tail strip. The 16 unmatched rows: DNS/DNF
+        participants the API omits and 'Ole-Christian' hyphen-style
         name variants."""
         from result_file_matching import attach_person_ids, match_stats
         year = json.load(open(os.path.join(
@@ -507,7 +506,7 @@ class ParseBlinken(unittest.TestCase):
         attach_person_ids(self.detail, comp['results'])
         matched, total = match_stats(self.detail)
         self.assertEqual(total, 98)  # 31 + 17 + 30 + 20 deltakere
-        self.assertEqual(matched, 79)
+        self.assertEqual(matched, 82)
 
 
 class ParseBlinkenBane(unittest.TestCase):

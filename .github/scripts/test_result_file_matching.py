@@ -130,6 +130,75 @@ class AttachPersonIds(unittest.TestCase):
         self.assertEqual(row['personId'], 'p1')
 
 
+class ClubTailStrip(unittest.TestCase):
+    API = [
+        {'personId': 'p1', 'name': 'Håvard Ellingsen',
+         'club': 'Aron Skytterklubb, Drammen'},
+        {'personId': 'p2', 'name': 'Johnny Aslaksen',
+         'club': 'Norske Offiserers Pistolklubb Bergen'},
+        {'personId': 'p3', 'name': 'Annen Person', 'club': 'Bergen PK'},
+        {'personId': 'p4', 'name': 'Håvard Ellingsen',
+         'club': 'Åsane Pistolklubb'},
+    ]
+
+    def test_abbreviated_club_tail_stripped_from_name(self):
+        # the split heuristic cannot anchor 'Aron S. Drammen' (no club
+        # suffix word), so the whole region rides the name — the tail
+        # matches when it reads as the candidate's club: 'aron' exact,
+        # 'S.' the initial of 'Skytterklubb', 'Drammen' exact. The tail
+        # also disambiguates the two same-named API persons.
+        detail = ovelse_detail([
+            {'name': 'Håvard Ellingsen Aron S. Drammen'},
+        ])
+        attach_person_ids(detail, self.API)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertEqual(row['personId'], 'p1')
+
+    def test_multi_word_initials_tail_stripped_from_name(self):
+        # 'NOP' abbreviates 'Norske Offiserers Pistolklubb'
+        detail = ovelse_detail([
+            {'name': 'Johnny Aslaksen NOP-Bergen'},
+        ])
+        attach_person_ids(detail, self.API)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertEqual(row['personId'], 'p2')
+
+    def test_initial_must_align(self):
+        # 'B.' is not the initial of 'Skytterklubb'
+        detail = ovelse_detail([
+            {'name': 'Håvard Ellingsen Aron B. Drammen'},
+        ])
+        attach_person_ids(detail, self.API)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertNotIn('personId', row)
+
+    def test_ambiguous_club_tail_stays_unmatched(self):
+        # two API persons share the name AND the club the tail reads
+        # as — the strip cannot pick between them
+        detail = ovelse_detail([
+            {'name': 'Håvard Ellingsen Aron S. Drammen'},
+        ])
+        api = [
+            {'personId': 'p1', 'name': 'Håvard Ellingsen',
+             'club': 'Aron Skytterklubb, Drammen'},
+            {'personId': 'p9', 'name': 'Håvard Ellingsen',
+             'club': 'Aron Skytterklubb, Drammen'},
+        ]
+        attach_person_ids(detail, api)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertNotIn('personId', row)
+
+    def test_tail_must_reach_club_end(self):
+        # 'Bergen PK' is not a suffix of 'Norske Offiserers
+        # Pistolklubb Bergen'
+        detail = ovelse_detail([
+            {'name': 'Johnny Aslaksen Bergen PK'},
+        ])
+        attach_person_ids(detail, self.API)
+        row = detail['ovelser'][0]['classes'][0]['rows'][0]
+        self.assertNotIn('personId', row)
+
+
 class MatchStats(unittest.TestCase):
     def test_counts_across_ovelser_sections_and_lag_members(self):
         detail = {
