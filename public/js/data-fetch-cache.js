@@ -15,6 +15,13 @@ var StandplassData = (function () {
             return fetchJson(dataBase + '/birthyears', dataBase + '/birthyears.json');
         }
 
+        // Mestere indexes (public/data/<branch>/mestere-<year>.json) —
+        // the mesterskap pages' data. Dashed filename, so not
+        // fetchYear's {base}/{year}.json shape; same cache discipline.
+        function fetchMestere(dataBase, year) {
+            return fetchJson(dataBase + '/' + year + '-mestere', dataBase + '-' + year + '.json');
+        }
+
         function fetchJson(key, url) {
             var entry = cache[key];
             var now = Date.now();
@@ -37,7 +44,7 @@ var StandplassData = (function () {
             cache = {};
         }
 
-        return { fetchYear: fetchYear, fetchBirthyears: fetchBirthyears, clearCache: clearCache };
+        return { fetchYear: fetchYear, fetchBirthyears: fetchBirthyears, fetchMestere: fetchMestere, clearCache: clearCache };
     }
 
     function applyFilter(rows, filter) {

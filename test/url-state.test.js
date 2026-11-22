@@ -43,6 +43,18 @@ var metricWrite = StandplassUrlState.createController({ namespace: null });
 metricWrite.setSearch('?metric=avgAge');
 assert.strictEqual(get(window.location.search, 'metric'), 'avgAge', 'metric is written to the URL by setSearch');
 
+// The mesterskap pages' branch/year params must round-trip through the
+// controller like every other tracked param.
+window.location.search = '?gren=bane&ar=2024';
+var mestRead = StandplassUrlState.createController({ namespace: null });
+assert.strictEqual(get(mestRead.getSearch(), 'gren'), 'bane', 'gren is tracked and readable on load');
+assert.strictEqual(get(mestRead.getSearch(), 'ar'), '2024', 'ar is tracked and readable on load');
+window.location.search = '';
+var mestWrite = StandplassUrlState.createController({ namespace: null });
+mestWrite.setSearch('?gren=felt&ar=2025');
+assert.strictEqual(get(window.location.search, 'gren'), 'felt', 'gren is written to the URL by setSearch');
+assert.strictEqual(get(window.location.search, 'ar'), '2025', 'ar is written to the URL by setSearch');
+
 // Embed, sync-url off: state lives in memory only, the real URL never touched.
 window.location.search = '';
 var embedOff = StandplassUrlState.createController({ namespace: 'felt', syncUrl: false });

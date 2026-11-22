@@ -30,6 +30,34 @@ sync-bane-full:
 sync-bane-year year:
     FULL_SCAN=true YEAR={{year}} python3 .github/scripts/scrape_bane.py
 
+# Incremental result-file parse -- current + previous year, fresh files only
+parse-details:
+    python3 .github/scripts/parse_result_files.py
+
+# Full result-file parse -- every year from 2021 (backfill; resumable)
+parse-details-full:
+    FULL_SCAN=true python3 .github/scripts/parse_result_files.py
+
+# Full result-file parse for one specific year -- e.g. `just parse-details-year 2023`
+parse-details-year year:
+    FULL_SCAN=true YEAR={{year}} python3 .github/scripts/parse_result_files.py
+
+# ETag freshness sweep -- re-parse result files replaced behind the same URL
+parse-details-sweep:
+    SWEEP=true python3 .github/scripts/parse_result_files.py
+
+# Rebuild mestere indexes only -- offline, no fetching (run after classification changes)
+parse-details-indexes:
+    INDEXES_ONLY=true python3 .github/scripts/parse_result_files.py
+
+# One-off: patch regionOrganizationId into existing year JSONs (run once, after the full scan finishes)
+backfill-comp-regions:
+    python3 .github/scripts/backfill_comp_regions.py
+
+# Refresh the committed krets reference data from the NSF API (rarely needed)
+update-kretser:
+    python3 .github/scripts/fetch_kretser.py
+
 # Local dev server for public/, with the same /felt -> /felt.html rewrite Cloudflare does in production
 start:
     python3 dev-server.py

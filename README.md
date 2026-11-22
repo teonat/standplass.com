@@ -42,8 +42,9 @@ The "Opprett innebygging" button on the felt, bane and terminliste pages
 generates this snippet, carrying over your current `klubb`, `club` and
 `mode` settings — other filters are not carried.
 
-The remaining pages (klubb, nasjonalt, norgesfelt, klubbstatistikk) are
-standalone-only for now; making them embeddable is planned.
+The remaining pages (klubb, nasjonalt, norgesfelt, klubbstatistikk,
+mesterskap) are standalone-only for now; making them embeddable is
+planned.
 
 ## Deployment
 
@@ -52,9 +53,38 @@ Deployed via Cloudflare Workers Builds (git integration) — every push to
 
 ## Data
 
-`public/data/felt/{year}.json` and `public/data/bane/{year}.json` are
-updated daily by `.github/workflows/scrape-felt.yml` and `scrape-bane.yml`,
-which run `.github/scripts/scrape_stevneresultater.py` / `scrape_bane.py`.
-`public/data/norgesfelt.json` is updated by
-`.github/workflows/scrape-norgesfelt.yml`
-(`.github/scripts/scrape_norgesfelt.py`).
+### Felt and bane results
+
+`.github/workflows/scrape-felt.yml` and `scrape-bane.yml` scrape the
+skyting.no API daily (04:00 and 06:00 UTC) into
+`public/data/felt/{year}.json` and `public/data/bane/{year}.json`.
+
+- **Daily** — new competitions with results, plus corrections to
+  recently started competitions.
+- **On demand** — dry run, full scan, or a single year.
+
+### Norgesfelt
+
+`.github/workflows/scrape-norgesfelt.yml` scrapes norgesfelt.no daily
+at 02:00 UTC into `public/data/norgesfelt.json`. If the scrape fails,
+the workflow retries itself up to three times.
+
+### Result details
+
+`.github/workflows/parse-details.yml` parses the result PDFs behind
+each competition into `public/data/detaljer/` and a per-year
+championship index (`mestere-{year}.json` in each branch folder).
+
+- **Daily 08:00 UTC** (after the scrapers) — parses new and updated
+  competitions from the current and previous year files.
+- **Sundays 09:00 UTC** — re-checks every parsed PDF, in case an
+  organizer replaced it behind the same URL.
+- **On demand** (workflow dispatch) — full scan, one year, one
+  branch, sweep or dry run.
+
+It reads the current and previous year files because that is
+everything the scrapers can change: they add new competitions to the
+current year, and re-scrape corrections only within 28 days of a
+competition's start date — which reaches last year's file only
+around New Year. Competitions that have not changed are skipped
+without downloading anything.

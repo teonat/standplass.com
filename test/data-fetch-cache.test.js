@@ -40,7 +40,30 @@ Promise.all([fetcher.fetchYear('/data/felt', 2026), fetcher.fetchYear('/data/fel
                 assert.strictEqual(birthCallCount, 1, 'second birthyears call served from cache');
                 assert.deepStrictEqual(maps[0], { p1: 1990, p2: null });
 
-                console.log('data-fetch-cache.test.js: all assertions passed');
+                // fetchMestere: the mesterskap pages' per-year index.
+                // The files live at {base}-{year}.json (dashed), so they
+                // cannot ride fetchYear's {base}/{year}.json shape —
+                // same one-request-per-URL-per-TTL cache discipline.
+                var mestereCallCount = 0;
+                function fakeMestereFetch(url) {
+                    mestereCallCount++;
+                    return Promise.resolve({
+                        ok: true,
+                        json: function () { return Promise.resolve({ url: url }); }
+                    });
+                }
+                var mestereFetcher = StandplassData.createFetcher(fakeMestereFetch, 60000);
+                return Promise.all([
+                    mestereFetcher.fetchMestere('/data/felt/mestere', 2025),
+                    mestereFetcher.fetchMestere('/data/felt/mestere', 2025)
+                ]).then(function (idx) {
+                    assert.strictEqual(mestereCallCount, 1,
+                        'second mestere call served from cache');
+                    assert.strictEqual(idx[0].url, '/data/felt/mestere-2025.json',
+                        'mestere files live at {branch}/mestere-{year}.json');
+
+                    console.log('data-fetch-cache.test.js: all assertions passed');
+                });
             });
     })
     .catch(function (err) {
