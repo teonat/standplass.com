@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 6
+PARSER_VERSION = 7
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -51,6 +51,8 @@ def detect_family(text):
         return 'blinken'
     if 'Pl. Navn Klubb' in text:
         return 'leon'
+    if 'Stevnet er approbert' in text:
+        return 't96'
     if 'Dato/tid:' in text and (
         'Stevnenummer' in text or 'file:///C:/resultat' in text
     ):
@@ -77,6 +79,8 @@ def parse_result(pdf):
         return parse_blinken(text)
     if family == 'leon':
         return parse_leon(text)
+    if family == 't96':
+        return parse_t96(text)
     if family == 'plain-NO':
         return parse_plain_no(text)
     if family == 'datotid':
@@ -727,6 +731,111 @@ def _parse_leon_row(line, n_series, block):
     extra = numbers[n_series:]
     if extra:
         row[block] = [[int(v), None] for v in extra]
+    return row
+
+
+_T96_OVELSE = re.compile(r'^Kaliber (.+?)(?: Deltakere:\s*(\d+))?$')
+_T96_KLASSE = re.compile(r'^Klasse (.+)$')
+_T96_STARTENDE = re.compile(r'^Startende totalt:\s*(\d+)$')
+_T96_VERSION = re.compile(r'T96 \(V([\d.]+)')
+
+
+def parse_t96(text):
+    """Parse the T96 generator ('Stevnet er approbert' header, Haugesund
+    Pistolklubb & Eirik Apeland).
+
+    Column headers are interleaved letter salad, but rows are clean
+    lines: 'pos name club' then meter-range triples (Treff, Figur,
+    Inner), a componentwise totals triple, the total, and premie.
+    Series cells carry [treff+figur+inner, inner] per range — the
+    values sum to the API-verified total. '(KM - …)' championship
+    re-listings are kept as separate øvelser with no Deltakere line;
+    no medals are derived from positions.
+    """
+    detail = {}
+    stamp = _T96_VERSION.search(text)
+    detail['generator'] = f't96 {stamp.group(1)}' if stamp else 't96'
+    ovelser = []
+    by_navn = {}
+    sink = None
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        ovelse = _T96_OVELSE.match(line)
+        if ovelse:
+            navn = ovelse.group(1).strip()
+            current = by_navn.get(navn)
+            if current is None:
+                current = {'navn': navn, 'classes': []}
+                by_navn[navn] = current
+                ovelser.append(current)
+            if ovelse.group(2):
+                current['deltakere'] = int(ovelse.group(2))
+            sink = None
+            continue
+        klasse = _T96_KLASSE.match(line)
+        if klasse and ovelser:
+            classes = ovelser[-1]['classes']
+            if classes and classes[-1]['klasse'] == klasse.group(1):
+                sink = classes[-1]
+            else:
+                sink = {'klasse': klasse.group(1), 'rows': []}
+                classes.append(sink)
+            continue
+        startende = _T96_STARTENDE.match(line)
+        if startende:
+            detail['deltakere'] = int(startende.group(1))
+            continue
+        row = _parse_t96_row(line)
+        if row is not None and sink is not None:
+            sink['rows'].append(row)
+    detail['ovelser'] = ovelser
+    return detail
+
+
+def _parse_t96_row(line):
+    """Parse one T96 row: 'pos name club <triples>… totals total premie'.
+
+    The trailing digit run holds (Treff, Figur, Inner) triples per
+    meter range, a componentwise totals triple, the total (equal to
+    the API score) and the premie. Returns None for non-rows.
+    """
+    tokens = line.split()
+    if not tokens or not tokens[0].isdigit():
+        return None
+    end = len(tokens)
+    while end > 1 and tokens[end - 1].isdigit():
+        end -= 1
+    numbers = [int(t) for t in tokens[end:]]
+    region = tokens[1:end]
+    if not region or len(numbers) < 8:
+        return None
+    premie = numbers[-1]
+    total = numbers[-2]
+    triples = numbers[:-2]
+    if len(triples) % 3 or len(triples) < 6:
+        return None
+    groups = [triples[i:i + 3] for i in range(0, len(triples), 3)]
+    totals = groups[-1]
+    ranges = groups[:-1]
+    for i in range(3):
+        if sum(g[i] for g in ranges) != totals[i]:
+            return None
+    if sum(totals) != total:
+        return None
+    name, club = _split_name_club(region)
+    if not name:
+        return None
+    row = {'pos': int(tokens[0]), 'name': name}
+    if club:
+        row['club'] = club
+    row['series'] = [
+        [sum(g), g[2]] for g in ranges
+    ]
+    row['ix'] = totals[2]
+    row['sum'] = total
+    row['premie'] = premie
     return row
 
 

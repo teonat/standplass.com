@@ -21,6 +21,7 @@ from result_file_parse import (
     parse_leon,
     parse_plain_no,
     parse_result,
+    parse_t96,
 )
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures')
@@ -57,6 +58,12 @@ class DetectFamily(unittest.TestCase):
             detect_family(fixture_text('leon-fgmrs.pdf')), 'leon')
         self.assertEqual(
             detect_family(fixture_text('leon-vm.pdf')), 'leon')
+
+    def test_t96_fixtures(self):
+        self.assertEqual(
+            detect_family(fixture_text('t96-open.pdf')), 't96')
+        self.assertEqual(
+            detect_family(fixture_text('t96-km.pdf')), 't96')
 
     def test_inrx_felt_fixture(self):
         self.assertEqual(detect_family(fixture_text('inrx-felt.pdf')), 'inrX')
@@ -693,9 +700,122 @@ class ParseLeonDispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseT96(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_t96(fixture_text('t96-open.pdf'))
+
+    def test_generator_and_comp_totals(self):
+        self.assertEqual(self.detail['generator'], 't96 2.0.4')
+        self.assertEqual(self.detail['deltakere'], 30)
+
+    def test_ovelser_with_deltakere(self):
+        self.assertEqual(
+            [(o['navn'], o['deltakere']) for o in self.detail['ovelser']],
+            [('T96 fin', 11), ('T96 grov', 7), ('T96 militær', 2),
+             ('T96 revolver', 6), ('T96 spesialpistol', 3),
+             ('T96 spesialrevolver', 1)],
+        )
+
+    def test_row_pins(self):
+        row = find_row(self.detail, 'T96 fin', 'Å', 'Jakob Kråkevik')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Odda PK')
+        # series cells are [treff+figur+inner, inner] per meter range
+        self.assertEqual(row['series'],
+                         [[92, 27], [83, 20], [47, 9]])
+        self.assertEqual(row['ix'], 56)
+        self.assertEqual(row['sum'], 222)
+        self.assertEqual(row['premie'], 187)
+
+    def test_row_counts_match_deltakere(self):
+        for ovelse in self.detail['ovelser']:
+            rows = sum(len(c['rows']) for c in ovelse['classes'])
+            self.assertEqual(rows, ovelse['deltakere'], ovelse['navn'])
+        total = sum(o['deltakere'] for o in self.detail['ovelser'])
+        self.assertEqual(total, self.detail['deltakere'])
+
+    def test_totals_triple_is_componentwise_sum(self):
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    values = [cell[0] for cell in row['series']]
+                    inners = [cell[1] for cell in row['series']]
+                    self.assertEqual(sum(values), row['sum'], row['name'])
+                    self.assertEqual(sum(inners), row['ix'], row['name'])
+
+    def test_sums_equal_api_scores(self):
+        """The API's score field equals every matched row's sum. The 5
+        unmatched rows are name variants: 'Kenneth E. Kristoffersen'
+        (API 'Kenneth Eliussen Kristoffersen') and 'Edvin Heggland'
+        (API 'Edvin Martin Heggland') — abbreviated and missing middle
+        names stay unmatched by design."""
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2021.json')))
+        comp = next(c for c in year['competitions']
+                    if '8e9190b9' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        # one API row per person per øvelse — key by both
+        by_pid = {(r['personId'], r['discipline']): r
+                  for r in comp['results']}
+        checked = 0
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    if row.get('personId'):
+                        api = by_pid.get(
+                            (row['personId'], ovelse['navn']))
+                        if api is None:
+                            continue
+                        self.assertEqual(
+                            row['sum'], api['score'], row['name'])
+                        checked += 1
+        self.assertGreaterEqual(checked, 25)
+
+
+class ParseT96Km(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_t96(fixture_text('t96-km.pdf'))
+
+    def test_generator_and_km_ovelser(self):
+        self.assertEqual(self.detail['generator'], 't96 2.0.5')
+        self.assertEqual(self.detail['deltakere'], 12)
+        # the '(KM - Hordaland)' re-listings are separate øvelser
+        # without a Deltakere line of their own
+        self.assertEqual(
+            [(o['navn'], [c['klasse'] for c in o['classes']])
+             for o in self.detail['ovelser']],
+            [('T96 fin', ['Å']), ('T96 grov', ['Å']),
+             ('T96 fin (KM - Hordaland)', ['Å']),
+             ('T96 grov (KM - Hordaland)', ['Å'])],
+        )
+        for ovelse in self.detail['ovelser']:
+            if ovelse['navn'].endswith(')'):
+                self.assertNotIn('deltakere', ovelse)
+            else:
+                self.assertIn('deltakere', ovelse)
+
+    def test_km_rows_mirror_open_rows(self):
+        row = find_row(self.detail, 'T96 fin (KM - Hordaland)', 'Å',
+                       'Gisle Enge')
+        self.assertEqual(row['sum'], 238)
+        self.assertEqual(row['series'], [[101, 35], [81, 20], [56, 12]])
+
+
+class ParseT96Dispatch(unittest.TestCase):
+    def test_parse_result_routes_t96(self):
+        with pdfplumber.open(os.path.join(FIXTURES, 't96-open.pdf')) as pdf:
+            detail = parse_result(pdf)
+        self.assertEqual(detail['generator'], 't96 2.0.4')
+        self.assertTrue(detail['ovelser'])
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_6(self):
-        self.assertEqual(PARSER_VERSION, 6)
+    def test_parser_version_is_7(self):
+        self.assertEqual(PARSER_VERSION, 7)
 
 
 class ParseResultDispatch(unittest.TestCase):
