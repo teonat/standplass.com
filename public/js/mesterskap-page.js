@@ -47,6 +47,7 @@ var StandplassMesterskapPage = (function () {
         return {
             ovelse: StandplassFormat.decodeIdList(params.get('ovelse')),
             klasse: StandplassFormat.decodeIdList(params.get('class')),
+            medal: StandplassFormat.decodeIdList(params.get('medal')),
             krets: StandplassFormat.decodeIdList(params.get('krets')),
             distrikt: StandplassFormat.decodeIdList(params.get('distrikt')),
             klubb: params.get('klubb') || '',
@@ -60,6 +61,7 @@ var StandplassMesterskapPage = (function () {
         var out = [];
         if (f.ovelse && f.ovelse.length) { out.push(['ovelse', StandplassFormat.encodeIdList(f.ovelse)]); }
         if (f.klasse && f.klasse.length) { out.push(['class', StandplassFormat.encodeIdList(f.klasse)]); }
+        if (f.medal && f.medal.length) { out.push(['medal', StandplassFormat.encodeIdList(f.medal)]); }
         if (f.krets && f.krets.length) { out.push(['krets', StandplassFormat.encodeIdList(f.krets)]); }
         if (f.distrikt && f.distrikt.length) { out.push(['distrikt', StandplassFormat.encodeIdList(f.distrikt)]); }
         if (f.klubb) { out.push(['klubb', f.klubb]); }
@@ -94,6 +96,7 @@ var StandplassMesterskapPage = (function () {
         var out = [];
         out.push(dropdownGroup('ovelse', 'Øvelse', 'Alle øvelser'));
         out.push(dropdownGroup('klasse', 'Klasse', 'Alle klasser'));
+        out.push(dropdownGroup('medal', 'Medalje', 'Alle medaljer'));
         if (scope === 'km') {
             out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
         }
@@ -354,7 +357,7 @@ var StandplassMesterskapPage = (function () {
         // ?krets= param on dm/nm never round-trips.
         if (scope !== 'km') { filters.krets = []; }
         var emptyFilters = function () {
-            return { ovelse: [], klasse: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
+            return { ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
         };
 
         // Felt/bane toggle, reflecting a ?gren=bane initial state.
@@ -440,6 +443,9 @@ var StandplassMesterskapPage = (function () {
 
             wireDropdown('ovelse', 'Alle øvelser', function () { return distinctSorted('ovelse'); }, 'ovelse');
             wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
+            // Fixed medal order — Gull first is the meaningful order,
+            // not collation (which would put Bronse first).
+            wireDropdown('medal', 'Alle medaljer', function () { return ['Gull', 'Sølv', 'Bronse']; }, 'medal');
             if (scope === 'km') {
                 wireDropdown('krets', 'Alle kretser', function () { return distinctSorted('region'); }, 'krets');
             }
@@ -508,6 +514,7 @@ var StandplassMesterskapPage = (function () {
             FW.wireClearAllFilters(root.getElementById('mesterskap-clear-filters'), [
                 function () { filters.ovelse = []; },
                 function () { filters.klasse = []; },
+                function () { filters.medal = []; },
                 function () { filters.krets = []; },
                 function () { filters.distrikt = []; },
                 function () { filters.klubb = ''; },
@@ -526,7 +533,7 @@ var StandplassMesterskapPage = (function () {
             var qs = new URLSearchParams(urlState.getSearch());
             qs.set('gren', gren);
             qs.set('ar', String(ar));
-            ['ovelse', 'class', 'krets', 'distrikt', 'klubb', 'name', 'type'].forEach(function (k) {
+            ['ovelse', 'class', 'medal', 'krets', 'distrikt', 'klubb', 'name', 'type'].forEach(function (k) {
                 qs.delete(k);
             });
             filterParams(filters).forEach(function (p) { qs.set(p[0], p[1]); });

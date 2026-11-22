@@ -251,6 +251,14 @@ assert.strictEqual(dmRows.length, 3, 'c5 dm (1) + dmLag (1) + c6 dm (1)');
 var NOF = { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' };
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: ['Felt Grov'], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 2);
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: ['U'], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 3);
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], medal: ['Gull'], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 3,
+    'medal filters by exact medal names');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], medal: ['Sølv', 'Bronse'], region: [], distrikt: [], klubb: '', navn: '', type: '' }).length, 3,
+    'medal is multi-select');
+assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], medal: ['Sølv'], region: [], distrikt: [], klubb: '', navn: '', type: 'lag' }).length, 1,
+    'medal combines with the type filter (the lag row is Sølv)');
+assert.strictEqual(MD.filterPodiumRows(kmRows, NOF).length, 6,
+    'empty filters are no-ops (a filter object without a medal key too)');
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: ['Buskerud'], distrikt: [], klubb: '', navn: '', type: '' }).length, 4);
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: ['Østlandet Sør'], klubb: '', navn: '', type: '' }).length, 3,
     'distrikt filter applies to row.distrikt (c3\u2019s lag row has none)');
@@ -263,8 +271,6 @@ assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region:
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: 'individuelt' }).length, 5);
 assert.deepStrictEqual(MD.filterPodiumRows(kmRows, { ovelse: ['Finnes Ikke'], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' }), [],
     'stale filter values filter to nothing (a visible zero, never a crash)');
-assert.strictEqual(MD.filterPodiumRows(kmRows, NOF).length, 6,
-    'empty filters are no-ops');
 assert.strictEqual(MD.filterPodiumRows(kmRows, null).length, 6,
     'a null filters object is an empty filter');
 

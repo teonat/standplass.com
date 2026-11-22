@@ -69,19 +69,23 @@ assert.strictEqual(MP.grenDisplayName('bane'), 'baneskyting');
 
 // ── resolveFilters / filterParams: the URL filter codec ────────────────
 
-var EMPTY_FILTERS = { ovelse: [], klasse: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
+var EMPTY_FILTERS = { ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
 assert.deepStrictEqual(MP.resolveFilters(''), EMPTY_FILTERS);
 assert.deepStrictEqual(MP.resolveFilters('?ovelse=Felt%20Fin,Felt%20Grov'), {
-    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], krets: [], distrikt: [],
+    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], medal: [], krets: [], distrikt: [],
     klubb: '', navn: '', type: ''
 }, 'øvelse is a comma-joined, per-element-encoded list');
+assert.deepStrictEqual(MP.resolveFilters('?medal=Gull,S%C3%B8lv'), {
+    ovelse: [], klasse: [], medal: ['Gull', 'Sølv'], krets: [], distrikt: [],
+    klubb: '', navn: '', type: ''
+}, 'medal is a comma-joined list (æ/ø round-trips)');
 assert.strictEqual(MP.resolveFilters('?type=lag').type, 'lag');
 assert.strictEqual(MP.resolveFilters('?type=ugyldig').type, '',
     'invalid type falls back to alle');
 
 var full = {
     ovelse: ['Felt Fin', 'Felt Militær Rødpunkt'], klasse: ['U'],
-    krets: ['Buskerud'], distrikt: ['Nord-Norge'],
+    medal: ['Gull'], krets: ['Buskerud'], distrikt: ['Nord-Norge'],
     klubb: 'Bodø PK', navn: 'anne', type: 'individuelt'
 };
 var sp = new URLSearchParams();
@@ -99,6 +103,7 @@ assert.deepStrictEqual(MP.filterParams({ ovelse: ['Felt Fin'], klasse: [], krets
 var kmBar = MP.filterBarMarkup('km');
 ['mesterskap-ovelse-btn', 'mesterskap-ovelse-panel', 'mesterskap-ovelse-list',
  'mesterskap-klasse-btn', 'mesterskap-klasse-list',
+ 'mesterskap-medal-btn', 'mesterskap-medal-list',
  'mesterskap-krets-btn', 'mesterskap-krets-list',
  'mesterskap-distrikt-btn', 'mesterskap-distrikt-list',
  'mesterskap-klubb-input', 'mesterskap-klubb-tags', 'mesterskap-klubb-clear',

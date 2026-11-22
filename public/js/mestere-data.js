@@ -254,15 +254,15 @@ var StandplassMestereData = (function () {
         return rows;
     }
 
-    // filters: {ovelse: [], klasse: [], region: [], distrikt: [],
-    // klubb: '', navn: '', type: ''} — empty array/string is a no-op.
-    // The page maps the URL's krets param to region (km) or distrikt
-    // (dm, via the krets→distrikt mapping) before calling; null row
-    // values never match a non-empty filter.
+    // filters: {ovelse: [], klasse: [], medal: [], region: [],
+    // distrikt: [], klubb: '', navn: '', type: ''} — empty array/string
+    // is a no-op. The page maps the URL's krets param to region (km)
+    // before calling; null row values never match a non-empty filter.
     function filterPodiumRows(rows, filters) {
         var f = filters || {};
         var ovelse = f.ovelse || [];
         var klasse = f.klasse || [];
+        var medal = f.medal || [];
         var region = f.region || [];
         var distrikt = f.distrikt || [];
         var klubb = f.klubb || '';
@@ -271,6 +271,7 @@ var StandplassMestereData = (function () {
         return (rows || []).filter(function (r) {
             if (ovelse.length && ovelse.indexOf(r.ovelse) === -1) { return false; }
             if (klasse.length && klasse.indexOf(r.klasse) === -1) { return false; }
+            if (medal.length && medal.indexOf(r.medal) === -1) { return false; }
             if (region.length && region.indexOf(r.region) === -1) { return false; }
             if (distrikt.length && distrikt.indexOf(r.distrikt) === -1) { return false; }
             if (klubb && r.club !== klubb) { return false; }
