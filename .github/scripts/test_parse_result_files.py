@@ -493,5 +493,111 @@ class EtagSweep(unittest.TestCase):
         self.assertEqual(summary2['changed'], 0)
 
 
+class PdfCache(unittest.TestCase):
+    PDF_URL = 'https://nsfstorage.blob.core.windows.net/competitionresults/cache-test.pdf'
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        write_year(self.root, 'felt', '2025', [
+            make_comp('comp-cache', self.PDF_URL, BANE_PDF_RESULTS),
+        ])
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _path(self):
+        return detail_path('felt', '2025', 'comp-cache', root=self.root)
+
+    def _detail(self):
+        with open(self._path(), encoding='utf-8') as f:
+            return json.load(f)
+
+    def _age_detail(self):
+        """Simulate a parser version bump: same comp, older version."""
+        detail = self._detail()
+        detail['parserVersion'] = PARSER_VERSION - 1
+        with open(self._path(), 'w', encoding='utf-8') as f:
+            json.dump(detail, f)
+
+    def _run(self, fetch):
+        return run({'full_scan': True, 'year': '2025', 'branch': 'felt',
+                    'dry_run': False}, fetch_pdf=fetch, root=self.root)
+
+    def test_version_bump_reparse_serves_from_cache(self):
+        def fetch(url):
+            return fixture_bytes('inrx-bane.pdf'), '"e1"'
+
+        self._run(fetch)
+        self.assertEqual(self._detail()['pdfEtag'], '"e1"')
+        self._age_detail()
+
+        def no_fetch(url):
+            raise AssertionError('version-bump re-parse must not fetch')
+
+        summary = self._run(no_fetch)
+        self.assertEqual(summary['parsed'], 1)
+        self.assertEqual(summary['up_to_date'], 0)
+        detail = self._detail()
+        self.assertEqual(detail['parserVersion'], PARSER_VERSION)
+        self.assertEqual(detail['pdfEtag'], '"e1"')
+
+    def test_sweep_replacement_refreshes_the_cache(self):
+        def fetch(url):
+            return fixture_bytes('inrx-bane.pdf'), '"e1"'
+
+        self._run(fetch)
+
+        def conditional(url, etag):
+            assert etag == '"e1"'
+            return 200, fixture_bytes('inrx-felt.pdf'), '"e2"'
+
+        run_sweep({'full_scan': True, 'year': '2025', 'branch': 'felt'},
+                  fetch_conditional=conditional, root=self.root)
+        self.assertEqual(self._detail()['pdfEtag'], '"e2"')
+        self._age_detail()
+
+        def no_fetch(url):
+            raise AssertionError('swept bytes must come from the cache')
+
+        summary = self._run(no_fetch)
+        self.assertEqual(summary['parsed'], 1)
+        names = {r['name'] for o in self._detail()['ovelser']
+                 for c in o['classes'] for r in c['rows']}
+        self.assertIn('Gustav Tisthamar', names)  # the replacement's rows
+
+    def test_quarantine_marker_carries_etag_for_cache(self):
+        def fetch(url):
+            return b'not a pdf', '"e9"'
+
+        self._run(fetch)
+        detail = self._detail()
+        self.assertEqual(detail['generator'], 'quarantined')
+        self.assertEqual(detail['pdfEtag'], '"e9"')
+        self._age_detail()
+
+        def no_fetch(url):
+            raise AssertionError('quarantine retry must not re-fetch')
+
+        summary = self._run(no_fetch)
+        self.assertEqual(summary['quarantined'], 1)
+        self.assertEqual(self._detail()['parserVersion'], PARSER_VERSION)
+
+    def test_cache_miss_without_stored_etag_fetches(self):
+        def fetch(url):
+            return fixture_bytes('inrx-bane.pdf'), '"e1"'
+
+        self._run(fetch)
+        detail = self._detail()
+        detail.pop('pdfEtag')  # like the earliest detail-file format
+        with open(self._path(), 'w', encoding='utf-8') as f:
+            json.dump(detail, f)
+        self._age_detail()
+
+        summary = self._run(fetch)
+        self.assertEqual(summary['parsed'], 1)
+        self.assertEqual(self._detail()['pdfEtag'], '"e1"')
+
+
 if __name__ == '__main__':
     unittest.main()

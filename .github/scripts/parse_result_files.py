@@ -83,6 +83,43 @@ def load_detail(path):
         return json.load(f)
 
 
+CACHE_DIR = os.path.join('.cache', 'result-pdfs')
+
+
+def cache_path(url, root='.'):
+    """Path of a URL's cached PDF bytes (gitignored, local only)."""
+    key = hashlib.sha256(url.encode()).hexdigest()
+    return os.path.normpath(os.path.join(root, CACHE_DIR, f'{key}.pdf'))
+
+
+def cache_get(url, etag, root='.'):
+    """Cached PDF bytes for url, when they were fetched under exactly
+    this etag. None on any mismatch — the caller then fetches."""
+    if not etag:
+        return None
+    pdf = cache_path(url, root=root)
+    etag_file = pdf[:-4] + '.etag'
+    if not (os.path.exists(pdf) and os.path.exists(etag_file)):
+        return None
+    with open(etag_file, encoding='utf-8') as f:
+        if f.read() != etag:
+            return None
+    with open(pdf, 'rb') as f:
+        return f.read()
+
+
+def cache_put(url, content, etag, root='.'):
+    """Store fetched bytes under their etag for offline re-parses."""
+    if not etag or not content:
+        return
+    pdf = cache_path(url, root=root)
+    os.makedirs(os.path.dirname(pdf), exist_ok=True)
+    with open(pdf, 'wb') as f:
+        f.write(content)
+    with open(pdf[:-4] + '.etag', 'w', encoding='utf-8') as f:
+        f.write(etag)
+
+
 def index_path(branch, year, root='.'):
     """Path of a year's slim KM/DM champions index."""
     return os.path.normpath(os.path.join(
@@ -248,13 +285,18 @@ def _parse_and_write(comp, url, content, etag, path, summary, dry_run):
         reason = f'parse error: {exc}'
     if detail is None:
         if not dry_run:
-            write_detail(path, {
+            marker = {
                 'generator': 'quarantined',
                 'reason': reason,
                 'parserVersion': PARSER_VERSION,
                 'sourceUrl': url,
                 'sourceHash': source_hash(comp, url),
-            })
+            }
+            if etag:
+                # lets version-bump retries re-parse from the PDF
+                # cache instead of re-fetching
+                marker['pdfEtag'] = etag
+            write_detail(path, marker)
         summary['quarantined'] += 1
         summary['quarantine_list'].append(
             (path.split(os.sep)[-3], path.split(os.sep)[-2], comp['id'], reason)
@@ -366,6 +408,7 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
             print(f'  sweep unexpected status {status} for {url}')
             continue
         summary['changed'] += 1
+        cache_put(url, content, etag, root=root)
         if _parse_and_write(comp, url, content, etag, path, summary,
                             opts.get('dry_run')):
             summary['re-parsed'] += 1
@@ -418,12 +461,22 @@ def run(opts, *, fetch_pdf=None, root='.'):
             elif not should_reparse(existing, comp, url):
                 summary['up_to_date'] += 1
                 continue
-        try:
-            content, etag = cached_fetch(url)
-        except Exception as exc:  # noqa: BLE001 — network errors are run output
-            summary['failed'] += 1
-            print(f'  fetch failed {url}: {exc}')
-            continue
+        content = etag = None
+        if existing is not None and existing.get('pdfEtag'):
+            # the PDF itself may be unchanged even when a re-parse is
+            # due (version bump, changed comp results) — the stored
+            # etag proves the bytes, so parse without the network
+            content = cache_get(url, existing['pdfEtag'], root=root)
+            if content is not None:
+                etag = existing['pdfEtag']
+        if content is None:
+            try:
+                content, etag = cached_fetch(url)
+            except Exception as exc:  # noqa: BLE001 — network errors are run output
+                summary['failed'] += 1
+                print(f'  fetch failed {url}: {exc}')
+                continue
+            cache_put(url, content, etag, root=root)
         _parse_and_write(comp, url, content, etag, path, summary,
                          opts.get('dry_run'))
 
