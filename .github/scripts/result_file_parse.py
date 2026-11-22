@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 5
+PARSER_VERSION = 6
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -32,7 +32,7 @@ _MEDALS = ('Gull', 'Sølv', 'Bronse')
 _CLUB_ENDINGS = (
     'klubb', 'klubben', 'lag', 'laget', 'selskap', 'samvirket', 'skyttere',
 )
-_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'gsl'}
+_CLUB_ACRONYMS = {'pk', 'sl', 'il', 'sk', 'ss', 'ssk', 'gsl'}
 
 
 class UnsupportedFormatError(Exception):
@@ -49,6 +49,8 @@ def detect_family(text):
         return 'inrX'
     if 'Arrangert av' in text and 'Event #' in text:
         return 'blinken'
+    if 'Pl. Navn Klubb' in text:
+        return 'leon'
     if 'Dato/tid:' in text and (
         'Stevnenummer' in text or 'file:///C:/resultat' in text
     ):
@@ -73,6 +75,8 @@ def parse_result(pdf):
         return parse_inrx(text)
     if family == 'blinken':
         return parse_blinken(text)
+    if family == 'leon':
+        return parse_leon(text)
     if family == 'plain-NO':
         return parse_plain_no(text)
     if family == 'datotid':
@@ -615,6 +619,114 @@ def _parse_blinken_row(line, n_series):
         row['status'] = status
     if premie is not None:
         row['premie'] = premie
+    return row
+
+
+_LEON_HEADER = re.compile(r'^Pl\. Navn Klubb (.+) (\S+)$')
+_LEON_DELTAGERE = re.compile(r'^Antall deltagere:\s*(\d+)$')
+_LEON_STAR = re.compile(r'^\((\d+)\*\)$')
+
+
+def parse_leon(text):
+    """Parse the Leon generator ('Pl. Navn Klubb' tables, Kongsberg
+    Target System electronics).
+
+    Column names vary by program ('10s-1 … 6s-2 Hurtig',
+    'Pre. 1 … Due. 3 VM') — the series count is the number of
+    enumerated columns before the trailing block name, and the block
+    name ('hurtig', 'vm') keys the extra series carried beside the
+    scored ones. The line before each table header is the section
+    title '<øvelse> <klasse>'. No totals are printed; the API's score
+    field equals the sum of the enumerated columns.
+    """
+    detail = {'generator': 'leon'}
+    ovelser = []
+    by_navn = {}
+    sink = None
+    n_series = 0
+    block = None
+    prev = None
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        header = _LEON_HEADER.match(line)
+        if header:
+            # column names can span tokens ('Pre. 1'); every series
+            # column ends in a digit, the block name does not
+            n_series = sum(
+                1 for token in header.group(1).split()
+                if token[-1].isdigit()
+            )
+            block = header.group(2).casefold()
+            title = (prev or '').split()
+            if len(title) >= 2:
+                navn = ' '.join(title[:-1])
+                klasse = title[-1]
+                current = by_navn.get(navn)
+                if current is None:
+                    current = {'navn': navn, 'classes': []}
+                    by_navn[navn] = current
+                    ovelser.append(current)
+                classes = current['classes']
+                if classes and classes[-1]['klasse'] == klasse:
+                    sink = classes[-1]
+                else:
+                    sink = {'klasse': klasse, 'rows': []}
+                    classes.append(sink)
+            prev = None
+            continue
+        deltakere = _LEON_DELTAGERE.match(line)
+        if deltakere:
+            detail['deltakere'] = int(deltakere.group(1))
+            prev = None
+            continue
+        row = _parse_leon_row(line, n_series, block)
+        if row is not None:
+            if sink is not None:
+                sink['rows'].append(row)
+            prev = None
+            continue
+        prev = line
+    detail['ovelser'] = ovelser
+    return detail
+
+
+def _parse_leon_row(line, n_series, block):
+    """Parse one Leon row: 'N. name club series… <block>… (N*)'.
+
+    The parenthesized star count ends every row. Returns None for
+    lines that are not rows.
+    """
+    tokens = line.split()
+    if not tokens or not tokens[0].endswith('.'):
+        return None
+    if not tokens[0][:-1].isdigit() or not n_series:
+        return None
+    star = _LEON_STAR.match(tokens[-1])
+    if not star:
+        return None
+    body = tokens[1:-1]
+    start = next((i for i, t in enumerate(body) if t.isdigit()), None)
+    if start is None or start < 1:
+        return None
+    numbers = body[start:]
+    if not all(t.isdigit() for t in numbers):
+        return None
+    if len(numbers) < n_series + 1:
+        return None
+    name, club = _split_name_club(body[:start])
+    if not name:
+        return None
+    row = {'pos': int(tokens[0][:-1]), 'name': name}
+    if club:
+        row['club'] = club
+    row['series'] = [[int(v), None] for v in numbers[:n_series]]
+    row['sum'] = sum(int(v) for v in numbers[:n_series])
+    row['ix'] = int(star.group(1))
+    extra = numbers[n_series:]
+    if extra:
+        row[block] = [[int(v), None] for v in extra]
     return row
 
 

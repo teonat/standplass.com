@@ -44,6 +44,14 @@ class SplitNameClub(unittest.TestCase):
         self.assertEqual(name, 'Arnstein Skare')
         self.assertEqual(club, 'Melhus Sportsskyttere')
 
+    def test_ssk_acronym(self):
+        from result_file_parse import _split_name_club
+        name, club = _split_name_club(
+            'Morten Aronsen Svelvik SSK'.split()
+        )
+        self.assertEqual(name, 'Morten Aronsen')
+        self.assertEqual(club, 'Svelvik SSK')
+
 
 class AttachPersonIds(unittest.TestCase):
     def test_case_and_punctuation_variance_matches(self):

@@ -18,6 +18,7 @@ from result_file_parse import (
     parse_blinken,
     parse_datotid,
     parse_inrx,
+    parse_leon,
     parse_plain_no,
     parse_result,
 )
@@ -50,6 +51,12 @@ class DetectFamily(unittest.TestCase):
             detect_family(fixture_text('blinken-felt.pdf')), 'blinken')
         self.assertEqual(
             detect_family(fixture_text('blinken-bane.pdf')), 'blinken')
+
+    def test_leon_fixtures(self):
+        self.assertEqual(
+            detect_family(fixture_text('leon-fgmrs.pdf')), 'leon')
+        self.assertEqual(
+            detect_family(fixture_text('leon-vm.pdf')), 'leon')
 
     def test_inrx_felt_fixture(self):
         self.assertEqual(detect_family(fixture_text('inrx-felt.pdf')), 'inrX')
@@ -555,9 +562,140 @@ class ParseBlinkenDispatch(unittest.TestCase):
         self.assertTrue(detail['ovelser'])
 
 
+class ParseLeon(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_leon(fixture_text('leon-fgmrs.pdf'))
+
+    def test_generator_and_deltagere(self):
+        self.assertEqual(self.detail['generator'], 'leon')
+        self.assertEqual(self.detail['deltakere'], 19)
+
+    def test_ovelser_and_classes(self):
+        self.assertEqual(
+            [(o['navn'], [c['klasse'] for c in o['classes']])
+             for o in self.detail['ovelser']],
+            [('25m Fin', ['C', 'D']), ('25m Revolver', ['C']),
+             ('25m Spesialpistol', ['C'])],
+        )
+
+    def test_row_pins(self):
+        row = find_row(self.detail, '25m Fin', 'C', 'Jan Petter Wiger')
+        self.assertEqual(row['pos'], 1)
+        self.assertEqual(row['club'], 'Hokksund PK')
+        self.assertEqual(
+            row['series'],
+            [[74, None], [70, None], [75, None],
+             [69, None], [48, None], [52, None]],
+        )
+        self.assertEqual(row['sum'], 388)
+        self.assertEqual(row['ix'], 1)
+        self.assertEqual(row['hurtig'],
+                         [[3, None], [8, None], [8, None]])
+
+    def test_abbreviated_club_rides_the_name(self):
+        # 'Aron S. Drammen' has no club-suffix word, so the row keeps
+        # the whole region as its name — the matcher's club-tail strip
+        # resolves it against the API club 'Aron Skytterklubb, Drammen'
+        row = find_row(self.detail, '25m Fin', 'D',
+                       'Håvard Ellingsen Aron S. Drammen')
+        self.assertNotIn('club', row)
+        self.assertEqual(row['sum'], 530)
+
+    def test_row_count_matches_deltagere(self):
+        rows = [r for o in self.detail['ovelser'] for c in o['classes']
+                for r in c['rows']]
+        self.assertEqual(len(rows), self.detail['deltakere'])
+
+    def test_sums_equal_api_scores(self):
+        """sum = the enumerated series columns — the API's own score
+        field confirms it for every matched row. The one unmatched
+        row: 'Rune Finstad Oslo Komm.Tj.M. SKL' — 'Komm.Tj.M.'
+        truncates inside compound words, which no exact rule reads."""
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2021.json')))
+        comp = next(c for c in year['competitions']
+                    if '7e11a2b0' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        by_pid = {r['personId']: r for r in comp['results']}
+        checked = 0
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    if row.get('personId'):
+                        self.assertEqual(
+                            row['sum'],
+                            by_pid[row['personId']]['score'],
+                            row['name'],
+                        )
+                        checked += 1
+        self.assertGreaterEqual(checked, 18)
+
+
+class ParseLeonVm(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_leon(fixture_text('leon-vm.pdf'))
+
+    def test_columns_and_block_name(self):
+        self.assertEqual(
+            [(o['navn'], [c['klasse'] for c in o['classes']])
+             for o in self.detail['ovelser']],
+            [('25m Fin', ['B', 'C', 'D']), ('25m Grov', ['B'])],
+        )
+        row = find_row(self.detail, '25m Fin', 'B', 'Jan Olaf Sandvik')
+        self.assertEqual(row['club'], 'Kongsberg PK')
+        self.assertEqual(
+            row['series'],
+            [[81, None], [77, None], [73, None],
+             [81, None], [73, None], [80, None]],
+        )
+        self.assertEqual(row['sum'], 465)
+        self.assertEqual(row['ix'], 4)
+        self.assertEqual(row['vm'], [[4, None], [6, None], [5, None]])
+
+    def test_row_count_matches_deltagere(self):
+        rows = [r for o in self.detail['ovelser'] for c in o['classes']
+                for r in c['rows']]
+        self.assertEqual(len(rows), self.detail['deltakere'])
+        self.assertEqual(self.detail['deltakere'], 10)
+
+    def test_sums_equal_api_scores(self):
+        from result_file_matching import attach_person_ids
+        year = json.load(open(os.path.join(
+            os.path.dirname(__file__), '..', '..', 'public', 'data',
+            'bane', '2021.json')))
+        comp = next(c for c in year['competitions']
+                    if '7c7b5693' in (c.get('resultFileUrl') or ''))
+        attach_person_ids(self.detail, comp['results'])
+        by_pid = {r['personId']: r for r in comp['results']}
+        checked = 0
+        for ovelse in self.detail['ovelser']:
+            for cls in ovelse['classes']:
+                for row in cls['rows']:
+                    if row.get('personId'):
+                        self.assertEqual(
+                            row['sum'],
+                            by_pid[row['personId']]['score'],
+                            row['name'],
+                        )
+                        checked += 1
+        self.assertGreaterEqual(checked, 9)
+
+
+class ParseLeonDispatch(unittest.TestCase):
+    def test_parse_result_routes_leon(self):
+        with pdfplumber.open(os.path.join(FIXTURES, 'leon-fgmrs.pdf')) as pdf:
+            detail = parse_result(pdf)
+        self.assertEqual(detail['generator'], 'leon')
+        self.assertTrue(detail['ovelser'])
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_5(self):
-        self.assertEqual(PARSER_VERSION, 5)
+    def test_parser_version_is_6(self):
+        self.assertEqual(PARSER_VERSION, 6)
 
 
 class ParseResultDispatch(unittest.TestCase):
