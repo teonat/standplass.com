@@ -143,7 +143,12 @@ var StandplassPersonModalController = (function () {
                 syncCurrentPersonModalUrl();
                 drawChart();
             }
-            if (chartHandle && StandplassPersonModal.hasMetricValue(entry, modalMetric)) {
+            // A single-point chart (a person with one result in the
+            // pre-filtered discipline) renders renderChart's noop handle
+            // — activateDot would be silently swallowed — so the guard is
+            // hasChartDot, not just hasMetricValue: no dot means the row
+            // fallback (and its p_entry write) takes over.
+            if (chartHandle && StandplassPersonModal.hasChartDot(modalEntries, modalMetric, entry)) {
                 chartHandle.activateDot(String(idx));
             } else {
                 var row = modalEl.querySelector('tr[data-idx="' + idx + '"]');

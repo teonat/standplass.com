@@ -641,6 +641,19 @@ var StandplassPersonModal = (function () {
         return false;
     }
 
+    // Whether an entry actually gets a dot on the rendered chart: the
+    // chart draws dots only with 2+ plotted points (a single point is no
+    // line — renderChart's noop path), and only for entries its series
+    // includes (chartPoints' own predicate: dated, non-null on the
+    // metric, ranking not the zero encoding). The open-from-entry
+    // activation uses this instead of the noop-swallowing activateDot
+    // when the chart has nothing to activate — the row fallback (and
+    // its p_entry write) takes over.
+    function hasChartDot(entries, metric, entry) {
+        var pts = chartPoints(entries, metric);
+        return pts.length >= 2 && pts.indexOf(entry) !== -1;
+    }
+
     // ── Meritter tab rendering ─────────────────────────────────────────
     // Consumes meritterForPerson's rows. The chips split individual and
     // lag kinds (owner ruling 2026-11-23: separate chips, only non-zero
@@ -811,6 +824,7 @@ var StandplassPersonModal = (function () {
         findEntryIndex: findEntryIndex,
         activationMetric: activationMetric,
         hasMetricValue: hasMetricValue,
+        hasChartDot: hasChartDot,
         parsePersonFilterParams: parsePersonFilterParams,
         buildPersonFilterParams: buildPersonFilterParams
     };

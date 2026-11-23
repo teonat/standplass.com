@@ -585,6 +585,29 @@ assert.strictEqual(StandplassPersonModal.hasMetricValue(
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { position: null }, 'position'), false);
 
+// hasChartDot: whether an entry actually gets a dot on the rendered
+// chart — the chart renders dots only with 2+ plotted points (fewer is
+// the noop-chart path), and only for entries its series includes. The
+// open-from-entry activation must treat a single-point chart like no
+// chart at all: the row fallback (highlight + p_entry write) takes over
+// instead of silently swallowing the activation into the noop handle.
+var chartPts = [
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Grovfelt', class: 'Å',
+      score: 94, rankingScore: 0 },
+    { date: '2026-07-01', competitionId: 'c2', discipline: 'Grovfelt', class: 'Å',
+      score: 91, rankingScore: null }
+];
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'score', chartPts[0]), true,
+    'two plotted points render dots — the entry gets one');
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'score',
+    { date: '2026-08-01', competitionId: 'c3', discipline: 'Grovfelt', class: 'Å', score: 88 }),
+    false, 'an entry outside the series has no dot');
+assert.strictEqual(StandplassPersonModal.hasChartDot(
+    [chartPts[0]], 'score', chartPts[0]), false,
+    'a single-point chart renders no dots — the row fallback takes over');
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'rankingScore', chartPts[1]),
+    false, 'the ranking series excludes rankless rows — no dot on that chart');
+
 // ── branch switcher (owner ruling 2026-11-23: Alle/Felt/Bane, not ────
 // per-row tags — scales with future branches; rows stay untagged)
 
