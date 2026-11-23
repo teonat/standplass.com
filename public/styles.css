@@ -584,7 +584,8 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     color: var(--brand-accent);
     text-decoration-color: var(--brand-accent);
 }
-.stevner-comp-links a {
+.stevner-comp-links a,
+.stevner-comp-links .stevner-resultfile-btn {
     display: inline-block;
     margin-left: 0.25rem;
     font-size: 0.8rem;
@@ -596,6 +597,16 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     padding: 0.15rem 0.4rem;
 }
 .stevner-comp-links a:hover { background: var(--border-faint); }
+/* The Resultatfil action shares the pill look but keeps its OWN class
+   so no handler ever matches it by look (the Kolonner lesson); a
+   button additionally needs the resets anchors get for free. The
+   nested .nav-beta-tag reuses the Mesterskap nav tag's look. */
+.stevner-comp-links .stevner-resultfile-btn {
+    font-family: inherit;
+    background: none;
+    cursor: pointer;
+}
+.stevner-comp-links .stevner-resultfile-btn:hover { background: var(--border-faint); }
 .stevner-comp-meta {
     display: block;
     margin-top: 0.25rem;
@@ -1293,6 +1304,14 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .comp-modal-dialog::backdrop { background: rgba(0,0,0,0.4); }
 .comp-modal-dialog .program-toggle { margin: 0.75rem 1.5rem 0; width: auto; }
 .comp-modal-dialog .comp-modal-body { padding: 0 1.5rem 1.5rem; }
+/* Resultatfil modal — the comp modal's chrome, wider: series tables
+   (10 stands on felt, more on bane) do not fit 640px. Each table gets
+   its own horizontal-scroll wrap so section titles stay put; the
+   innertreff sub digits render smaller than their values. */
+.resultfile-modal-dialog { max-width: min(960px, 95vw); }
+.resultfile-table-wrap { overflow-x: auto; }
+.resultfile-modal-dialog sub { font-size: 0.72em; opacity: 0.8; }
+.resultfile-fallback { margin: 0.75rem 0 0; }
 .comp-modal-meta {
     margin: 0;
     font-size: 0.8125rem;
@@ -1551,6 +1570,7 @@ tr[data-idx] { cursor: pointer; }
 [data-mode="dark"] .stevner-person-btn.link-btn,
 [data-mode="dark"] .stevner-comp-btn,
 [data-mode="dark"] .stevner-comp-links a,
+[data-mode="dark"] .stevner-comp-links .stevner-resultfile-btn,
 [data-mode="dark"] .comp-modal-infocard a,
 [data-mode="dark"] .comp-modal-disc-name,
 [data-mode="dark"] .comp-modal-title,

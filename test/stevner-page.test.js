@@ -58,6 +58,28 @@ assert.strictEqual(cards[0].title, 'Vårfelt');
 assert.strictEqual(cards[0].status, 1);
 assert.strictEqual(cards[0].resultFileUrl, 'https://example.test/r.pdf');
 
+// ── cardLinksHtml — the Resultatfil action joins the link row ─────────
+var links1 = SP.cardLinksHtml(cards[0]);
+assert.ok(links1.indexOf('class="stevner-resultfile-btn"') !== -1,
+    'a comp with a result file gets the Resultatfil action');
+assert.ok(links1.indexOf('data-comp-id="c1"') !== -1,
+    'the action carries the comp id');
+assert.ok(links1.indexOf('data-resultfile="https://example.test/r.pdf"') !== -1,
+    'the action carries the result file url for the modal');
+assert.ok(links1.indexOf('data-title="Vårfelt"') !== -1,
+    'the action carries the comp title');
+assert.ok(links1.indexOf('>Resultatfil <span class="nav-beta-tag"') !== -1,
+    'the action carries the beta pill (partial result-file coverage)');
+assert.ok(links1.indexOf('stevner-resultfile-btn') < links1.indexOf('>PDF</a>'),
+    'the Resultatfil action sits before the raw PDF link');
+var links2 = SP.cardLinksHtml(cards[1]);
+assert.ok(links2.indexOf('stevner-resultfile-btn') === -1,
+    'no result file, no Resultatfil action');
+assert.ok(links2.indexOf('>PDF</a>') === -1,
+    'no result file, no PDF link either');
+assert.ok(links2.indexOf('skyting.no</a>') !== -1,
+    'the deep link survives');
+
 // klasse mode keys on discipline|class, so c1's three results form THREE
 // groups (Grovfelt|A, Grovfelt|B, Fellesfelt|A), not two.
 assert.strictEqual(cards[0].groups.length, 3, 'klasse mode groups by discipline+class');

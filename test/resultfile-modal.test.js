@@ -1,0 +1,147 @@
+'use strict';
+var assert = require('node:assert');
+// nsf-orgs-style localStorage probing noise guard (see comp-modal.test.js)
+process.removeAllListeners('warning');
+global.StandplassFormat = require('../public/js/format.js');
+global.StandplassDataTable = require('../public/js/data-table.js');
+global.StandplassRankingBand = require('../public/js/ranking-band.js');
+var RFM = require('../public/js/resultfile-modal.js');
+
+// ── seriesCellHtml ──────────────────────────────────────────────────────
+
+assert.strictEqual(RFM.seriesCellHtml([27, 16]), '27<sub>16</sub>',
+    'the innertreff count is marked sub-style');
+assert.strictEqual(RFM.seriesCellHtml([10, 0]), '10',
+    'a zero innertreff renders no sub');
+assert.strictEqual(RFM.seriesCellHtml([7, null]), '7',
+    'a null innertreff (family without per-stand innertreff) renders no sub');
+assert.strictEqual(RFM.seriesCellHtml([null, null]), '–',
+    'a null value renders a dash');
+
+// ── ovelseSections ─────────────────────────────────────────────────────
+
+var detail = {
+    generator: 'inrX 1.9.1.0',
+    maxFeltPoints: { group1: 80, group2: 70 },
+    ovelser: [
+        { navn: 'Felt Fin', classes: [
+            { klasse: 'Å', rows: [
+                { medal: 'Gull', name: 'Eirik Djønne', club: 'Odda Pistolklubb',
+                  series: [[9, 5], [10, 0], [7, null]], ix: 33, sum: 90, personId: 'p1' },
+                { pos: 4, name: 'Kari Nordmann', club: 'Bodø PK',
+                  series: [[8, 1], [7, 0]], ix: 12, sum: 77 }
+            ] },
+            { klasse: 'U', rows: [
+                { name: 'Ung Ut', club: 'Klubb C', series: [[5, null]], sum: 30 }
+            ] }
+        ] },
+        { navn: 'Felt Grov', classes: [{ klasse: 'Å', rows: [] }] }
+    ],
+    km: {
+        sections: [
+            { navn: 'KM Fin felt', klasse: 'Å', rows: [
+                { medal: 'Sølv', name: 'Eirik Djønne', club: 'Odda Pistolklubb',
+                  series: [[9, 5]], ix: 5, sum: 40, personId: 'p1' }
+            ] }
+        ],
+        lag: [
+            { navn: 'KM Lag: Felt Magnum-1', klasse: 'Å', teams: [
+                { medal: 'Gull', team: 'Odda Pistolklubb', series: [[27, 15], [30, 13]],
+                  ix: 95, sum: 265, members: [
+                    { name: 'Eirik Djønne', klasse: 'Å', ix: 33, sum: 90, personId: 'p1' },
+                    { name: 'Jakob Kråkevik', klasse: 'Å', ix: 30, sum: 85 }
+                  ] }
+            ] }
+        ]
+    }
+};
+
+var parts = RFM.ovelseSections(detail);
+assert.strictEqual(parts.sections.length, 4,
+    'øvelser + km sections + km lag all become sections');
+assert.strictEqual(parts.sections[0].navn, 'Felt Fin');
+assert.ok(!parts.sections[0].isLag, 'program øvelser are person sections');
+assert.strictEqual(parts.sections[0].classes.length, 2,
+    'classes flatten with their klasse labels');
+assert.strictEqual(parts.sections[0].classes[1].klasse, 'U');
+assert.strictEqual(parts.sections[1].navn, 'Felt Grov');
+assert.strictEqual(parts.sections[1].classes[0].rows.length, 0,
+    'an empty øvelse keeps its empty classes (no synthetic rows)');
+assert.strictEqual(parts.sections[2].navn, 'KM Fin felt',
+    'championship sections join the list after the program øvelser');
+assert.strictEqual(parts.sections[3].navn, 'KM Lag: Felt Magnum-1');
+assert.ok(parts.sections[3].isLag, 'lag sections are flagged');
+assert.strictEqual(parts.sections[3].classes[0].rows[0].team, 'Odda Pistolklubb',
+    'a lag section carries teams as its rows');
+assert.deepStrictEqual(parts.maxFeltPoints, { group1: 80, group2: 70 },
+    'the comp-level max-felt facts ride along on the section list');
+assert.deepStrictEqual(RFM.ovelseSections({}), { sections: [], maxFeltPoints: null },
+    'an empty detail is empty sections, never a crash');
+assert.deepStrictEqual(RFM.ovelseSections(null), { sections: [], maxFeltPoints: null },
+    'a null detail is empty sections too');
+
+// ── maxFeltLine ────────────────────────────────────────────────────────
+
+assert.strictEqual(RFM.maxFeltLine({ group1: 80, group2: 70 }),
+    'Maks poeng felt gr. 1: 80, gr. 2: 70',
+    'the max-felt facts render in the PDF\'s own wording, gr. order');
+assert.strictEqual(RFM.maxFeltLine({ group3: 38 }), 'Maks poeng felt gr. 3: 38');
+assert.strictEqual(RFM.maxFeltLine(null), '', 'no facts, no line');
+
+// ── renderFallback ─────────────────────────────────────────────────────
+
+var fb = RFM.renderFallback({ title: 'Stevne', resultFileUrl: 'https://example.test/r.pdf' });
+assert.ok(fb.indexOf('https://example.test/r.pdf') !== -1,
+    'the fallback offers the PDF link');
+assert.ok(fb.indexOf('kunne ikke tolkes') !== -1,
+    'the fallback explains itself');
+var fbEscape = RFM.renderFallback({ title: 'T', resultFileUrl: 'https://x/a.pdf" onload="x' });
+assert.ok(fbEscape.indexOf('" onload') === -1,
+    'the PDF url is attribute-escaped');
+var fbNoUrl = RFM.renderFallback({ title: 'T', resultFileUrl: null });
+assert.ok(fbNoUrl.indexOf('<a ') === -1,
+    'no resultFileUrl means no link, still a message');
+
+// ── renderFor (the open() body decision, pure) ─────────────────────────
+
+var comp = { id: 'c1', year: 2025, title: 'Vårfelt', resultFileUrl: 'https://example.test/r.pdf' };
+assert.ok(RFM.renderFor({ generator: 'quarantined' }, comp).indexOf('https://example.test/r.pdf') !== -1,
+    'a quarantined detail renders the fallback with the PDF link, not a crash');
+assert.ok(RFM.renderFor(null, comp).indexOf('https://example.test/r.pdf') !== -1,
+    'a failed fetch (null detail) renders the same fallback');
+assert.ok(RFM.renderFor(detail, comp).indexOf('Felt Fin') !== -1,
+    'a parsed detail renders its sections');
+
+// ── renderDetailBody (through the real base) ───────────────────────────
+
+var body = RFM.renderDetailBody(detail);
+assert.ok(body.indexOf('Felt Fin') !== -1, 'øvelse titles render');
+assert.ok(body.indexOf('KM Lag: Felt Magnum-1') !== -1, 'lag section titles render');
+assert.ok(body.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="6">Å</th></tr>') !== -1,
+    'klasse labels render as base group rows');
+assert.ok(body.indexOf('data-person-id="p1"') !== -1,
+    'matched rows link to the person modal');
+assert.ok(body.indexOf('<td>Kari Nordmann</td>') !== -1,
+    'unmatched rows render a plain name');
+assert.ok(body.indexOf('9<sub>5</sub> 10 7') !== -1,
+    'series cells join space-separated with sub innertreff, zeros/nulls bare');
+assert.ok(body.indexOf('<span class="medal medal--gold">1</span>') !== -1,
+    'medal rows render the medal chip');
+assert.ok(body.indexOf('<span class="medal medal--silver">2</span>') !== -1,
+    'championship medal rows render their chips too');
+assert.ok(body.indexOf('Odda Pistolklubb</button>') === -1,
+    'team names are not person buttons');
+assert.ok(body.indexOf('Jakob Kråkevik') !== -1,
+    'team members render');
+assert.ok(body.indexOf('Ingen rader tolket') !== -1,
+    'an øvelse whose rows never attached shows the honest empty message');
+
+var dnfDetail = { ovelser: [{ navn: 'Felt Fin', classes: [{ klasse: 'Å', rows: [
+    { status: 'DNF', name: 'Gunn Gikk', club: 'X PK', series: [[3, 0]], ix: 1 }
+] }] }] };
+var dnfBody = RFM.renderDetailBody(dnfDetail);
+assert.ok(dnfBody.indexOf('<td>DNF</td>') !== -1,
+    'status rows show their status in the plass column');
+assert.ok(dnfBody.indexOf('Gunn Gikk') !== -1, 'status rows still render');
+
+console.log('resultfile-modal.test.js: all assertions passed');

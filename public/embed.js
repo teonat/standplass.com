@@ -161,6 +161,7 @@ var StandplassEmbed = (function () {
         '/js/pagination.js', '/js/ranking-band.js', '/js/person-modal.js', '/js/person-modal-controller.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
         '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',
+        '/js/resultfile-modal.js',
         '/js/nsf-orgs.js', '/js/klubb-discipline-groups.js', '/js/terminliste-page.js'
     ];
     var dependenciesPromise = null;

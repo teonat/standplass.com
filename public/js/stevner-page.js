@@ -344,10 +344,28 @@ var StandplassStevnerPage = (function () {
             : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>';
     }
 
+    // The card's action row: the Resultatfil modal action (beta —
+    // partial result-file coverage, same signal as the Mesterskap nav
+    // tag), then the raw PDF, then the skyting.no deep link. Pure so
+    // the markup (incl. the beta pill) stays test-pinned.
+    function cardLinksHtml(card) {
+        if (!card.resultFileUrl) {
+            return card.deepLink
+                ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>'
+                : '';
+        }
+        return '<button type="button" class="stevner-resultfile-btn" data-comp-id="' + esc(card.id)
+            + '" data-title="' + esc(card.title || '') + '" data-resultfile="' + esc(card.resultFileUrl) + '">'
+            + 'Resultatfil <span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
+            + '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> '
+            + (card.deepLink
+                ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>'
+                : '');
+    }
+
     function renderCard(card, showClassBadge, spec, state) {
         var titleHtml = esc(card.title || 'Ukjent stevne') + (card.status === 3 ? ' (Avlyst)' : '');
-        var links = (card.resultFileUrl ? '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> ' : '')
-            + (card.deepLink ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>' : '');
+        var links = cardLinksHtml(card);
         var meta = [card.startDate ? String(card.startDate).slice(0, 10) : '', card.facilityName, card.organizationName]
             .filter(Boolean).map(esc).join(' · ');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
@@ -1017,6 +1035,38 @@ var StandplassStevnerPage = (function () {
         // page wires only its trigger below.
         var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
 
+        // Resultatfil modal — the parsed result file in a dialog of
+        // its own (the design kept it separate from the comp modal's
+        // tabs). detailBase derives from the page's data base
+        // ('/data/felt' → '/data/detaljer/felt'), which keeps the
+        // embed's absolute SELF_ORIGIN bases working unchanged.
+        // Person buttons inside the modal route through the page's
+        // existing person modal via cfg, so the module stays
+        // decoupled.
+        var resultfileHost = StandplassResultfileModal.ensureDialog({
+            idPrefix: config.idPrefix,
+            root: root,
+            detailBase: String(config.dataBase || '').replace(/\/[^/]*$/, '/detaljer$&'),
+            onPerson: function (btn) {
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: btn.dataset.discipline || null
+                });
+            }
+        });
+
+        rowsEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-resultfile-btn');
+            if (!btn) { return; }
+            resultfileHost.open({
+                id: btn.dataset.compId,
+                year: activeYear,
+                title: btn.dataset.title || '',
+                resultFileUrl: btn.dataset.resultfile || null
+            });
+        });
+
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-comp-btn');
             if (!btn) { return; }
@@ -1063,7 +1113,7 @@ var StandplassStevnerPage = (function () {
         groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, countUniqueShooters: countUniqueShooters,
         competitionCardTableSpec: competitionCardTableSpec, overallStatsBar: overallStatsBar,
-        statsLine: statsLine, formatUpdated: formatUpdated };
+        statsLine: statsLine, formatUpdated: formatUpdated, cardLinksHtml: cardLinksHtml };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
