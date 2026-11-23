@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 17
+PARSER_VERSION = 18
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -332,6 +332,19 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
     return premie, oppr, int(ix_tok), int(sum_tok), cells, region
 
 
+# Trailing status tokens. inrX prints DNF/DNS bare; a disqualified
+# shooter keeps their full result line and prints 'DSQ' — sometimes
+# with the violated rule cited in parentheses ('DSQ(8.25.4.9)').
+_STATUS_TOKEN = re.compile(r'^(DNF|DNS|DSQ(?:\([^)]*\))?)$')
+
+
+def _status_token(token):
+    """Normalized status for a trailing row token, else None."""
+    if _STATUS_TOKEN.match(token):
+        return 'DSQ' if token.startswith('DSQ') else token
+    return None
+
+
 def _parse_row(line, n_series, has_oppr, has_premie, allow_medal=False):
     """Parse one table row; returns None for lines that are not rows."""
     tokens = line.split()
@@ -344,8 +357,9 @@ def _parse_row(line, n_series, has_oppr, has_premie, allow_medal=False):
     elif tokens[0].isdigit():
         row['pos'] = int(tokens[0])
         tokens = tokens[1:]
-    if tokens[-1] in ('DNF', 'DNS'):
-        row['status'] = tokens[-1]
+    status = _status_token(tokens[-1])
+    if status:
+        row['status'] = status
         tokens = tokens[:-1]
     attempts = [True, False] if has_premie else [False]
     for with_premie in attempts:
@@ -385,6 +399,12 @@ def _parse_lag_line(line, n_series, entry):
         })
         return
     tokens = line.split()
+    # A disqualified team prints a bare 'DSQ' after its totals and
+    # loses its leading medal/position — strip the status first and
+    # allow the headless team line only when one was found.
+    status = _status_token(tokens[-1]) if len(tokens) > 1 else None
+    if status:
+        tokens = tokens[:-1]
     team = {}
     if tokens[0] in _MEDALS:
         team['medal'] = tokens[0]
@@ -392,7 +412,7 @@ def _parse_lag_line(line, n_series, entry):
     elif tokens[0].isdigit():
         team['pos'] = int(tokens[0])
         tokens = tokens[1:]
-    else:
+    elif not status:
         return
     need = n_series + 2
     if len(tokens) < need + 1:
@@ -410,6 +430,8 @@ def _parse_lag_line(line, n_series, entry):
     team['ix'] = int(tokens[-2])
     team['sum'] = int(tokens[-1])
     team['members'] = []
+    if status:
+        team['status'] = status
     entry['teams'].append(team)
 
 

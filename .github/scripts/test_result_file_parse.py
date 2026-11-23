@@ -17,6 +17,7 @@ from result_file_parse import (
     _parse_leon_row,
     _split_lag_team_head,
     _split_name_club,
+    _status_token,
     detect_family,
     parse_blinken,
     parse_datotid,
@@ -1455,6 +1456,69 @@ class ParseInrxCommaClub(unittest.TestCase):
             ('Per Andre Kulbraaten', 'Lillestrøm Og Omegn Pistolklubb'))
 
 
+class ParseInrxDsq(unittest.TestCase):
+    """DSQ rows (NM Magnumfelt 2026, inrX 1.9.1.0): disqualified
+    shooters print 'DSQ(<rule>)' after a complete series/ix/sum line
+    (they keep their results, unlike DNF/DNS rows which print no
+    sum), and a disqualified team prints a bare 'DSQ' with no leading
+    medal or position. Both must parse with status 'DSQ' — before
+    v18 the token defeated the tail-shape checks and the rows (and
+    the whole team) dropped.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-dsq.pdf'))
+
+    @staticmethod
+    def _klass(detail, ovelse, klasse='Å'):
+        o = next(o for o in detail['ovelser'] if o['navn'] == ovelse)
+        return next(c for c in o['classes'] if c['klasse'] == klasse)
+
+    def test_status_token_forms(self):
+        self.assertEqual(_status_token('DNF'), 'DNF')
+        self.assertEqual(_status_token('DNS'), 'DNS')
+        self.assertEqual(_status_token('DSQ'), 'DSQ')
+        self.assertEqual(_status_token('DSQ(8.25.4.9)'), 'DSQ')
+        self.assertIsNone(_status_token('DSQX'))
+        self.assertIsNone(_status_token('DSQ('))
+        self.assertIsNone(_status_token('70'))
+
+    def test_dsq_person_rows_parse(self):
+        for ovelse, expected in (('Felt Magnum-1', 5), ('Felt Magnum-2', 3)):
+            rows = self._klass(self.detail, ovelse)['rows']
+            self.assertEqual(len(rows), 249 if ovelse.endswith('1') else 169,
+                             f'{ovelse}: ranked + DSQ rows')
+            dsq = [r for r in rows if r.get('status') == 'DSQ']
+            self.assertEqual(len(dsq), expected, f'{ovelse}: DSQ rows kept')
+
+    def test_dsq_row_keeps_series_sum_and_no_pos(self):
+        row = find_row(self.detail, 'Felt Magnum-1', 'Å', 'Toralf Mjøen')
+        self.assertEqual(row.get('status'), 'DSQ')
+        self.assertNotIn('pos', row)
+        self.assertEqual(row.get('club'), 'Oppdal Pistolklubb')
+        self.assertEqual(row.get('ix'), 8)
+        self.assertEqual(row.get('sum'), 61)
+        self.assertEqual(len(row['series']), 10)
+
+    def test_dnf_rows_still_parse(self):
+        rows = self._klass(self.detail, 'Felt Magnum-2')['rows']
+        dnf = [r for r in rows if r.get('status') == 'DNF']
+        self.assertEqual(len(dnf), 2)
+
+    def test_dsq_team_parses_with_members(self):
+        teams = self._klass(self.detail, 'Lag: Felt Magnum-1')['teams']
+        self.assertEqual(len(teams), 39)
+        team = next(t for t in teams if t['team'] == 'Trondhjems PK 1')
+        self.assertEqual(team.get('status'), 'DSQ')
+        self.assertNotIn('pos', team)
+        self.assertNotIn('medal', team)
+        self.assertEqual(team.get('sum'), 204)
+        self.assertEqual([m['name'] for m in team['members']],
+                         ['Jan Arild Myrhaug', 'Eirik Myrhaug',
+                          'Sonja Lillesand'])
+
+
 class ParseBlinkenChampLag(unittest.TestCase):
     """Blinken championship tables ('… (KM …) Deltakere: N' øvelse
     headers, class headers with a Medalje column) and lag tables
@@ -1578,8 +1642,8 @@ class ParseBlinkenChampLag(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_17(self):
-        self.assertEqual(PARSER_VERSION, 17)
+    def test_parser_version_is_18(self):
+        self.assertEqual(PARSER_VERSION, 18)
 
 
 class ParseResultDispatch(unittest.TestCase):
