@@ -15,6 +15,7 @@ from result_file_parse import (
     UnsupportedFormatError,
     _parse_blinken_row,
     _parse_leon_row,
+    _split_lag_team_head,
     _split_name_club,
     detect_family,
     parse_blinken,
@@ -1454,9 +1455,131 @@ class ParseInrxCommaClub(unittest.TestCase):
             ('Per Andre Kulbraaten', 'Lillestrøm Og Omegn Pistolklubb'))
 
 
+class ParseBlinkenChampLag(unittest.TestCase):
+    """Blinken championship tables ('… (KM …) Deltakere: N' øvelse
+    headers, class headers with a Medalje column) and lag tables
+    ('Lag …' øvelse headers, class headers with no Klubb column,
+    team lines with inline 'Name(sum)' members that wrap across
+    lines). Both route into the inrX championship shape so the
+    matcher and mestere index consume them unchanged.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-champ-lag.pdf'))
+
+    def test_stevne_ovelser_keep_their_own_rows(self):
+        fin = next(o for o in self.detail['ovelser']
+                   if o['navn'] == '25m Finpistol')
+        # the U14 row is extraction-mangled (digits fused into the
+        # club token, a series value lost) — its arithmetic fails and
+        # it stays dropped, exactly as before champ tables were parsed
+        self.assertEqual(
+            {c['klasse']: len(c['rows']) for c in fin['classes']},
+            {'B': 3, 'C': 11, 'D': 1, 'P3-SH1': 1, 'U14': 0})
+        self.assertEqual(fin['deltakere'], 17)
+        grov = next(o for o in self.detail['ovelser']
+                    if o['navn'] == '25m Grovpistol')
+        self.assertEqual(
+            {c['klasse']: len(c['rows']) for c in grov['classes']},
+            {'B': 2, 'C': 10, 'D': 0})
+        self.assertEqual(grov['deltakere'], 14)
+
+    def test_champ_sections_carry_medal_rows(self):
+        a = next(s for s in self.detail['km']['sections']
+                 if s['klasse'] == 'Å')
+        self.assertEqual(a['navn'], 'KM: 25m Finpistol')
+        self.assertEqual(a.get('deltakere'), 16)
+        self.assertEqual(len(a['rows']), 10)
+        eirik = next(r for r in a['rows'] if r['name'] == 'Eirik Djønne')
+        self.assertEqual((eirik['medal'], eirik['sum']), ('Gull', 558))
+        frank = next(r for r in a['rows']
+                     if r['name'] == 'Frank Henning Lillebuen')
+        self.assertEqual(frank['medal'], 'Sølv')
+
+    def test_champ_class_set(self):
+        self.assertEqual(
+            {s['klasse'] for s in self.detail['km']['sections']},
+            {'P3-SH1', 'U14', 'V55', 'V65', 'V73', 'Å'})
+
+    def test_lag_teams_with_inline_members(self):
+        lag = next(l for l in self.detail['km']['lag']
+                   if l['klasse'] == 'Å')
+        self.assertEqual(lag['navn'], 'KM Lag: 25m Finpistol')
+        team = lag['teams'][0]
+        self.assertEqual(team['team'], 'Tysnes SSK 1')
+        self.assertEqual(team['medal'], 'Gull')
+        self.assertEqual(team['sum'], 1417)
+        self.assertEqual(team['ix'], 10)
+        self.assertEqual(len(team['series']), 12)
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in team['members']],
+            [('Ronnie Borgen', 457), ('Steffen Fossli', 480),
+             ('Terje Vikøren', 480)])
+
+    def test_lag_vet_class(self):
+        vet = next(l for l in self.detail['km']['lag']
+                   if l['klasse'] == 'VET')
+        self.assertEqual(vet['teams'][0]['team'], 'Tysnes SSK 2')
+        self.assertEqual(vet['teams'][0]['sum'], 1573)
+        self.assertEqual(len(vet['teams'][0]['members']), 3)
+
+    def test_grov_lag(self):
+        lag = next(l for l in self.detail['km']['lag']
+                   if l['navn'] == 'KM Lag: 25m Grovpistol'
+                   and l['klasse'] == 'Å')
+        self.assertEqual(lag['teams'][0]['sum'], 1256)
+        self.assertEqual(len(lag['teams'][0]['members']), 3)
+
+    def test_team_name_split_without_digit_boundary(self):
+        team, member_tokens = _split_lag_team_head(
+            ['Aron', 'PK', 'John', 'Smith(500)'])
+        self.assertEqual(team, 'Aron PK')
+        self.assertEqual(member_tokens, ['John', 'Smith(500)'])
+
+    def test_page_break_inside_lag_members(self):
+        # the member cell wraps across a page break: footer lines and
+        # the repeated øvelse/class headers must not lose the team or
+        # its pending name fragments
+        text = (
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Tysnes SSK 1 Ronnie Borgen(457) Steffen '
+            '118 106 113 114 117 111 110 116 119 130 135 128 10 1417 G\n'
+            'Blinken (V3.0.15 Build: 1448) Side 1 av 2\n'
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            'Fossli(480) Terje Vikøren(480)\n'
+        )
+        detail = parse_blinken(text)
+        team = detail['km']['lag'][0]['teams'][0]
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in team['members']],
+            [('Ronnie Borgen', 457), ('Steffen Fossli', 480),
+             ('Terje Vikøren', 480)])
+
+    def test_bare_lag_ovelse_is_ignored(self):
+        # a Lag øvelse with no championship scope has no section to
+        # attach to — its teams must not leak into the previous øvelse
+        text = (
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Tysnes SSK 1 Ronnie Borgen(457) Steffen '
+            '118 106 113 114 117 111 110 116 119 130 135 128 10 1417 G\n'
+            'Fossli(480) Terje Vikøren(480)\n'
+            'Lag 6G - 25m Grovpistol\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Odda PK 2 Eirik Djønne(500) Ola Nordmann(480) '
+            '100 100 100 100 100 100 100 100 100 100 100 100 9 1200 G\n'
+        )
+        detail = parse_blinken(text)
+        self.assertEqual(len(detail['km']['lag']), 1)
+        self.assertEqual(len(detail['km']['lag'][0]['teams']), 1)
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_16(self):
-        self.assertEqual(PARSER_VERSION, 16)
+    def test_parser_version_is_17(self):
+        self.assertEqual(PARSER_VERSION, 17)
 
 
 class ParseResultDispatch(unittest.TestCase):
