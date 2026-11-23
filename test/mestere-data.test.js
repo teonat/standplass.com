@@ -366,4 +366,40 @@ assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ navn: 'tore' })).l
     'navn search finds team members');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ type: 'individuelt' })).length, 1);
 
+// The medal-count ruling under FILTERS: a team's medal counts once
+// even when the filter keeps only part of the team, and each team of
+// a two-team club counts its own (the PDFs print all the club's
+// shooters under each team line, so the same names ride both teams).
+var greipstadRows = MD.filterPodiumRows(mRows, memberFilters({ klubb: 'Greipstad Pistolklubb' }));
+assert.strictEqual(greipstadRows.length, 2, 'the klubb filter keeps both Greipstad members');
+assert.strictEqual(MD.statsFor(greipstadRows, 'nm').medaljer, 1,
+    'a filter keeping part of a team still counts its medal once');
+assert.strictEqual(MD.statsFor(
+    MD.filterPodiumRows(mRows, memberFilters({ navn: 'tore' })), 'nm').medaljer, 1,
+    'a single kept teammate counts the medal once too');
+
+var twoTeamIndex = { year: 2024, comps: [comp('t1', {
+    nmLag: [sec('Felt Fin', 'Å', [
+        { medal: 'Gull', team: 'Mosjøen PK 1', sum: 318, club: 'Mosjøen PK', members: [
+            { name: 'Ola Nordmann', klasse: 'M', sum: 107 },
+            { name: 'Kari Nordmann', klasse: 'K', sum: 106 }
+        ] },
+        { medal: 'Sølv', team: 'Mosjøen PK 2', sum: 310, club: 'Mosjøen PK', members: [
+            { name: 'Ola Nordmann', klasse: 'M', sum: 104 },
+            { name: 'Kari Nordmann', klasse: 'K', sum: 103 }
+        ] }
+    ])]
+})] };
+var tRows = MD.podiumRows(twoTeamIndex, 'nm');
+assert.strictEqual(tRows.length, 4, 'two teams × their printed member lines');
+var tKeys = {};
+tRows.forEach(function (r) { tKeys[r.podiumKey] = true; });
+assert.strictEqual(Object.keys(tKeys).length, 2,
+    'the same names under team 2 are a different podium');
+var mosjoenRows = MD.filterPodiumRows(tRows, memberFilters({ klubb: 'Mosjøen PK' }));
+assert.strictEqual(mosjoenRows.length, 4,
+    'a two-team club keeps all its member rows under one club filter');
+assert.strictEqual(MD.statsFor(mosjoenRows, 'nm').medaljer, 2,
+    'each team of a two-team club counts its own medal');
+
 console.log('mestere-data.test.js: all assertions passed');

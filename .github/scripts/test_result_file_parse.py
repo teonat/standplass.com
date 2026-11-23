@@ -100,7 +100,7 @@ def find_row(detail, ovelse, klasse, name):
         if o['navn'] == ovelse:
             for c in o['classes']:
                 if c['klasse'] == klasse:
-                    for r in c['rows']:
+                    for r in c.get('rows', []):
                         if r['name'] == name:
                             return r
     raise AssertionError(f'row not found: {ovelse} / {klasse} / {name}')
