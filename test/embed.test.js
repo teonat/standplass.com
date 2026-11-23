@@ -49,6 +49,8 @@ var path = require('path');
 var embedSource = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'embed.js'), 'utf8');
 var dtIdx = embedSource.indexOf("'/js/data-table.js'");
 assert.ok(dtIdx !== -1, 'embed.js loads data-table.js');
+assert.ok(embedSource.indexOf("'/js/resultfile-modal.js'") !== -1,
+    'embed.js loads resultfile-modal.js (the stevne cards\' Resultatfil action)');
 assert.ok(embedSource.indexOf("'/js/table-renderer.js'") === -1,
     'embed.js must not load the retired table-renderer.js');
 

@@ -73,6 +73,10 @@ var StandplassStevnerPage = (function () {
     }
 
     function decorateRow(comp, r) {
+        // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
+        // date" on this string and parses it as UTC midnight, both of which break on
+        // a full datetime.
+        var date = comp.startDate ? String(comp.startDate).slice(0, 10) : '';
         return {
             position: r.position,
             name: r.name,
@@ -85,16 +89,18 @@ var StandplassStevnerPage = (function () {
             competitionType: comp.competitionTypeName || '',
             competition: comp.title,
             competitionId: comp.id,
-            // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
-            // date" on this string and parses it as UTC midnight, both of which break on
-            // a full datetime.
-            date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
+            date: date,
             applicableForClassification: comp.applicableForClassification === true,
             // data-discipline lets a future click handler resolve initialDisc
             // for the person modal (Task 7) without a second data pass.
+            // data-date/-comp-id/-class identify the exact entry, so opening
+            // the modal from this row can activate it (dot + row highlight).
             nameHtml: '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
                 + esc(r.personId) + '" data-person-name="' + esc(r.name) + '"'
-                + ' data-discipline="' + esc(r.discipline) + '">'
+                + ' data-discipline="' + esc(r.discipline) + '"'
+                + ' data-date="' + esc(date) + '"'
+                + ' data-comp-id="' + esc(comp.id) + '"'
+                + ' data-class="' + esc(r.class || '') + '">'
                 + esc(r.name || '–') + '</button>'
         };
     }
@@ -344,10 +350,28 @@ var StandplassStevnerPage = (function () {
             : '<span class="comp-modal-badge comp-modal-badge--no">Ikke klasseførende</span>';
     }
 
+    // The card's action row: the Resultatfil modal action (beta —
+    // partial result-file coverage, same signal as the Mesterskap nav
+    // tag), then the raw PDF, then the skyting.no deep link. Pure so
+    // the markup (incl. the beta pill) stays test-pinned.
+    function cardLinksHtml(card) {
+        if (!card.resultFileUrl) {
+            return card.deepLink
+                ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>'
+                : '';
+        }
+        return '<button type="button" class="stevner-resultfile-btn" data-comp-id="' + esc(card.id)
+            + '" data-title="' + esc(card.title || '') + '" data-resultfile="' + esc(card.resultFileUrl) + '">'
+            + 'Resultatfil <span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
+            + '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> '
+            + (card.deepLink
+                ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>'
+                : '');
+    }
+
     function renderCard(card, showClassBadge, spec, state) {
         var titleHtml = esc(card.title || 'Ukjent stevne') + (card.status === 3 ? ' (Avlyst)' : '');
-        var links = (card.resultFileUrl ? '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> ' : '')
-            + (card.deepLink ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>' : '');
+        var links = cardLinksHtml(card);
         var meta = [card.startDate ? String(card.startDate).slice(0, 10) : '', card.facilityName, card.organizationName]
             .filter(Boolean).map(esc).join(' · ');
         return '<div class="ranking-card" data-comp-id="' + esc(card.id) + '">'
@@ -987,7 +1011,13 @@ var StandplassStevnerPage = (function () {
 
         loadYear(activeYear);
 
-        var personModal = StandplassPersonModalController.create({
+        // Both branches' mestere bases for the person modal's Meritter
+        // tab. Derived from this page's own data base so an embed's
+        // absolute origin carries through, same as the resultfile
+        // modal's detailBase; the felt/bane segment swaps for the
+        // sibling branch.
+        var mestereOrigin = String(config.dataBase || '').replace(/\/(felt|bane)$/, '');
+        var personModalCfg = {
             idPrefix: config.idPrefix,
             root: root,
             urlState: urlState,
@@ -996,15 +1026,28 @@ var StandplassStevnerPage = (function () {
                     return flattenRows(yearData).filter(function (r) { return r.personId === personId; })
                         .map(function (r) {
                             return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
-                                competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                                competition: r.competition, competitionId: r.competitionId, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
                         });
                 });
             },
             defaultYear: activeYear,
             firstYear: FIRST_YEAR,
             currentYear: CURRENT_YEAR,
-            initialMetric: view === 'bane' ? 'score' : 'rankingScore'
-        });
+            initialMetric: view === 'bane' ? 'score' : 'rankingScore',
+            mestereBases: [
+                { branch: view === 'bane' ? 'bane' : 'felt',
+                  base: mestereOrigin + '/' + (view === 'bane' ? 'bane' : 'felt') + '/mestere' },
+                { branch: view === 'bane' ? 'felt' : 'bane',
+                  base: mestereOrigin + '/' + (view === 'bane' ? 'felt' : 'bane') + '/mestere' }
+            ],
+            // Comp titles in the Meritter tab open the page's comp
+            // modal; hosts without one (klubb, nasjonalt, ...) pass no
+            // callback and get plain text instead.
+            onOpenComp: function (compId, compTitle) {
+                compModalHost.open(compId, compTitle);
+            }
+        };
+        var personModal = StandplassPersonModalController.create(personModalCfg);
 
         // Competition-detail modal (native <dialog>, not the person modal's
         // activeModalCloser system -- <dialog> handles Escape/focus-trap on
@@ -1016,6 +1059,38 @@ var StandplassStevnerPage = (function () {
         // from this page's and terminliste's line-identical copies); this
         // page wires only its trigger below.
         var compModalHost = StandplassCompModal.createDialogHost({ idPrefix: config.idPrefix, root: root });
+
+        // Resultatfil modal — the parsed result file in a dialog of
+        // its own (the design kept it separate from the comp modal's
+        // tabs). detailBase derives from the page's data base
+        // ('/data/felt' → '/data/detaljer/felt'), which keeps the
+        // embed's absolute SELF_ORIGIN bases working unchanged.
+        // Person buttons inside the modal route through the page's
+        // existing person modal via cfg, so the module stays
+        // decoupled.
+        var resultfileHost = StandplassResultfileModal.ensureDialog({
+            idPrefix: config.idPrefix,
+            root: root,
+            detailBase: String(config.dataBase || '').replace(/\/[^/]*$/, '/detaljer$&'),
+            onPerson: function (btn) {
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: btn.dataset.discipline || null
+                });
+            }
+        });
+
+        rowsEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-resultfile-btn');
+            if (!btn) { return; }
+            resultfileHost.open({
+                id: btn.dataset.compId,
+                year: activeYear,
+                title: btn.dataset.title || '',
+                resultFileUrl: btn.dataset.resultfile || null
+            });
+        });
 
         rowsEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-comp-btn');
@@ -1029,7 +1104,13 @@ var StandplassStevnerPage = (function () {
             personModal.open(btn, {
                 personId: btn.dataset.personId,
                 personName: btn.dataset.personName,
-                initialDisc: btn.dataset.discipline || null
+                initialDisc: btn.dataset.discipline || null,
+                entry: btn.dataset.date ? {
+                    date: btn.dataset.date,
+                    competitionId: btn.dataset.compId,
+                    discipline: btn.dataset.discipline,
+                    class: btn.dataset.class || null
+                } : null
             });
         });
 
@@ -1063,7 +1144,7 @@ var StandplassStevnerPage = (function () {
         groupCompetitionRows: groupCompetitionRows,
         competitionStats: competitionStats, countUniqueShooters: countUniqueShooters,
         competitionCardTableSpec: competitionCardTableSpec, overallStatsBar: overallStatsBar,
-        statsLine: statsLine, formatUpdated: formatUpdated };
+        statsLine: statsLine, formatUpdated: formatUpdated, cardLinksHtml: cardLinksHtml };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

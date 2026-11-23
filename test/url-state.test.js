@@ -113,4 +113,21 @@ assert.strictEqual(qsAfter.get('q'), 'ola', 'q must round-trip');
 assert.strictEqual(qsAfter.get('clubs'), 'Oslo%20Pistolklubb,Bergen%20Pistolklubb', 'clubs must round-trip untouched -- url-state.js treats it as an opaque string');
 assert.strictEqual(qsAfter.get('subtype'), 'total', 'subtype (toppliste tab sub-toggle) must round-trip');
 
+// The person modal's deep-link params must round-trip like p_metric: the
+// activation writes p_entry (and p_metric) via setSearch, and a pasted
+// link is read back via getSearch at page init — an untracked param is
+// silently dropped by both, so the shared link would open unactivated
+// (and the meritter tab link would open on Resultater).
+window.location.search = '?person=42&year=2026';
+var personLink = StandplassUrlState.createController({ namespace: null });
+personLink.setSearch('?person=42&year=2026&p_tab=meritter&p_branch=felt'
+    + '&p_entry=2026-06-06~c1~Felt Fin~Å');
+var linkQs = new URLSearchParams(personLink.getSearch());
+assert.strictEqual(linkQs.get('p_tab'), 'meritter', 'p_tab must round-trip (meritter deep link)');
+assert.strictEqual(linkQs.get('p_branch'), 'felt', 'p_branch must round-trip (meritter branch filter)');
+assert.strictEqual(linkQs.get('p_entry'), '2026-06-06~c1~Felt Fin~Å',
+    'p_entry must round-trip (activated-entry deep link)');
+assert.strictEqual(get(window.location.search, 'p_entry'), '2026-06-06~c1~Felt Fin~Å',
+    'setSearch writes p_entry to the real URL');
+
 console.log('url-state.test.js: all assertions passed');

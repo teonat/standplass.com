@@ -26,18 +26,62 @@ assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_year=2024,2025&p_disc=Felt'),
     '?klubb=eksempel'
 );
+// ...including the meritter tab + branch params
+assert.strictEqual(
+    StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_tab=meritter&p_branch=felt'),
+    '?klubb=eksempel'
+);
+// ...and the activated entry param
+assert.strictEqual(
+    StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_entry=2026-06-06~c1~Felt+Fin~%C3%85'),
+    '?klubb=eksempel'
+);
 
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");
 
 // parsePersonFilterParams: absent params -> nulls (defaults), not empty arrays
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42'),
-    { years: null, types: null, discs: null, classes: null, metric: null }
+    { years: null, types: null, discs: null, classes: null, metric: null,
+      tab: null, branch: null, entry: null }
 );
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_year=2024,2025&p_disc=Felt,Bane&p_metric=score'),
-    { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score' }
+    { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score',
+      tab: null, branch: null, entry: null }
 );
+// p_tab/p_branch: the Meritter deep link — only the meritter tab and a
+// real branch value parse; anything else falls back to the defaults
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=felt'),
+    { years: null, types: null, discs: null, classes: null, metric: null,
+      tab: 'meritter', branch: 'felt', entry: null }
+);
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=resultater&p_branch=xyz').tab,
+    null, 'an unknown tab value is not the meritter tab');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=xyz').branch,
+    null, 'an unknown branch value falls back to Alle');
+
+// p_entry: the activated entry's identity, date~competitionId~discipline~
+// class — shareable, re-activated on open. Empty parts are wildcards on
+// the match; a value with no anchor at all would match everything and
+// parses as no entry.
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=2026-06-06~c1~Felt Fin~Å').entry,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: 'Å' },
+    'a full p_entry parses into the entry identity');
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=2026-06-06~c1~Felt Fin~').entry,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: null },
+    'an empty trailing class part is a wildcard');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=not-enough-parts').entry,
+    null, 'a malformed p_entry (not four parts) is no entry');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=~~~').entry,
+    null, 'an all-empty p_entry is no entry (it would match the first row)');
 
 // buildPersonFilterParams: default state (single selected year === activeYear,
 // no filters, default metric) writes nothing -- a plain ?person=X&year=Y link
@@ -47,7 +91,8 @@ assert.deepStrictEqual(
         selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
-    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: null, p_branch: null, p_entry: null }
 );
 // a real change to each -- multi-year, a filter, and a non-default metric
 assert.deepStrictEqual(
@@ -55,7 +100,8 @@ assert.deepStrictEqual(
         selectedYears: [2025, 2024], activeYear: 2026, types: null, discs: ['Felt'], classes: null,
         metric: 'score', defaultMetric: 'rankingScore'
     }),
-    { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
+    { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score',
+      p_tab: null, p_branch: null, p_entry: null }
 );
 // the unfiltered state (empty filter lists) serializes to no params —
 // an all-unticked or never-touched filter never writes p_* clutter,
@@ -65,8 +111,41 @@ assert.deepStrictEqual(
         selectedYears: [2026], activeYear: 2026, types: [], discs: [], classes: [],
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
-    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: null, p_branch: null, p_entry: null }
 );
+// the Meritter tab + branch filter ride the same patch, non-default only
+assert.deepStrictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
+        metric: 'rankingScore', defaultMetric: 'rankingScore',
+        tab: 'meritter', branch: 'felt'
+    }),
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: 'meritter', p_branch: 'felt', p_entry: null }
+);
+// the activated entry rides along too, and round-trips through the parse
+var entryState = {
+    selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
+    metric: 'rankingScore', defaultMetric: 'rankingScore',
+    entry: { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: 'Å' }
+};
+var entryPatch = StandplassPersonModal.buildPersonFilterParams(entryState);
+assert.strictEqual(entryPatch.p_entry, '2026-06-06~c1~Felt Fin~Å',
+    'an active entry writes its identity');
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=' + entryPatch.p_entry).entry,
+    entryState.entry,
+    'the written p_entry parses back into the same spec');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(Object.assign({}, entryState,
+        { entry: { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: null } })).p_entry,
+    '2026-06-06~c1~Felt Fin~',
+    'a null class part serializes as empty');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(Object.assign({}, entryState,
+        { entry: { date: null, competitionId: null, discipline: null, class: null } })).p_entry,
+    null, 'an all-null entry spec writes nothing');
 
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },
@@ -332,3 +411,239 @@ assert.ok(pmTable.indexOf('<td><span class="medal medal--bronze">3</span></td>')
 // every header sortable, Dato carrying the initial aria-sort
 assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
 assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');
+
+// ── Meritter tab: chips + body rendering (owner rulings 2026-11-23) ────
+// Merit rows are meritterForPerson's shape; the chips split individual
+// and lag kinds (separate chips), and lag rows carry the muted team span.
+
+var meritFixture = [
+    { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null },
+    { year: 2026, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1' },
+    { year: 2025, scope: 'nm', ovelse: 'Felt Fin', klasse: null, region: null,
+      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null }
+];
+
+var chips = StandplassPersonModal.meritterChips(meritFixture);
+assert.deepStrictEqual(chips.map(function (c) { return c.key; }), ['nm', 'km', 'kmLag'],
+    'chip kinds in the fixed order, lag keyed off team, only non-zero kinds');
+var chipByKey = {};
+chips.forEach(function (c) { chipByKey[c.key] = c; });
+assert.deepStrictEqual(chipByKey.km, { key: 'km', label: 'KM', counts: { Gull: 1, Sølv: 0, Bronse: 0 } },
+    'counts keep all three medals, zeros included');
+assert.deepStrictEqual(chipByKey.kmLag, { key: 'kmLag', label: 'KM-lag', counts: { Gull: 0, Sølv: 1, Bronse: 0 } },
+    'a lag merit counts into its own kmLag chip');
+assert.strictEqual(chipByKey.nm.label, 'NM');
+
+var lagOnlyChips = StandplassPersonModal.meritterChips([
+    { year: 2026, scope: 'dm', ovelse: '25m Grov', klasse: 'Mix-lag', region: 'Østlandet Sør',
+      medal: 'Gull', compId: 'd1', compTitle: 'DM 2026', team: 'Brumunddal PK' }
+]);
+assert.deepStrictEqual(lagOnlyChips.map(function (c) { return c.key; }), ['dmLag'],
+    'a lag-only shooter gets no individual chips');
+assert.strictEqual(lagOnlyChips[0].label, 'DM-lag');
+assert.deepStrictEqual(StandplassPersonModal.meritterChips([]), [], 'no merits → no chips');
+
+var meritBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: true });
+
+// chips row: labels + medal spans with counts, zeros omitted
+var chipsAt = meritBody.indexOf('person-meritt-chips');
+assert.ok(chipsAt !== -1, 'the chips row renders');
+var chipsHtml = meritBody.slice(chipsAt, meritBody.indexOf('</div>', chipsAt));
+['km', 'kmLag', 'nm'].forEach(function (k) {
+    assert.ok(chipsHtml.indexOf('data-kind="' + k + '"') !== -1, 'chip ' + k + ' renders');
+});
+assert.ok(chipsHtml.indexOf('data-kind="nmLag"') === -1 && chipsHtml.indexOf('data-kind="dm"') === -1,
+    'zero kinds get no chip');
+assert.ok(chipsHtml.indexOf('KM') !== -1 && chipsHtml.indexOf('KM-lag') !== -1
+    && chipsHtml.indexOf('NM') !== -1, 'chip labels use the scope + -lag forms');
+assert.strictEqual((chipsHtml.match(/class="medal /g) || []).length, 3,
+    'one medal span per non-zero count');
+assert.ok(chipsHtml.indexOf('>0<') === -1, 'zero counts are omitted from the chips');
+
+// year groups, newest first; per-merit medal badges mirror ranking-band markup
+assert.ok(meritBody.indexOf('person-meritt-year">2026') < meritBody.indexOf('person-meritt-year">2025'),
+    'year headings group the list, newest first');
+assert.ok(meritBody.indexOf('<span class="medal medal--gold">1</span>') !== -1,
+    'a gull merit renders the gold badge with position 1');
+assert.ok(meritBody.indexOf('<span class="medal medal--silver">2</span>') !== -1,
+    'a sølv merit renders the silver badge with position 2');
+assert.ok(meritBody.indexOf('<span class="medal medal--bronze">3</span>') !== -1,
+    'a bronse merit renders the bronze badge with position 3');
+
+// each row names its championship kind between the medal and the øvelse
+assert.ok(meritBody.indexOf('<span class="person-meritt-scope">KM</span>') !== -1,
+    'a km merit names its kind');
+assert.ok(meritBody.indexOf('<span class="person-meritt-scope">NM</span>') !== -1,
+    'an nm merit names its kind');
+var goldBadgeAt = meritBody.indexOf('<span class="medal medal--gold">1</span>');
+var kmScopeAt = meritBody.indexOf('<span class="person-meritt-scope">KM</span>');
+var firstOvelseAt = meritBody.indexOf('<span class="person-meritt-ovelse">Felt Fin</span>');
+assert.ok(goldBadgeAt !== -1 && kmScopeAt !== -1 && firstOvelseAt !== -1
+    && goldBadgeAt < kmScopeAt && kmScopeAt < firstOvelseAt,
+    'the scope sits between the medal badge and the øvelse');
+
+// row parts: only when present; the lag team span sits between class and region
+assert.strictEqual((meritBody.match(/person-meritt-klasse/g) || []).length, 2,
+    'klasse renders only when present (2 of 3 merits)');assert.strictEqual((meritBody.match(/person-meritt-region/g) || []).length, 2,
+    'region renders only when present (2 of 3 merits)');
+assert.strictEqual((meritBody.match(/person-meritt-team/g) || []).length, 1,
+    'only the lag merit carries a team span');
+var teamAt = meritBody.indexOf('Tysnes SSK 1');
+assert.ok(meritBody.indexOf('Lag Å') < teamAt && teamAt < meritBody.indexOf('Vestlandet'),
+    'the team name sits inline between the class and the region, muted by its class');
+
+// comp links on: buttons carrying id + title for delegation
+assert.ok(meritBody.indexOf('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
+    + ' data-comp-id="c2" data-comp-title="KM felt 2026 lag">KM felt 2026 lag</button>') !== -1,
+    'comp titles render as link buttons carrying id + title for delegation');
+
+// comp links off (and by default): plain spans, no buttons
+var plainBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: false });
+assert.ok(plainBody.indexOf('<button') === -1, 'no link buttons without a comp-modal host');
+assert.ok(plainBody.indexOf('<span class="person-meritt-comp">KM felt 2026</span>') !== -1,
+    'comp titles render as plain spans');
+assert.ok(StandplassPersonModal.renderMeritterBody(meritFixture).indexOf('<button') === -1,
+    'compLinks defaults off');
+
+// every dynamic text goes through esc, attribute values included
+var hostile = StandplassPersonModal.renderMeritterBody([
+    { year: 2026, scope: 'km', ovelse: 'Felt <Fin>', klasse: 'U', region: 'Buske&rud',
+      medal: 'Gull', compId: 'c"<1>', compTitle: '<script>alert("x")</script>', team: 'T <&> PK' }
+], { compLinks: true });
+assert.ok(hostile.indexOf('<script>') === -1, 'a hostile comp title never reaches the DOM raw');
+assert.ok(hostile.indexOf('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;') !== -1);
+assert.ok(hostile.indexOf('data-comp-id="c&quot;&lt;1&gt;"') !== -1, 'attribute values are escaped');
+assert.ok(hostile.indexOf('Felt &lt;Fin&gt;') !== -1 && hostile.indexOf('T &lt;&amp;&gt; PK') !== -1,
+    'øvelse and team are escaped too');
+
+// empty merits → the honest empty message, nothing else
+assert.strictEqual(StandplassPersonModal.renderMeritterBody([], { compLinks: true }),
+    '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>',
+    'empty merits → the honest empty message');
+
+// ── open-from-entry activation helpers ────────────────────────────────
+// Opening the modal from a specific result row should activate that
+// entry like an in-modal row click: dot ring + row highlight. The row
+// button carries the entry's identity (date, competitionId, discipline,
+// class); a ranking chart cannot show an entry without a rank score,
+// so the activation falls back to the poeng graph (owner ruling).
+
+var entryFixture = [
+    { date: '2026-06-06', competition: 'KM felt', competitionId: 'c1',
+      discipline: 'Felt Fin', class: 'Å', rankingScore: 0.91, score: 88, position: 2 },
+    { date: '2026-06-06', competition: 'KM felt', competitionId: 'c1',
+      discipline: 'Felt Grov', class: 'Å', rankingScore: null, score: 94, position: 1 },
+    { date: '2026-07-01', competition: 'Sommerstevne', competitionId: 'c2',
+      discipline: 'Felt Fin', class: 'Å', rankingScore: 0.85, score: 80, position: 4 }
+];
+
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-07-01', competitionId: 'c2', discipline: 'Felt Fin', class: 'Å' }), 2,
+    'the entry is found by its full identity');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Grov' }), 1,
+    'a spec without class still matches (class skipped when absent)');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-06-06', competitionId: 'c9', discipline: 'Felt Fin' }), -1,
+    'another competition is no match');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture, null), -1,
+    'no spec is no match');
+
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null, score: 94 }, 'rankingScore'), 'score',
+    'a rankless entry activates on the poeng graph instead');
+// The listing encodes "no ranking" as zero, not just null — chartPoints
+// excludes ranking-0 rows from the ranking series, so the activation
+// helpers must agree with the chart's own dot predicate.
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 0, score: 94 }, 'rankingScore'), 'score',
+    'a zero-ranking entry activates on the poeng graph instead');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 88, score: 94 }, 'rankingScore'), 'rankingScore',
+    'a real ranking keeps the ranking graph');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null }, 'score'), 'score',
+    'the poeng graph is never switched away from');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null }, 'position'), 'position',
+    'the position graph is never switched away from');
+
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 0.91, score: 88, position: 2 }, 'rankingScore'), true);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: null, score: 88 }, 'rankingScore'), false);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 0, score: 94 }, 'rankingScore'), false,
+    'a zero ranking has no dot on the ranking chart');
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { score: 88 }, 'score'), true);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { score: 0 }, 'score'), true,
+    'a zero poeng sum is still a dot on the poeng chart');
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { position: null }, 'position'), false);
+
+// hasChartDot: whether an entry actually gets a dot on the rendered
+// chart — the chart renders dots only with 2+ plotted points (fewer is
+// the noop-chart path), and only for entries its series includes. The
+// open-from-entry activation must treat a single-point chart like no
+// chart at all: the row fallback (highlight + p_entry write) takes over
+// instead of silently swallowing the activation into the noop handle.
+var chartPts = [
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Grovfelt', class: 'Å',
+      score: 94, rankingScore: 0 },
+    { date: '2026-07-01', competitionId: 'c2', discipline: 'Grovfelt', class: 'Å',
+      score: 91, rankingScore: null }
+];
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'score', chartPts[0]), true,
+    'two plotted points render dots — the entry gets one');
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'score',
+    { date: '2026-08-01', competitionId: 'c3', discipline: 'Grovfelt', class: 'Å', score: 88 }),
+    false, 'an entry outside the series has no dot');
+assert.strictEqual(StandplassPersonModal.hasChartDot(
+    [chartPts[0]], 'score', chartPts[0]), false,
+    'a single-point chart renders no dots — the row fallback takes over');
+assert.strictEqual(StandplassPersonModal.hasChartDot(chartPts, 'rankingScore', chartPts[1]),
+    false, 'the ranking series excludes rankless rows — no dot on that chart');
+
+// ── branch switcher (owner ruling 2026-11-23: Alle/Felt/Bane, not ────
+// per-row tags — scales with future branches; rows stay untagged)
+
+var branchMerits = [
+    { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null, branch: 'felt' },
+    { year: 2026, scope: 'km', ovelse: '25m Grovpistol', klasse: 'Å', region: 'Hordaland',
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM bane 2026', team: null, branch: 'bane' },
+    { year: 2025, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
+      medal: 'Gull', compId: 'c3', compTitle: 'KM felt 2025 lag', team: 'Tysnes SSK 1', branch: 'felt' }
+];
+
+var branchBody = StandplassPersonModal.renderMeritterBody(branchMerits, { compLinks: false });
+var toggleAt = branchBody.indexOf('person-meritt-branch-toggle');
+assert.ok(toggleAt !== -1, 'mixed-branch merits render the switcher');
+var toggleHtml = branchBody.slice(toggleAt, branchBody.indexOf('</div>', toggleAt));
+assert.deepStrictEqual(
+    (toggleHtml.match(/data-branch="([^"]*)"/g) || []).map(function (s) { return s.slice(13, -1); }),
+    ['', 'felt', 'bane'],
+    'Alle first, then the present branches in fixed order');
+assert.ok(toggleHtml.indexOf('data-branch="" aria-pressed="true"') !== -1,
+    'Alle is the active default');
+assert.ok(branchBody.indexOf('25m Grovpistol') !== -1 && branchBody.indexOf('medal--silver') !== -1,
+    'Alle shows every branch');
+
+var feltBody = StandplassPersonModal.renderMeritterBody(branchMerits, { branch: 'felt' });
+assert.ok(feltBody.indexOf('25m Grovpistol') === -1, 'a branch filter drops the other branch\'s rows');
+assert.ok(feltBody.indexOf('Felt Grov') !== -1, 'the branch\'s own rows stay');
+assert.ok(feltBody.indexOf('medal--silver') === -1,
+    'chips recompute from the filtered merits — the bane sølv is gone');
+assert.ok(feltBody.indexOf('data-branch="felt" aria-pressed="true"') !== -1,
+    'the active branch button is marked');
+assert.ok(feltBody.indexOf('data-branch="" aria-pressed="false"') !== -1,
+    'Alle is no longer active under a branch filter');
+
+assert.ok(StandplassPersonModal.renderMeritterBody(
+    branchMerits.filter(function (m) { return m.branch === 'felt'; }), {}
+).indexOf('person-meritt-branch-toggle') === -1,
+    'single-branch merits render no switcher — nothing to filter');

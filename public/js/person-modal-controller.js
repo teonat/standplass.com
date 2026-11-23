@@ -45,9 +45,24 @@ var StandplassPersonModalController = (function () {
         var personOpenSeq = 0;
         var modalMetric = cfg.initialMetric || 'rankingScore';
         var modalEntries = [];
+        // The activated entry's identity (p_entry): set by every
+        // activation path — chart dot click, table row click, opening
+        // from a result row or a shared link — and cleared by
+        // deactivation or by anything that re-renders the table/chart
+        // (metric toggle, filter change), mirroring the visual
+        // activation. syncPersonModalUrl serializes it.
+        var activeEntrySpec = null;
         var chartHandle = null; // set by drawChart; row clicks use it to
                                 // activate the chart's dot for that entry
         var syncCurrentPersonModalUrl = function () {};
+
+        // The identity spec an activated entry serializes as — the same
+        // fields the felt/bane row buttons carry and findEntryIndex
+        // matches on.
+        function entrySpecOf(e) {
+            return e ? { date: e.date, competitionId: e.competitionId,
+                         discipline: e.discipline, class: e.class } : null;
+        }
 
         // Same "use it if the host page already rendered one, otherwise
         // make it" pattern stevner-page.js's own competition-modal code
@@ -82,11 +97,12 @@ var StandplassPersonModalController = (function () {
             if (modalOpener) { modalOpener.focus(); modalOpener = null; }
         }
 
-        function showModal(title, body) {
+        function showModal(title, body, headerExtras) {
             ensureModalEl();
             modalEl.innerHTML = '<div class="person-modal-shell">'
                 + '<div class="comp-modal-header">'
                 + '<h2 class="comp-modal-title" id="' + cfg.idPrefix + '-person-modal-title">' + title + '</h2>'
+                + (headerExtras || '')
                 + '<button type="button" class="comp-modal-close" id="' + cfg.idPrefix + '-person-modal-close" aria-label="Lukk">×</button>'
                 + '</div>'
                 + '<div class="comp-modal-body">' + body + '</div>'
@@ -106,6 +122,50 @@ var StandplassPersonModalController = (function () {
             }
         }
 
+        // Opening from a clicked result row: activate that entry like
+        // an in-modal row click (dot ring + chart scroll + row
+        // highlight/focus). A rankless entry has no dot on the ranking
+        // graph, so the poeng graph takes over first (owner ruling) —
+        // the toggle buttons and the URL follow, exactly as a manual
+        // metric switch. An entry with no value on the final metric
+        // either way gets the row highlight only.
+        function activateInitialEntry(spec) {
+            var idx = StandplassPersonModal.findEntryIndex(modalEntries, spec);
+            if (idx < 0) { return; }
+            var entry = modalEntries[idx];
+            var metric = StandplassPersonModal.activationMetric(entry, modalMetric);
+            if (metric !== modalMetric) {
+                modalMetric = metric;
+                Array.prototype.forEach.call(modalEl.querySelectorAll('.person-chart-toggle'), function (b) {
+                    var active = b.getAttribute('data-metric') === metric;
+                    b.classList.toggle('program-btn--active', active);
+                    b.setAttribute('aria-pressed', String(active));
+                });
+                syncCurrentPersonModalUrl();
+                drawChart();
+            }
+            // A single-point chart (a person with one result in the
+            // pre-filtered discipline) renders renderChart's noop handle
+            // — activateDot would be silently swallowed — so the guard is
+            // hasChartDot, not just hasMetricValue: no dot means the row
+            // fallback (and its p_entry write) takes over.
+            if (chartHandle && StandplassPersonModal.hasChartDot(modalEntries, modalMetric, entry)) {
+                chartHandle.activateDot(String(idx));
+            } else {
+                var row = modalEl.querySelector('tr[data-idx="' + idx + '"]');
+                if (row) {
+                    row.classList.add('person-row-highlight');
+                    row.scrollIntoView({ block: 'nearest' });
+                    row.focus();
+                }
+                // No dot on either metric — the row highlight is the whole
+                // activation, so the URL carries it here rather than through
+                // the chart's notify path.
+                activeEntrySpec = entrySpecOf(entry);
+                syncCurrentPersonModalUrl();
+            }
+        }
+
         function fetchPersonYear(personId, year) {
             personYearCache[personId] = personYearCache[personId] || {};
             if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
@@ -118,13 +178,50 @@ var StandplassPersonModalController = (function () {
             });
         }
 
+        // The Meritter tab's data: both branches' mestere indexes, every
+        // year, fetched once per widget instance (the underlying fetcher
+        // also dedupes by URL for its TTL). Each entry carries its
+        // branch — the panel's Alle/Felt/Bane switcher filters merits
+        // on it. Per-year fetch failures are skipped years, not a
+        // broken tab; only every-fetch-failed surfaces an error in the
+        // panel. cfg.mestereBases defaults to the site-relative
+        // felt/bane bases every standplass.com-hosted page can use;
+        // only the embeddable pages pass origin-absolute bases.
+        var mestereEntriesPromise = null;
+        function ensureMestereEntries() {
+            if (!mestereEntriesPromise) {
+                var fetcher = StandplassData.createFetcher(
+                    cfg.fetchImpl || window.fetch.bind(window));
+                var bases = cfg.mestereBases || [
+                    { branch: 'felt', base: '/data/felt/mestere' },
+                    { branch: 'bane', base: '/data/bane/mestere' }
+                ];
+                var years = [];
+                for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
+                var jobs = [];
+                years.forEach(function (year) {
+                    bases.forEach(function (b) {
+                        jobs.push(fetcher.fetchMestere(b.base, year).then(function (index) {
+                            return { year: year, branch: b.branch, index: index };
+                        }));
+                    });
+                });
+                mestereEntriesPromise = Promise.all(jobs.map(function (job) {
+                    return job.catch(function () { return null; });
+                })).then(function (entries) {
+                    return entries.filter(Boolean);
+                });
+            }
+            return mestereEntriesPromise;
+        }
+
         var METRICS = [
             { key: 'rankingScore', label: 'Ranking' },
             { key: 'score', label: 'Poeng', title: 'Poengsum varierer med stevnets maks-score — ikke direkte sammenlignbar på tvers av stevner' },
             { key: 'position', label: 'Plassering' }
         ];
 
-        function renderPersonModal(personId, personName, initialDisc, urlFilters) {
+        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry) {
             var mySeq = ++personOpenSeq;
             var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
             var entriesByYear = {};
@@ -136,7 +233,23 @@ var StandplassPersonModalController = (function () {
                 discs: (urlFilters && urlFilters.discs) || [],
                 classes: (urlFilters && urlFilters.classes) || []
             };
-            if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
+            // Every fresh open starts on the page's default chart — the
+            // previous session's toggle does not carry across opens
+            // (owner ruling 2026-11-23: too many starting points already
+            // manipulate the metric — p_metric deep links, explicit
+            // entry-point metrics, the activation's rankless fallback —
+            // for an invisible fourth one on top). Explicit starting
+            // points still win: a p_metric deep link or an entry point's
+            // opts.metric.
+            modalMetric = (urlFilters && urlFilters.metric)
+                || cfg.initialMetric || 'rankingScore';
+            // Deep-link state for the Meritter tab (p_tab/p_branch);
+            // plain row opens never carry it — Resultater/Alle.
+            var personTab = (urlFilters && urlFilters.tab) || null;
+            var merittBranch = (urlFilters && urlFilters.branch) || null;
+            // A fresh open starts unactivated; a p_entry deep link
+            // activates after the year data lands.
+            activeEntrySpec = null;
 
             function knownValues(key) {
                 var all = {};
@@ -150,7 +263,9 @@ var StandplassPersonModalController = (function () {
                 var patch = StandplassPersonModal.buildPersonFilterParams({
                     selectedYears: selectedYears, activeYear: cfg.defaultYear,
                     types: filters.types, discs: filters.discs, classes: filters.classes,
-                    metric: modalMetric, defaultMetric: cfg.initialMetric || 'rankingScore'
+                    metric: modalMetric, defaultMetric: cfg.initialMetric || 'rankingScore',
+                    tab: personTab, branch: merittBranch,
+                    entry: activeEntrySpec
                 });
                 var qs = new URLSearchParams(cfg.urlState.getSearch());
                 Object.keys(patch).forEach(function (k) {
@@ -226,6 +341,11 @@ var StandplassPersonModalController = (function () {
             }
 
             function refresh() {
+                // The table and chart re-render below — the current
+                // activation (row highlight, dot ring, p_entry) dies with
+                // them. The open flow re-activates after refresh; filter
+                // changes land unactivated.
+                activeEntrySpec = null;
                 syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
@@ -241,8 +361,20 @@ var StandplassPersonModalController = (function () {
                 });
             }
 
+            // The tab pair lives in the fixed header, not the scrollable
+            // body: the open-from-row activation scrolls the chart into
+            // view, which would push a body-mounted pair out of sight
+            // (owner QA). HeaderExtras slot on showModal.
+            function personModalTabsMarkup() {
+                return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
+                    + '<button type="button" class="program-btn person-modal-tab-btn program-btn--active" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
+                    + '</div>';
+            }
+
             function personModalBodyMarkup() {
-                return '<div class="person-filters">'
+                return '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-resultater">'
+                    + '<div class="person-filters">'
                     + '<div class="filter-group"><label>År</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-year-filter"></div></div>'
                     + '<div class="filter-group" hidden><label>Stevnetype</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-type-filter"></div></div>'
                     + '<div class="filter-group" hidden><label>Øvelse</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-disc-filter"></div></div>'
@@ -255,7 +387,73 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>';
+                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>'
+                    + '</div>'
+                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-meritter" hidden></div>';
+            }
+
+            // The Resultater/Meritter tab pair. The buttons are fresh
+            // per open (showModal replaces the body), so they're wired
+            // per open too; the active tab lives in the DOM (button
+            // classes + panel hidden), every fresh open starts on
+            // Resultater by markup default — unless the URL deep-links
+            // the Meritter tab, which the open flow handles with the
+            // returned switcher. Both the tab and the branch filter
+            // sync to p_tab/p_branch (non-default only).
+            function wirePersonTabs() {
+                var meritterShown = false;
+                function renderMerittPanel(panel) {
+                    panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
+                    ensureMestereEntries().then(function (entries) {
+                        if (mySeq !== personOpenSeq) { return; }
+                        if (!entries.length) {
+                            panel.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste mesterskapsdata.</p>';
+                            return;
+                        }
+                        var merits = StandplassMestereData.meritterForPerson(entries, personId);
+                        panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
+                            compLinks: !!cfg.onOpenComp,
+                            branch: merittBranch
+                        });
+                        // The switcher buttons re-render the panel from
+                        // the instance-cached entries — no refetch.
+                        Array.prototype.forEach.call(
+                            panel.querySelectorAll('.person-meritt-branch-btn'),
+                            function (btn) {
+                                btn.addEventListener('click', function () {
+                                    merittBranch = btn.getAttribute('data-branch') || null;
+                                    renderMerittPanel(panel);
+                                    syncCurrentPersonModalUrl();
+                                });
+                            });
+                    });
+                }
+                function switchTab(tab) {
+                    personTab = tab;
+                    Array.prototype.forEach.call(
+                        modalEl.querySelectorAll('.person-modal-tab-btn'),
+                        function (b) {
+                            var active = b.getAttribute('data-person-tab') === tab;
+                            b.classList.toggle('program-btn--active', active);
+                            b.setAttribute('aria-pressed', String(active));
+                        });
+                    id('-person-tab-resultater').hidden = tab !== 'resultater';
+                    var panel = id('-person-tab-meritter');
+                    panel.hidden = tab !== 'meritter';
+                    if (tab === 'meritter' && !meritterShown) {
+                        meritterShown = true;
+                        renderMerittPanel(panel);
+                    }
+                    syncCurrentPersonModalUrl();
+                }
+                Array.prototype.forEach.call(
+                    modalEl.querySelectorAll('.person-modal-tab-btn'),
+                    function (btn) {
+                        btn.addEventListener('click', function () {
+                            switchTab(btn.getAttribute('data-person-tab'));
+                        });
+                    });
+                return switchTab;
             }
 
             function toggleSetValue(current, v, checked) {
@@ -403,14 +601,27 @@ var StandplassPersonModalController = (function () {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
                 modalDisplayName = resolvedName || modalDisplayName;
-                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
+                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup(), personModalTabsMarkup());
                 wirePersonModalFilters();
+                var switchTab = wirePersonTabs();
+                if (personTab === 'meritter') { switchTab('meritter'); }
                 refresh();
+                if (initialEntry) { activateInitialEntry(initialEntry); }
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
         }
 
         wireGlobalEscapeHandler();
         ensureModalEl();
+        // Meritter-tab comp links (delegated once on the persistent
+        // modal element -- the buttons are re-rendered per person).
+        // Only rendered as buttons at all when the host passed an
+        // onOpenComp; the guard keeps a stray click a no-op even if
+        // markup changed underneath.
+        modalEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.person-meritt-comp');
+            if (!btn || !cfg.onOpenComp) { return; }
+            cfg.onOpenComp(btn.getAttribute('data-comp-id'), btn.getAttribute('data-comp-title'));
+        });
         modalEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.person-chart-toggle');
             if (!btn) { return; }
@@ -421,8 +632,9 @@ var StandplassPersonModalController = (function () {
                 b.setAttribute('aria-pressed', String(isActive));
             });
             // The chart re-renders (killing any linked-dot ring), so the
-            // row tint must not linger either.
+            // row tint must not linger either — nor the p_entry param.
             clearRowHighlight();
+            activeEntrySpec = null;
             syncCurrentPersonModalUrl();
             drawChart();
         });
@@ -441,13 +653,22 @@ var StandplassPersonModalController = (function () {
         }
         function onChartDotSelected(dotEl) {
             clearRowHighlight();
-            if (!dotEl) { return; }
-            var row = modalEl.querySelector('tr[data-idx="' + dotEl.getAttribute('data-idx') + '"]');
-            if (row) {
-                row.classList.add('person-row-highlight');
-                row.scrollIntoView({ block: 'nearest' });
-                row.focus();
+            // Every activation path reports here (chart dot click,
+            // table row click via activateDot, open-from-row/URL) — so the
+            // p_entry param tracks the activation, and deactivation
+            // (dotEl null) strips it.
+            activeEntrySpec = null;
+            if (dotEl) {
+                activeEntrySpec = entrySpecOf(
+                    modalEntries[parseInt(dotEl.getAttribute('data-idx'), 10)]);
+                var row = modalEl.querySelector('tr[data-idx="' + dotEl.getAttribute('data-idx') + '"]');
+                if (row) {
+                    row.classList.add('person-row-highlight');
+                    row.scrollIntoView({ block: 'nearest' });
+                    row.focus();
+                }
             }
+            syncCurrentPersonModalUrl();
         }
         modalEl.addEventListener('click', function (e) {
             var row = e.target.closest('tr[data-idx]');
@@ -464,16 +685,20 @@ var StandplassPersonModalController = (function () {
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
             // ask for a specific chart (a placements leaderboard opens
-            // Plassering). Without it the last-active metric sticks,
-            // exactly like the modal's own toggle buttons.
+            // Plassering). Without it every fresh open starts on the
+            // page's default chart.
             renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
-                opts.metric ? { metric: opts.metric } : null);
+                opts.metric ? { metric: opts.metric } : null, opts.entry || null);
         }
 
         function openFromUrl() {
             var personState = StandplassPersonModal.parsePersonFromUrl(cfg.urlState.getSearch());
             if (personState) {
-                renderPersonModal(personState.personId, null, null, StandplassPersonModal.parsePersonFilterParams(cfg.urlState.getSearch()));
+                var urlFilters = StandplassPersonModal.parsePersonFilterParams(cfg.urlState.getSearch());
+                // A p_entry deep link activates its entry after the data
+                // lands, exactly like opening from a clicked result row.
+                renderPersonModal(personState.personId, null, null, urlFilters,
+                    urlFilters.entry || null);
             }
         }
 

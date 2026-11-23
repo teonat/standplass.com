@@ -139,10 +139,23 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The Navn column: a person-modal button on person rows, escaped
-    // plain text otherwise. Team rows carry the team as name plus a
-    // visible lag tag — without it they read as club-less persons
-    // (owner QA) — the house raw-cell person-link pattern.
+    // plain text otherwise. Lag member rows link like person rows and
+    // carry the lag name as a muted sub-line (owner ruling 2026-11-23
+    // — no dedicated Lag column); fallback team rows keep the lag tag
+    // so they don't read as club-less persons (owner QA) — the house
+    // raw-cell person-link pattern.
     function personCell(row) {
+        if (row.lag != null) {
+            var label = row.personId
+                ? '<button type="button" class="stevner-person-btn link-btn"'
+                    + ' data-person-id="' + esc(row.personId)
+                    + '" data-person-name="' + esc(row.name) + '">'
+                    + esc(row.name) + '</button>'
+                : esc(row.name);
+            return label
+                + '<span class="mesterskap-lag-sub">Lag: '
+                + esc(row.lag) + '</span>';
+        }
         if (row.personId && !row.isTeam) {
             return '<button type="button" class="stevner-person-btn link-btn"'
                 + ' data-person-id="' + esc(row.personId)
@@ -182,9 +195,11 @@ var StandplassMesterskapPage = (function () {
     // column or a filter. Navn leads (owner ruling — the person is the
     // row's identity). Øvelse and Medalje display names but sort by
     // their rank fields (the base compares cells as strings — a name
-    // key cannot sort Gull first). Team rows show the club embedded in
-    // the lag name in their Klubb cell (display-only — row.club stays
-    // null, so club filters and stats stay individual-only). The
+    // key cannot sort Gull first). Klubb: member rows carry their
+    // resolved club, and one with nothing resolved shows '–' (owner
+    // ruling — never a club derived from the lag name); only the
+    // memberless team-row fallback derives a display club from the
+    // lag name. The
     // region column (krets on km, distrikt on dm) is defaultHidden
     // behind its group row; nm carries neither column nor grouping.
     // hideBelow tiers follow the norgesfelt search table (700/900).
@@ -209,7 +224,9 @@ var StandplassMesterskapPage = (function () {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
                 cell: function (row) {
                     if (row.club != null) { return row.club; }
-                    if (row.isTeam) { return StandplassMestereData.teamClub(row.name); }
+                    if (row.isTeam && row.lag == null) {
+                        return StandplassMestereData.teamClub(row.name);
+                    }
                     return '–';
                 }
             }
@@ -217,7 +234,20 @@ var StandplassMesterskapPage = (function () {
         if (rows.some(function (r) { return r.sum != null; })) {
             columns.push({
                 key: 'sum', label: 'Sum', align: 'right', sortable: true, defaultDir: 'desc',
-                cell: function (row) { return row.sum == null ? '–' : String(row.sum); }
+                raw: true,
+                // A lag member's sum carries the team's sum as a muted
+                // sub-line under the member's own (owner ruling
+                // 2026-11-23 — mirrors the lag-name sub-line under
+                // Navn); sorting stays on the member's own sum.
+                cell: function (row) {
+                    var main = row.sum == null ? '–' : String(row.sum);
+                    if (row.lag != null && row.lagSum != null) {
+                        return main
+                            + '<span class="mesterskap-lag-sub">'
+                            + String(row.lagSum) + '</span>';
+                    }
+                    return main;
+                }
             });
         }
         if (regionKey) {

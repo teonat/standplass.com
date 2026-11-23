@@ -21,7 +21,8 @@ var StandplassPersonModal = (function () {
         return '?' + params.toString();
     }
 
-    var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
+    var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric',
+                             'p_tab', 'p_branch', 'p_entry'];
 
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
@@ -32,11 +33,39 @@ var StandplassPersonModal = (function () {
         return qs ? '?' + qs : '';
     }
 
+    // p_entry: the activated entry's identity, 'date~competitionId~
+    // discipline~class' — shareable, re-activated on open by the same
+    // findEntryIndex the row buttons' identity goes through. Empty
+    // parts are wildcards on the match; a value with no anchor at all
+    // would match the first entry and parses as no entry instead.
+    function parseEntryParam(v) {
+        if (!v) { return null; }
+        var parts = v.split('~');
+        if (parts.length !== 4) { return null; }
+        var spec = {
+            date: parts[0] || null,
+            competitionId: parts[1] || null,
+            discipline: parts[2] || null,
+            class: parts[3] || null
+        };
+        return (spec.date || spec.competitionId || spec.discipline || spec.class) ? spec : null;
+    }
+
+    function formatEntryParam(spec) {
+        if (!spec) { return null; }
+        var v = [spec.date, spec.competitionId, spec.discipline, spec.class].map(function (x) {
+            return x == null ? '' : String(x);
+        }).join('~');
+        return v === '~~~' ? null : v;
+    }
+
     // Reads the p_year/p_type/p_disc/p_class/p_metric params a deep link may
     // carry (KSS: nsf-ui.js's tryOpenFromUrl) -- a plain row click never
     // reads these, it always starts from defaults. For p_type/p_disc/
     // p_class, an absent param and an empty list are the same thing --
     // unfiltered -- so the caller normalizes both to [] at init.
+    // p_tab/p_branch deep-link the Meritter tab and its branch filter;
+    // unknown values fall back to the defaults (Resultater / Alle).
     function parsePersonFilterParams(search) {
         var params = new URLSearchParams(search);
         function splitList(key) {
@@ -47,33 +76,44 @@ var StandplassPersonModal = (function () {
         var years = yearsRaw
             ? yearsRaw.split(',').map(function (y) { return parseInt(y, 10); }).filter(function (y) { return !isNaN(y); })
             : null;
+        var branch = params.get('p_branch');
         return {
             years: years && years.length ? years : null,
             types: splitList('p_type'),
             discs: splitList('p_disc'),
             classes: splitList('p_class'),
-            metric: params.get('p_metric') || null
+            metric: params.get('p_metric') || null,
+            tab: params.get('p_tab') === 'meritter' ? 'meritter' : null,
+            branch: branch === 'felt' || branch === 'bane' ? branch : null,
+            entry: parseEntryParam(params.get('p_entry'))
         };
     }
 
-    // Builds a { p_year, p_type, p_disc, p_class, p_metric } patch -- each
-    // value is either the param to set, or null to remove it -- so the URL
-    // never carries a param that just repeats the default state (a plain
-    // ?person=X&year=Y should stay exactly that until something's actually
-    // changed inside the modal). state: { selectedYears, activeYear, types,
-    // discs, classes, metric, defaultMetric }.
+    // Builds a { p_year, p_type, p_disc, p_class, p_metric, p_tab,
+    // p_branch } patch -- each value is either the param to set, or
+    // null to remove it -- so the URL never carries a param that just
+    // repeats the default state (a plain ?person=X&year=Y should stay
+    // exactly that until something's actually changed inside the
+    // modal). state: { selectedYears, activeYear, types, discs,
+    // classes, metric, defaultMetric, tab?, branch? } -- tab is
+    // 'meritter' or null, branch 'felt'/'bane' or null (Alle).
     function buildPersonFilterParams(state) {
         var isDefaultYears = state.selectedYears.length === 1 && state.selectedYears[0] === state.activeYear;
         // Empty filter list = unfiltered, so it writes no param (same as
         // null): a bookmark never carries p_type=p_disc=p_class clutter
         // for the default view.
         function list(v) { return v && v.length ? v.join(',') : null; }
+        var branch = state.branch === 'felt' || state.branch === 'bane'
+            ? state.branch : null;
         return {
             p_year: isDefaultYears ? null : state.selectedYears.slice().sort(function (a, b) { return a - b; }).join(','),
             p_type: list(state.types),
             p_disc: list(state.discs),
             p_class: list(state.classes),
-            p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null
+            p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null,
+            p_tab: state.tab === 'meritter' ? 'meritter' : null,
+            p_branch: branch,
+            p_entry: formatEntryParam(state.entry)
         };
     }
 
@@ -555,12 +595,223 @@ var StandplassPersonModal = (function () {
         ];
     }
 
+    // ── Open-from-entry activation helpers ──────────────────────────
+    // Opening the modal from a clicked result row activates that entry
+    // like an in-modal row click (dot ring + row highlight). The row
+    // button carries the entry's identity; a ranking chart cannot show
+    // an entry without a rank score, so the activation falls back to
+    // the poeng graph (owner ruling 2026-11-23).
+
+    // spec: {date?, competitionId?, discipline?, class?} — present
+    // fields must all match; the first matching index wins, -1 when
+    // nothing matches (or no spec was given).
+    function findEntryIndex(entries, spec) {
+        if (!spec) { return -1; }
+        for (var i = 0; i < (entries || []).length; i++) {
+            var e = entries[i];
+            var match = ['date', 'competitionId', 'discipline', 'class'].every(function (k) {
+                return spec[k] == null || e[k] === spec[k];
+            });
+            if (match) { return i; }
+        }
+        return -1;
+    }
+
+    // The chart metric an entry can actually be activated on: a
+    // rankless entry has no dot on the ranking graph, so the poeng
+    // graph takes over; every other metric stays as-is.
+    function activationMetric(entry, currentMetric) {
+        if (currentMetric === 'rankingScore' && !hasMetricValue(entry, 'rankingScore')) {
+            return 'score';
+        }
+        return currentMetric;
+    }
+
+    // Whether an entry gets a dot on a metric's chart — the chart's own
+    // dot predicate (chartPoints), which the activation must agree with
+    // exactly: the listing encodes "no ranking" as zero, not just null,
+    // and chartPoints excludes ranking-0 rows from the ranking series.
+    // A zero poeng sum is a real dot; positions are 1-based.
+    function hasMetricValue(entry, metric) {
+        if (metric === 'rankingScore') {
+            return entry.rankingScore != null && Number(entry.rankingScore) !== 0;
+        }
+        if (metric === 'score') { return entry.score != null; }
+        if (metric === 'position') { return entry.position != null; }
+        return false;
+    }
+
+    // Whether an entry actually gets a dot on the rendered chart: the
+    // chart draws dots only with 2+ plotted points (a single point is no
+    // line — renderChart's noop path), and only for entries its series
+    // includes (chartPoints' own predicate: dated, non-null on the
+    // metric, ranking not the zero encoding). The open-from-entry
+    // activation uses this instead of the noop-swallowing activateDot
+    // when the chart has nothing to activate — the row fallback (and
+    // its p_entry write) takes over.
+    function hasChartDot(entries, metric, entry) {
+        var pts = chartPoints(entries, metric);
+        return pts.length >= 2 && pts.indexOf(entry) !== -1;
+    }
+
+    // ── Meritter tab rendering ─────────────────────────────────────────
+    // Consumes meritterForPerson's rows. The chips split individual and
+    // lag kinds (owner ruling 2026-11-23: separate chips, only non-zero
+    // kinds); the body groups rows by year, newest first, with the lag
+    // team name inline and muted. Medal badges reuse ranking-band's
+    // markup (class names are the contract) so existing CSS styles
+    // them without a module dependency.
+
+    var CHIP_KINDS = [
+        { key: 'nm', label: 'NM' },
+        { key: 'nmLag', label: 'NM-lag' },
+        { key: 'dm', label: 'DM' },
+        { key: 'dmLag', label: 'DM-lag' },
+        { key: 'km', label: 'KM' },
+        { key: 'kmLag', label: 'KM-lag' }
+    ];
+    var MERITT_MEDALS = [
+        { name: 'Gull', pos: 1, cls: 'medal--gold' },
+        { name: 'Sølv', pos: 2, cls: 'medal--silver' },
+        { name: 'Bronse', pos: 3, cls: 'medal--bronze' }
+    ];
+
+    function medalByName(name) {
+        for (var i = 0; i < MERITT_MEDALS.length; i++) {
+            if (MERITT_MEDALS[i].name === name) { return MERITT_MEDALS[i]; }
+        }
+        return null;
+    }
+
+    // A merit row's badge shows the position (1/2/3) like the results
+    // table's Plass cell; a chip's span shows the count instead.
+    function meritBadge(medal) {
+        var m = medalByName(medal);
+        return m ? '<span class="medal ' + m.cls + '">' + String(m.pos) + '</span>' : '';
+    }
+
+    function medalSpan(medal, n) {
+        var m = medalByName(medal);
+        if (!m) { return ''; }
+        return '<span class="medal ' + m.cls + '">' + String(n) + '</span>';
+    }
+
+    // merits → [{key, label, counts}] — key 'kmLag' for a merit with a
+    // team, 'km' without; counts is {Gull, Sølv, Bronse} (zeros kept —
+    // the renderer omits them). Fixed kind order, only non-zero kinds.
+    function meritterChips(merits) {
+        var byKind = {};
+        (merits || []).forEach(function (m) {
+            var kind = m.team != null ? m.scope + 'Lag' : m.scope;
+            if (!Object.prototype.hasOwnProperty.call(byKind, kind)) {
+                byKind[kind] = { Gull: 0, Sølv: 0, Bronse: 0 };
+            }
+            if (byKind[kind][m.medal] != null) { byKind[kind][m.medal] += 1; }
+        });
+        return CHIP_KINDS.filter(function (k) {
+            return Object.prototype.hasOwnProperty.call(byKind, k.key);
+        }).map(function (k) {
+            return { key: k.key, label: k.label, counts: byKind[k.key] };
+        });
+    }
+
+    var SCOPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };
+
+    function meritRowHtml(m, compLinks) {
+        var parts = [meritBadge(m.medal)];
+        parts.push('<span class="person-meritt-scope">'
+            + esc(SCOPE_LABELS[m.scope] || String(m.scope || '').toUpperCase())
+            + '</span>');
+        parts.push('<span class="person-meritt-ovelse">' + esc(m.ovelse) + '</span>');
+        if (m.klasse != null) {
+            parts.push('<span class="person-meritt-klasse">' + esc(m.klasse) + '</span>');
+        }
+        if (m.team != null) {
+            parts.push('<span class="person-meritt-team">' + esc(m.team) + '</span>');
+        }
+        if (m.region != null) {
+            parts.push('<span class="person-meritt-region">' + esc(m.region) + '</span>');
+        }
+        var title = m.compTitle == null ? '' : esc(m.compTitle);
+        if (compLinks && m.compId != null) {
+            parts.push('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
+                + ' data-comp-id="' + esc(m.compId) + '"'
+                + ' data-comp-title="' + title + '">' + title + '</button>');
+        } else {
+            parts.push('<span class="person-meritt-comp">' + title + '</span>');
+        }
+        return '<div class="person-meritt-row">' + parts.join('') + '</div>';
+    }
+
+    // The Meritter tab's whole body: an Alle/Felt/Bane switcher (owner
+    // ruling 2026-11-23 — only when ≥2 branches are present in the
+    // merits; rows stay untagged), the chips row and the year-grouped
+    // list, all computed from the branch-filtered merits.
+    // opts.compLinks renders comp titles as delegated link buttons
+    // (hosts with a comp modal) instead of plain spans; opts.branch
+    // (null/undefined = Alle) filters the merits.
+    var BRANCH_ORDER = ['felt', 'bane'];
+
+    function branchBtnHtml(branch, label, active) {
+        return '<button type="button" class="program-btn person-meritt-branch-btn'
+            + (active ? ' program-btn--active' : '') + '" data-branch="' + esc(branch)
+            + '" aria-pressed="' + active + '">' + esc(label) + '</button>';
+    }
+
+    function renderMeritterBody(merits, opts) {
+        if (!merits || !merits.length) {
+            return '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>';
+        }
+        opts = opts || {};
+        var branches = BRANCH_ORDER.filter(function (b) {
+            return merits.some(function (m) { return m.branch === b; });
+        });
+        var shown = opts.branch
+            ? merits.filter(function (m) { return m.branch === opts.branch; })
+            : merits;
+        var chipsHtml = meritterChips(shown).map(function (c) {
+            var counts = MERITT_MEDALS.filter(function (md) { return c.counts[md.name] > 0; })
+                .map(function (md) { return medalSpan(md.name, c.counts[md.name]); })
+                .join('');
+            return '<span class="person-meritt-chip" data-kind="' + esc(c.key) + '">'
+                + esc(c.label) + counts + '</span>';
+        }).join('');
+        var years = [];
+        var byYear = {};
+        shown.forEach(function (m) {
+            if (!Object.prototype.hasOwnProperty.call(byYear, m.year)) {
+                byYear[m.year] = [];
+                years.push(m.year);
+            }
+            byYear[m.year].push(m);
+        });
+        years.sort(function (a, b) { return b - a; });
+        var listHtml = years.map(function (y) {
+            return '<h3 class="person-meritt-year">' + esc(String(y)) + '</h3>'
+                + byYear[y].map(function (m) { return meritRowHtml(m, !!opts.compLinks); }).join('');
+        }).join('');
+        var toggle = '';
+        if (branches.length > 1) {
+            toggle = '<div class="program-toggle person-meritt-branch-toggle" role="group" aria-label="Gren">'
+                + branchBtnHtml('', 'Alle', !opts.branch)
+                + branches.map(function (b) {
+                    return branchBtnHtml(b, b.charAt(0).toUpperCase() + b.slice(1),
+                        opts.branch === b);
+                }).join('')
+                + '</div>';
+        }
+        return toggle
+            + '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
+    }
+
     return {
         parsePersonFromUrl: parsePersonFromUrl,
         buildPersonUrl: buildPersonUrl,
         clearPersonFromUrl: clearPersonFromUrl,
         shortDate: shortDate,
         resultsTableColumns: resultsTableColumns,
+        meritterChips: meritterChips,
+        renderMeritterBody: renderMeritterBody,
         chartPoints: chartPoints,
         dotColor: dotColor,
         computeOverlapCounts: computeOverlapCounts,
@@ -570,6 +821,10 @@ var StandplassPersonModal = (function () {
         mergeYearEntries: mergeYearEntries,
         getFilteredEntries: getFilteredEntries,
         resolveInitialFilter: resolveInitialFilter,
+        findEntryIndex: findEntryIndex,
+        activationMetric: activationMetric,
+        hasMetricValue: hasMetricValue,
+        hasChartDot: hasChartDot,
         parsePersonFilterParams: parsePersonFilterParams,
         buildPersonFilterParams: buildPersonFilterParams
     };

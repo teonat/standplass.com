@@ -584,7 +584,8 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     color: var(--brand-accent);
     text-decoration-color: var(--brand-accent);
 }
-.stevner-comp-links a {
+.stevner-comp-links a,
+.stevner-comp-links .stevner-resultfile-btn {
     display: inline-block;
     margin-left: 0.25rem;
     font-size: 0.8rem;
@@ -596,6 +597,16 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     padding: 0.15rem 0.4rem;
 }
 .stevner-comp-links a:hover { background: var(--border-faint); }
+/* The Resultatfil action shares the pill look but keeps its OWN class
+   so no handler ever matches it by look (the Kolonner lesson); a
+   button additionally needs the resets anchors get for free. The
+   nested .nav-beta-tag reuses the Mesterskap nav tag's look. */
+.stevner-comp-links .stevner-resultfile-btn {
+    font-family: inherit;
+    background: none;
+    cursor: pointer;
+}
+.stevner-comp-links .stevner-resultfile-btn:hover { background: var(--border-faint); }
 .stevner-comp-meta {
     display: block;
     margin-top: 0.25rem;
@@ -1270,6 +1281,87 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
     outline-offset: 2px;
 }
 
+/* ── Person modal — Resultater/Meritter tabs ── */
+/* Same program-toggle chrome the chart's metric toggle uses; the
+   active tab lives in the button classes, panels toggle via hidden.
+   (.person-modal-shell .program-toggle's width:auto applies here
+   too — no full-width tab bar.) */
+.person-modal-tabs {
+    margin: 0;
+}
+
+/* The tabs ride in the fixed header: the title takes the free space so
+   the pair and the close button keep to the right, and the header wraps
+   (title above, tabs + close below) on narrow widths instead of ever
+   scrolling away — the body is the only part that scrolls. */
+.person-modal .comp-modal-header {
+    flex-wrap: wrap;
+}
+
+.person-modal .comp-modal-title {
+    flex: 1;
+}
+
+/* The panels carry no layout display rule of their own, so hidden
+   works natively — this explicit override is the same cheap
+   insurance the klubb gotcha list prescribes, in case a future rule
+   gives a panel its own display. */
+.person-modal-tab-panel[hidden] { display: none; }
+
+/* ── Person modal — Meritter tab ── */
+/* The branch switcher (Alle/Felt/Bane) rides above the chips; same
+   toggle chrome as the tab pair. */
+.person-meritt-branch-toggle {
+    margin: 0 0 0.75rem;
+}
+
+.person-meritt-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.person-meritt-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+.person-meritt-chip .medal { font-size: 0.75rem; }
+.person-meritt-year {
+    margin: 1.25rem 0 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.person-meritt-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-faint);
+    font-size: 0.9375rem;
+}
+.person-meritt-row .medal { align-self: center; flex-shrink: 0; }
+/* .medal's negative margins are table-column alignment compensation
+   (digits must not move); outside a table cell they make adjacent
+   badges overlap and overhang the row edge — the first non-table
+   .medal usage. Reset them here, not in .medal itself. */
+.person-meritt-chip .medal,
+.person-meritt-row .medal { margin: 0; }
+.person-meritt-row .person-meritt-comp { align-self: center; }
+/* Lag merits: the team name rides inline after the class, muted like
+   the mesterskap member rows' lag sub-line. */
+.person-meritt-scope,
+.person-meritt-team,
+.person-meritt-region { color: var(--text-muted); }
+
+
 /* ── Competition-detail modal (native <dialog>) ─ */
 /* A native <dialog>'s UA default is background:white/color:black -- unlike
    every other surface in this project, it doesn't inherit the page's mode
@@ -1293,6 +1385,25 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .comp-modal-dialog::backdrop { background: rgba(0,0,0,0.4); }
 .comp-modal-dialog .program-toggle { margin: 0.75rem 1.5rem 0; width: auto; }
 .comp-modal-dialog .comp-modal-body { padding: 0 1.5rem 1.5rem; }
+/* Resultatfil modal — the comp modal's chrome, wider: series tables
+   (10 stands on felt, more on bane) do not fit 640px. Each table gets
+   its own horizontal-scroll wrap so section titles stay put; the
+   innertreff sub digits render smaller than their values. */
+.resultfile-modal-dialog { max-width: min(960px, 95vw); }
+.resultfile-table-wrap { overflow-x: auto; }
+.resultfile-modal-dialog sub { font-size: 0.72em; opacity: 0.8; }
+.resultfile-fallback { margin: 0.75rem 0 0; }
+/* Status rows (DNS/DNF/DSQ) are marked, not silently dashed — a
+   muted badge in the Plass column (owner ruling 2026-11-23). */
+.resultfile-status {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--border-faint);
+}
 .comp-modal-meta {
     margin: 0;
     font-size: 0.8125rem;
@@ -1551,6 +1662,7 @@ tr[data-idx] { cursor: pointer; }
 [data-mode="dark"] .stevner-person-btn.link-btn,
 [data-mode="dark"] .stevner-comp-btn,
 [data-mode="dark"] .stevner-comp-links a,
+[data-mode="dark"] .stevner-comp-links .stevner-resultfile-btn,
 [data-mode="dark"] .comp-modal-infocard a,
 [data-mode="dark"] .comp-modal-disc-name,
 [data-mode="dark"] .comp-modal-title,
@@ -2034,6 +2146,15 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   border: 1px solid currentColor;
   border-radius: 3px;
   vertical-align: 1px;
+}
+
+/* Lag member rows: the lag name rides as a muted sub-line under the
+   person's name (owner ruling 2026-11-23 — no dedicated Lag column). */
+.mesterskap-lag-sub {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 /* The medal column reads as the row's anchor — heavier, no color games

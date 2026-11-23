@@ -15,6 +15,9 @@ from result_file_parse import (
     UnsupportedFormatError,
     _parse_blinken_row,
     _parse_leon_row,
+    _split_lag_team_head,
+    _split_name_club,
+    _status_token,
     detect_family,
     parse_blinken,
     parse_datotid,
@@ -100,7 +103,7 @@ def find_row(detail, ovelse, klasse, name):
         if o['navn'] == ovelse:
             for c in o['classes']:
                 if c['klasse'] == klasse:
-                    for r in c['rows']:
+                    for r in c.get('rows', []):
                         if r['name'] == name:
                             return r
     raise AssertionError(f'row not found: {ovelse} / {klasse} / {name}')
@@ -185,6 +188,20 @@ def find_champ_lag(detail, key, navn):
         if lag['navn'] == navn:
             return lag
     raise AssertionError(f'lag not found: {key} / {navn}')
+
+
+def find_lag_class(detail, navn, klasse):
+    """The class dict of one lag øvelse, requiring the teams shape."""
+    for o in detail['ovelser']:
+        if o['navn'] == navn:
+            for c in o['classes']:
+                if c['klasse'] == klasse:
+                    if 'teams' not in c:
+                        raise AssertionError(
+                            f'{navn} / {klasse} carries no teams '
+                            f'(keys: {sorted(c)})')
+                    return c
+    raise AssertionError(f'lag class not found: {navn} / {klasse}')
 
 
 class ParseInrXFeltDmSections(unittest.TestCase):
@@ -315,14 +332,98 @@ class ParseInrXLagRobustness(unittest.TestCase):
         self.assertEqual([m['name'] for m in team['members']], ['Per Hansen'])
 
 
+class ParseInrxLagOvelser(unittest.TestCase):
+    """v15: 'Lag: '/'Mix-lag: ' øvelser parse as team tables inside
+    the øvelser list. Their team lines used to parse as fused person
+    rows ('Gull Greipstad PK1' as a name, the medal kept fused) and
+    the member sublines ('Name (Klasse) ix sum' — no series) were
+    dropped by the person-row grammar; they now carry the same team
+    shape as the championship lag sections, members included.
+
+    Fixture: comp 02afbbe1 (felt 2024, NM), inrX 1.9.0.0."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-lag-ovelse.pdf'))
+
+    def test_first_team_with_series_and_members(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Greipstad PK1')
+        self.assertEqual(gull['ix'], 76)
+        self.assertEqual(gull['sum'], 318)
+        self.assertEqual(gull['series'][:2], [[27, 0], [36, 15]])
+        self.assertEqual(
+            [(m['name'], m['klasse'], m['ix'], m['sum'])
+             for m in gull['members']],
+            [('Tore Vrålstad', 'M', 26, 107),
+             ('Ingunn Marie Engelsen', 'K', 22, 106),
+             ('Arne Landsverk', 'M', 28, 105)],
+        )
+
+    def test_silver_and_pos_ranked_teams(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'Å')['teams']
+        solv = teams[1]
+        self.assertEqual(solv['medal'], 'Sølv')
+        self.assertEqual(solv['team'], 'Bærum PK')
+        self.assertEqual(solv['sum'], 310)
+        self.assertEqual(len(solv['members']), 3)
+        pos4 = next(t for t in teams if t.get('pos') == 4)
+        self.assertEqual(pos4['team'], 'Bergen PK1')
+        self.assertEqual(pos4['sum'], 301)
+
+    def test_second_class_merges_under_same_ovelse(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'V')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull['sum'], 306)
+        self.assertEqual(
+            [m['name'] for m in gull['members']],
+            ['Tormod Strand', 'Bjørn Einar Norén', 'Per Arve Iversen'],
+        )
+
+    def test_mix_lag_is_a_lag_ovelse(self):
+        teams = find_lag_class(self.detail, 'Mix-lag: Felt Fin',
+                               'Å')['teams']
+        self.assertEqual(len(teams), 27)
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull['sum'], 198)
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in gull['members']],
+            [('Kjetil Skogshagen', 101), ('Mona Gjelstad', 97)],
+        )
+
+    def test_lag_ovelser_carry_teams_not_rows(self):
+        for o in self.detail['ovelser']:
+            if 'lag: ' in o['navn'].lower():
+                for c in o['classes']:
+                    self.assertNotIn('rows', c, o['navn'])
+                    self.assertIn('teams', c, o['navn'])
+
+    def test_ordinary_ovelse_in_same_file_unchanged(self):
+        fin = next(o for o in self.detail['ovelser']
+                   if o['navn'] == 'Felt Fin')
+        counts = {c['klasse']: len(c['rows']) for c in fin['classes']}
+        self.assertEqual(counts, {
+            'U': 9, 'Jk': 4, 'Jm': 4, 'K': 57, 'M': 220,
+            'V55': 105, 'V65': 49, 'V73': 25,
+        })
+        first = find_row(self.detail, 'Felt Fin', 'U', 'Nikolai Rico Hansen')
+        self.assertEqual(first['medal'], 'Gull')
+        self.assertEqual(first['sum'], 95)
+
+
 class ParseInrXMedalRows(unittest.TestCase):
     """inrX open øvelser print championship podiums with the medal as
     the first word ('Gull <name> <club> …'); NM comps carry all their
     results this way, so without the strip every podium row fails
     person matching and no mestere nm sections appear. Person øvelser
     now strip the medal into a row field (the KM/DM tables always
-    did); Lag/Mix-lag øvelser keep the printed team shape — their
-    rows are team rows. Multi-word club place parts ('Horten og
+    did); Lag/Mix-lag øvelser are team tables — see
+    ParseInrxLagOvelser. Multi-word club place parts ('Horten og
     Omegn PK', 'Nedre Eiker PK') used to leak into the name; the
     split now absorbs the connector pair and place-forming prefix.
 
@@ -367,17 +468,21 @@ class ParseInrXMedalRows(unittest.TestCase):
         self.assertEqual(row['name'], 'Tore Vrålstad')
         self.assertEqual(row['club'], 'Greipstad Pistolklubb')
 
-    def test_lag_ovelse_keeps_printed_team_shape(self):
-        row = find_row(self.detail, 'Lag: Felt Sp-Pistol', 'Å', 'Gull')
-        self.assertNotIn('medal', row)
-        self.assertEqual(row['name'], 'Gull')
-        self.assertEqual(row['club'], 'Brumunddal Pistolklubb 1 SP-Pistol')
+    def test_lag_ovelse_is_a_team_table(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Sp-Pistol',
+                               'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Brumunddal Pistolklubb 1 SP-Pistol')
+        self.assertTrue(gull['members'])
 
-    def test_mix_lag_ovelse_keeps_printed_team_shape(self):
-        row = find_row(self.detail, 'Mix-lag: Felt Sp-Pistol', 'Å', 'Gull')
-        self.assertNotIn('medal', row)
-        self.assertEqual(row['name'], 'Gull')
-        self.assertEqual(row['club'], 'Bjørkelangen Pistolklubb SP-Pistol')
+    def test_mix_lag_ovelse_is_a_team_table(self):
+        teams = find_lag_class(self.detail, 'Mix-lag: Felt Sp-Pistol',
+                               'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Bjørkelangen Pistolklubb SP-Pistol')
+        self.assertTrue(gull['members'])
 
     def test_place_prefix_rules_on_synthetic_text(self):
         text = '\n'.join([
@@ -1312,9 +1417,233 @@ class ParseMegalinkDispatch(unittest.TestCase):
                 parse_result(pdf)
 
 
+class ParseInrxCommaClub(unittest.TestCase):
+    """Comma-form club tails ('Aron Skytterklubb, Drammen'): the club
+    ends with ', City', so the club-ending token carries a trailing
+    comma. The split must test the token comma-stripped; the club
+    keeps its printed comma form (the API's registered club names
+    carry it too).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-comma-club.pdf'))
+
+    def test_comma_city_club_splits(self):
+        row = find_row(self.detail, 'Felt Revolver', 'A', 'Rune Hammer')
+        self.assertEqual(row.get('club'), 'Aron Skytterklubb, Drammen')
+
+    def test_another_comma_city_row_splits(self):
+        row = find_row(self.detail, 'Felt Fin', 'B', 'Dag Kristiansen')
+        self.assertEqual(row.get('club'), 'Aron Skytterklubb, Drammen')
+
+    def test_plain_club_rows_unchanged(self):
+        row = find_row(self.detail, 'Felt Fin', 'A', 'Per Andre Kulbraaten')
+        self.assertEqual(row['name'], 'Per Andre Kulbraaten')
+        self.assertEqual(row.get('club'), 'Lillestrøm Og Omegn Pistolklubb')
+
+    def test_split_name_club_comma_city(self):
+        self.assertEqual(
+            _split_name_club(
+                ['Rune', 'Hammer', 'Aron', 'Skytterklubb,', 'Drammen']),
+            ('Rune Hammer', 'Aron Skytterklubb, Drammen'))
+
+    def test_split_name_club_plain(self):
+        self.assertEqual(
+            _split_name_club(
+                ['Per', 'Andre', 'Kulbraaten', 'Lillestrøm', 'Og',
+                 'Omegn', 'Pistolklubb']),
+            ('Per Andre Kulbraaten', 'Lillestrøm Og Omegn Pistolklubb'))
+
+
+class ParseInrxDsq(unittest.TestCase):
+    """DSQ rows (NM Magnumfelt 2026, inrX 1.9.1.0): disqualified
+    shooters print 'DSQ(<rule>)' after a complete series/ix/sum line
+    (they keep their results, unlike DNF/DNS rows which print no
+    sum), and a disqualified team prints a bare 'DSQ' with no leading
+    medal or position. Both must parse with status 'DSQ' — before
+    v18 the token defeated the tail-shape checks and the rows (and
+    the whole team) dropped.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-dsq.pdf'))
+
+    @staticmethod
+    def _klass(detail, ovelse, klasse='Å'):
+        o = next(o for o in detail['ovelser'] if o['navn'] == ovelse)
+        return next(c for c in o['classes'] if c['klasse'] == klasse)
+
+    def test_status_token_forms(self):
+        self.assertEqual(_status_token('DNF'), 'DNF')
+        self.assertEqual(_status_token('DNS'), 'DNS')
+        self.assertEqual(_status_token('DSQ'), 'DSQ')
+        self.assertEqual(_status_token('DSQ(8.25.4.9)'), 'DSQ')
+        self.assertIsNone(_status_token('DSQX'))
+        self.assertIsNone(_status_token('DSQ('))
+        self.assertIsNone(_status_token('70'))
+
+    def test_dsq_person_rows_parse(self):
+        for ovelse, expected in (('Felt Magnum-1', 5), ('Felt Magnum-2', 3)):
+            rows = self._klass(self.detail, ovelse)['rows']
+            self.assertEqual(len(rows), 249 if ovelse.endswith('1') else 169,
+                             f'{ovelse}: ranked + DSQ rows')
+            dsq = [r for r in rows if r.get('status') == 'DSQ']
+            self.assertEqual(len(dsq), expected, f'{ovelse}: DSQ rows kept')
+
+    def test_dsq_row_keeps_series_sum_and_no_pos(self):
+        row = find_row(self.detail, 'Felt Magnum-1', 'Å', 'Toralf Mjøen')
+        self.assertEqual(row.get('status'), 'DSQ')
+        self.assertNotIn('pos', row)
+        self.assertEqual(row.get('club'), 'Oppdal Pistolklubb')
+        self.assertEqual(row.get('ix'), 8)
+        self.assertEqual(row.get('sum'), 61)
+        self.assertEqual(len(row['series']), 10)
+
+    def test_dnf_rows_still_parse(self):
+        rows = self._klass(self.detail, 'Felt Magnum-2')['rows']
+        dnf = [r for r in rows if r.get('status') == 'DNF']
+        self.assertEqual(len(dnf), 2)
+
+    def test_dsq_team_parses_with_members(self):
+        teams = self._klass(self.detail, 'Lag: Felt Magnum-1')['teams']
+        self.assertEqual(len(teams), 39)
+        team = next(t for t in teams if t['team'] == 'Trondhjems PK 1')
+        self.assertEqual(team.get('status'), 'DSQ')
+        self.assertNotIn('pos', team)
+        self.assertNotIn('medal', team)
+        self.assertEqual(team.get('sum'), 204)
+        self.assertEqual([m['name'] for m in team['members']],
+                         ['Jan Arild Myrhaug', 'Eirik Myrhaug',
+                          'Sonja Lillesand'])
+
+
+class ParseBlinkenChampLag(unittest.TestCase):
+    """Blinken championship tables ('… (KM …) Deltakere: N' øvelse
+    headers, class headers with a Medalje column) and lag tables
+    ('Lag …' øvelse headers, class headers with no Klubb column,
+    team lines with inline 'Name(sum)' members that wrap across
+    lines). Both route into the inrX championship shape so the
+    matcher and mestere index consume them unchanged.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_blinken(fixture_text('blinken-champ-lag.pdf'))
+
+    def test_stevne_ovelser_keep_their_own_rows(self):
+        fin = next(o for o in self.detail['ovelser']
+                   if o['navn'] == '25m Finpistol')
+        # the U14 row is extraction-mangled (digits fused into the
+        # club token, a series value lost) — its arithmetic fails and
+        # it stays dropped, exactly as before champ tables were parsed
+        self.assertEqual(
+            {c['klasse']: len(c['rows']) for c in fin['classes']},
+            {'B': 3, 'C': 11, 'D': 1, 'P3-SH1': 1, 'U14': 0})
+        self.assertEqual(fin['deltakere'], 17)
+        grov = next(o for o in self.detail['ovelser']
+                    if o['navn'] == '25m Grovpistol')
+        self.assertEqual(
+            {c['klasse']: len(c['rows']) for c in grov['classes']},
+            {'B': 2, 'C': 10, 'D': 0})
+        self.assertEqual(grov['deltakere'], 14)
+
+    def test_champ_sections_carry_medal_rows(self):
+        a = next(s for s in self.detail['km']['sections']
+                 if s['klasse'] == 'Å')
+        self.assertEqual(a['navn'], 'KM: 25m Finpistol')
+        self.assertEqual(a.get('deltakere'), 16)
+        self.assertEqual(len(a['rows']), 10)
+        eirik = next(r for r in a['rows'] if r['name'] == 'Eirik Djønne')
+        self.assertEqual((eirik['medal'], eirik['sum']), ('Gull', 558))
+        frank = next(r for r in a['rows']
+                     if r['name'] == 'Frank Henning Lillebuen')
+        self.assertEqual(frank['medal'], 'Sølv')
+
+    def test_champ_class_set(self):
+        self.assertEqual(
+            {s['klasse'] for s in self.detail['km']['sections']},
+            {'P3-SH1', 'U14', 'V55', 'V65', 'V73', 'Å'})
+
+    def test_lag_teams_with_inline_members(self):
+        lag = next(l for l in self.detail['km']['lag']
+                   if l['klasse'] == 'Å')
+        self.assertEqual(lag['navn'], 'KM Lag: 25m Finpistol')
+        team = lag['teams'][0]
+        self.assertEqual(team['team'], 'Tysnes SSK 1')
+        self.assertEqual(team['medal'], 'Gull')
+        self.assertEqual(team['sum'], 1417)
+        self.assertEqual(team['ix'], 10)
+        self.assertEqual(len(team['series']), 12)
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in team['members']],
+            [('Ronnie Borgen', 457), ('Steffen Fossli', 480),
+             ('Terje Vikøren', 480)])
+
+    def test_lag_vet_class(self):
+        vet = next(l for l in self.detail['km']['lag']
+                   if l['klasse'] == 'VET')
+        self.assertEqual(vet['teams'][0]['team'], 'Tysnes SSK 2')
+        self.assertEqual(vet['teams'][0]['sum'], 1573)
+        self.assertEqual(len(vet['teams'][0]['members']), 3)
+
+    def test_grov_lag(self):
+        lag = next(l for l in self.detail['km']['lag']
+                   if l['navn'] == 'KM Lag: 25m Grovpistol'
+                   and l['klasse'] == 'Å')
+        self.assertEqual(lag['teams'][0]['sum'], 1256)
+        self.assertEqual(len(lag['teams'][0]['members']), 3)
+
+    def test_team_name_split_without_digit_boundary(self):
+        team, member_tokens = _split_lag_team_head(
+            ['Aron', 'PK', 'John', 'Smith(500)'])
+        self.assertEqual(team, 'Aron PK')
+        self.assertEqual(member_tokens, ['John', 'Smith(500)'])
+
+    def test_page_break_inside_lag_members(self):
+        # the member cell wraps across a page break: footer lines and
+        # the repeated øvelse/class headers must not lose the team or
+        # its pending name fragments
+        text = (
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Tysnes SSK 1 Ronnie Borgen(457) Steffen '
+            '118 106 113 114 117 111 110 116 119 130 135 128 10 1417 G\n'
+            'Blinken (V3.0.15 Build: 1448) Side 1 av 2\n'
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            'Fossli(480) Terje Vikøren(480)\n'
+        )
+        detail = parse_blinken(text)
+        team = detail['km']['lag'][0]['teams'][0]
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in team['members']],
+            [('Ronnie Borgen', 457), ('Steffen Fossli', 480),
+             ('Terje Vikøren', 480)])
+
+    def test_bare_lag_ovelse_is_ignored(self):
+        # a Lag øvelse with no championship scope has no section to
+        # attach to — its teams must not leak into the previous øvelse
+        text = (
+            'Lag 6F - 25m Finpistol (KM Hordaland)\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Tysnes SSK 1 Ronnie Borgen(457) Steffen '
+            '118 106 113 114 117 111 110 116 119 130 135 128 10 1417 G\n'
+            'Fossli(480) Terje Vikøren(480)\n'
+            'Lag 6G - 25m Grovpistol\n'
+            'Klasse Å 1 2 3 4 5 6 7 8 9 10 11 12 X Total Mrk\n'
+            '1 Odda PK 2 Eirik Djønne(500) Ola Nordmann(480) '
+            '100 100 100 100 100 100 100 100 100 100 100 100 9 1200 G\n'
+        )
+        detail = parse_blinken(text)
+        self.assertEqual(len(detail['km']['lag']), 1)
+        self.assertEqual(len(detail['km']['lag'][0]['teams']), 1)
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_14(self):
-        self.assertEqual(PARSER_VERSION, 14)
+    def test_parser_version_is_18(self):
+        self.assertEqual(PARSER_VERSION, 18)
 
 
 class ParseResultDispatch(unittest.TestCase):

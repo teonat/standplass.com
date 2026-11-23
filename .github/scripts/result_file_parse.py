@@ -15,12 +15,17 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 14
+PARSER_VERSION = 18
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
 _MAX_FELT = re.compile(r'Maks poeng felt gr\. (\d+): (\d+)')
 _TABLE_HEADER = re.compile(r'^(.+?) :: Klasse (.+)$')
+# 'Lag: Felt Fin', 'Mix-lag: Felt Fin', 'KM Mix-lag: Standard' — øvelser
+# that are team tables, with or without a championship prefix. The
+# champ-prefixed 'KM Lag: '/'DM Lag: ' forms are intercepted by the
+# dispatch's championship branches before this regex is consulted.
+_LAG_OVELSE = re.compile(r'^(?:(?:KM|DM) )?(?:Mix-)?[Ll]ag: ')
 _SERIES_CELL = re.compile(r'^(\d+)(?:/(\d+))?$')
 _SERIES_PAIR = re.compile(r'^\d+/\d+$')
 _PREMIE_CELL = re.compile(r'^\*?(\d+)$')
@@ -181,7 +186,8 @@ def _split_name_club(tokens):
     Sp.Sk.', 'Oslo Komm.Tj.M. SKL' — the club starts one word
     before it), a suffix word (…klubb, …lag, PK, SKL — with
     multi-word place parts like 'Horten og Omegn' and 'Nedre
-    Eiker' absorbed), or a medial single initial between two words
+    Eiker' absorbed, and a ', City' tail's comma on the ending
+    token tested stripped), or a medial single initial between two words
     ('Aron S. Drammen'). The split only has to be reasonable: the
     person matcher joins rows against the API results and
     canonicalizes both fields there, so unmatched rows are the
@@ -205,7 +211,10 @@ def _split_name_club(tokens):
                 return ' '.join(tokens[:start]), ' '.join(tokens[start:])
             break
     for i in range(len(tokens) - 1, -1, -1):
-        low = tokens[i].lower()
+        # a ', City' club tail leaves its comma on the ending token
+        # ('Skytterklubb,') — test the token stripped; the club keeps
+        # the printed comma form
+        low = tokens[i].lower().rstrip(',')
         if low.endswith(_CLUB_ENDINGS) or low in _CLUB_ACRONYMS:
             start = max(0, i - 1)
             while start >= 2 and tokens[start - 1].lower() == 'og':
@@ -323,6 +332,19 @@ def _parse_row_tail(tokens, n_series, has_oppr, with_premie):
     return premie, oppr, int(ix_tok), int(sum_tok), cells, region
 
 
+# Trailing status tokens. inrX prints DNF/DNS bare; a disqualified
+# shooter keeps their full result line and prints 'DSQ' — sometimes
+# with the violated rule cited in parentheses ('DSQ(8.25.4.9)').
+_STATUS_TOKEN = re.compile(r'^(DNF|DNS|DSQ(?:\([^)]*\))?)$')
+
+
+def _status_token(token):
+    """Normalized status for a trailing row token, else None."""
+    if _STATUS_TOKEN.match(token):
+        return 'DSQ' if token.startswith('DSQ') else token
+    return None
+
+
 def _parse_row(line, n_series, has_oppr, has_premie, allow_medal=False):
     """Parse one table row; returns None for lines that are not rows."""
     tokens = line.split()
@@ -335,8 +357,9 @@ def _parse_row(line, n_series, has_oppr, has_premie, allow_medal=False):
     elif tokens[0].isdigit():
         row['pos'] = int(tokens[0])
         tokens = tokens[1:]
-    if tokens[-1] in ('DNF', 'DNS'):
-        row['status'] = tokens[-1]
+    status = _status_token(tokens[-1])
+    if status:
+        row['status'] = status
         tokens = tokens[:-1]
     attempts = [True, False] if has_premie else [False]
     for with_premie in attempts:
@@ -376,6 +399,12 @@ def _parse_lag_line(line, n_series, entry):
         })
         return
     tokens = line.split()
+    # A disqualified team prints a bare 'DSQ' after its totals and
+    # loses its leading medal/position — strip the status first and
+    # allow the headless team line only when one was found.
+    status = _status_token(tokens[-1]) if len(tokens) > 1 else None
+    if status:
+        tokens = tokens[:-1]
     team = {}
     if tokens[0] in _MEDALS:
         team['medal'] = tokens[0]
@@ -383,7 +412,7 @@ def _parse_lag_line(line, n_series, entry):
     elif tokens[0].isdigit():
         team['pos'] = int(tokens[0])
         tokens = tokens[1:]
-    else:
+    elif not status:
         return
     need = n_series + 2
     if len(tokens) < need + 1:
@@ -401,6 +430,8 @@ def _parse_lag_line(line, n_series, entry):
     team['ix'] = int(tokens[-2])
     team['sum'] = int(tokens[-1])
     team['members'] = []
+    if status:
+        team['status'] = status
     entry['teams'].append(team)
 
 
@@ -578,9 +609,113 @@ _BLINKEN_CODE = re.compile(r'^\d+[A-Z]+\s*-\s*')
 _BLINKEN_KLASSE = re.compile(
     r'^Klasse (\S+) Klubb ((?:\d+ )+)X OS Total Mrk OR Premie\s*$'
 )
+_BLINKEN_CHAMP_OVELSE = re.compile(
+    r'^\d+[A-Z]+\s*-\s*(.+?) \((KM|DM)[^)]*\) Deltakere\s*:\s*(\d+)\s*$'
+)
+_BLINKEN_CHAMP_KLASSE = re.compile(
+    r'^Klasse (\S+) Klubb ((?:\d+ )+)X OS Total Medalje\s*$'
+)
+_BLINKEN_LAG_OVELSE = re.compile(
+    r'^Lag \d+[A-Z]+\s*-\s*(.+?) \((KM|DM)[^)]*\)\s*$'
+)
+_BLINKEN_LAG_PLAIN = re.compile(r'^Lag \d+[A-Z]+\s*-\s*\S')
+_BLINKEN_LAG_KLASSE = re.compile(
+    r'^Klasse (\S+) ((?:\d+ )+)X Total Mrk\s*$'
+)
 _BLINKEN_DELTAKERE = re.compile(r'^Deltakere\s*:\s*(\d+)\s*$')
 _BLINKEN_VERSION = re.compile(r'Blinken \(V([\d.]+)')
 _BLINKEN_LETTER = re.compile(r'[A-Z]')
+_BLINKEN_MEDAL = {'G': 'Gull', 'S': 'Sølv', 'B': 'Bronse'}
+_MEMBER_SUM = re.compile(r'^(.+)\((\d+)\)$')
+
+
+def _split_lag_team_head(tokens):
+    """Split a lag team line's head region into (team, member tokens).
+
+    The team number rides the team name ('Tysnes SSK 1'): the team
+    runs up to and including the last digits-only token before the
+    first 'Name(sum)' member token. Without a digit boundary the
+    member's first name is the word before that token — a heuristic,
+    exactly like the row name/club split.
+    """
+    first = next(
+        (i for i, t in enumerate(tokens) if _MEMBER_SUM.match(t)), None
+    )
+    if first is None:
+        return ' '.join(tokens), []
+    digits = [i for i in range(first) if tokens[i].isdigit()]
+    cut = digits[-1] + 1 if digits else max(first - 1, 0)
+    return ' '.join(tokens[:cut]), tokens[cut:]
+
+
+def _accumulate_members(tokens, members, fragments):
+    """Fold 'Name(sum)' tokens into members. Bare tokens are name
+    fragments waiting for the sum token: lag member lists wrap
+    across lines, so a member's name can arrive split. Returns the
+    leftover fragments."""
+    for token in tokens:
+        m = _MEMBER_SUM.match(token)
+        if m:
+            fragments.append(m.group(1))
+            members.append(
+                {'name': ' '.join(fragments), 'sum': int(m.group(2))}
+            )
+            fragments = []
+        else:
+            fragments.append(token)
+    return fragments
+
+
+def _is_member_continuation(tokens):
+    """A wrapped member-cell line: every token is a 'Name(sum)' or a
+    digit-free word."""
+    return bool(tokens) and all(
+        _MEMBER_SUM.match(t) or not any(c.isdigit() for c in t)
+        for t in tokens
+    )
+
+
+def _parse_blinken_lag_team(line, n_series):
+    """Parse one lag team line: 'pos team members… series… X Total
+    [G|S|B]'. The member list can wrap onto following lines, so the
+    team returns with its pending name fragments. Returns
+    (team, fragments) or None when the line is not a team row."""
+    tokens = line.split()
+    if not tokens:
+        return None
+    pos = None
+    if tokens[0] == '-':
+        tokens = tokens[1:]
+    elif tokens[0].isdigit():
+        pos = int(tokens[0])
+        tokens = tokens[1:]
+    else:
+        return None
+    medal = None
+    if tokens and _BLINKEN_LETTER.fullmatch(tokens[-1]):
+        medal = _BLINKEN_MEDAL.get(tokens.pop())
+    if len(tokens) < n_series + 2:
+        return None
+    tail = tokens[-(n_series + 2):]
+    if not all(t.isdigit() for t in tail):
+        return None
+    series = [int(t) for t in tail[:-2]]
+    if sum(series) != int(tail[-1]):
+        return None
+    team = {}
+    if pos is not None:
+        team['pos'] = pos
+    if medal:
+        team['medal'] = medal
+    team['team'], member_tokens = _split_lag_team_head(
+        tokens[:-(n_series + 2)]
+    )
+    team['series'] = [[value, None] for value in series]
+    team['ix'] = int(tail[-2])
+    team['sum'] = int(tail[-1])
+    team['members'] = []
+    fragments = _accumulate_members(member_tokens, team['members'], [])
+    return team, fragments
 
 
 def parse_blinken(text):
@@ -590,13 +725,30 @@ def parse_blinken(text):
     read per class; classes continue across page breaks, where the
     øvelse header and the interrupted class header repeat. The øvelse
     code prefix ('1F - ', '7SP - ') is stripped from the name.
+
+    Championship øvelser ('6F - X (KM …) Deltakere: N' headers, class
+    headers with a Medalje column) and their lag øvelser ('Lag 6F - X
+    (KM …)' headers, class headers with no Klubb column, team lines
+    with inline 'Name(sum)' members that wrap across lines) route into
+    the shared championship shape — detail['km'|'dm'] sections and lag
+    teams — exactly as the inrX parser emits, so the matcher and the
+    mestere index consume them unchanged.
     """
     detail = {}
     stamp = _BLINKEN_VERSION.search(text)
     detail['generator'] = f'blinken {stamp.group(1)}' if stamp else 'blinken'
     ovelser = []
     by_navn = {}
-    sink = None
+    champs = {
+        'km': {'sections': [], 'lag': []},
+        'dm': {'sections': [], 'lag': []},
+    }
+    sink = None        # open stevne class
+    champ_sink = None  # open championship section
+    lag_sink = None    # open championship lag class
+    champ_ctx = None   # (scope, navn, deltakere) of the champ øvelse
+    lag_ctx = None     # (scope, navn) of the open Lag øvelse
+    pending = None     # (team, name fragments) while members wrap
     n_series = 0
     for line in text.split('\n'):
         line = line.strip()
@@ -611,6 +763,49 @@ def parse_blinken(text):
                 by_navn[navn] = current
                 ovelser.append(current)
             sink = None
+            champ_sink = None
+            lag_sink = None
+            champ_ctx = None
+            lag_ctx = None
+            pending = None
+            continue
+        champ_ovelse = _BLINKEN_CHAMP_OVELSE.match(line)
+        if champ_ovelse:
+            champ_ctx = (
+                champ_ovelse.group(2).lower(),
+                f'{champ_ovelse.group(2)}: {champ_ovelse.group(1)}',
+                int(champ_ovelse.group(3)),
+            )
+            sink = None
+            champ_sink = None
+            lag_sink = None
+            lag_ctx = None
+            pending = None
+            continue
+        lag_ovelse = _BLINKEN_LAG_OVELSE.match(line)
+        if lag_ovelse:
+            new_ctx = (
+                lag_ovelse.group(2).lower(),
+                f'{lag_ovelse.group(2)} Lag: {lag_ovelse.group(1)}',
+            )
+            if lag_ctx != new_ctx:
+                # a new Lag øvelse; a page break repeats the same
+                # header, keeping the open class and any wrapping
+                # member fragments
+                lag_ctx = new_ctx
+                lag_sink = None
+                pending = None
+            sink = None
+            champ_sink = None
+            champ_ctx = None
+            continue
+        if _BLINKEN_LAG_PLAIN.match(line):
+            # a Lag øvelse with no championship scope has no section
+            # to attach to — drop its tables rather than leak them
+            # into the previous Lag øvelse
+            lag_ctx = None
+            lag_sink = None
+            pending = None
             continue
         klasse = _BLINKEN_KLASSE.match(line)
         if klasse:
@@ -624,6 +819,37 @@ def parse_blinken(text):
             else:
                 sink = {'klasse': klasse.group(1), 'rows': []}
                 classes.append(sink)
+            champ_sink = None
+            lag_sink = None
+            pending = None
+            continue
+        champ_klasse = _BLINKEN_CHAMP_KLASSE.match(line)
+        if champ_klasse:
+            if champ_ctx is None:
+                continue
+            scope, navn, deltakere = champ_ctx
+            n_series = len(champ_klasse.group(2).split())
+            entry = _champ_entry(champs[scope]['sections'], navn,
+                                champ_klasse.group(1), 'rows')
+            entry.setdefault('deltakere', deltakere)
+            champ_sink = entry
+            sink = None
+            lag_sink = None
+            pending = None
+            continue
+        lag_klasse = _BLINKEN_LAG_KLASSE.match(line)
+        if lag_klasse:
+            if lag_ctx is None:
+                continue
+            scope, navn = lag_ctx
+            n_series = len(lag_klasse.group(2).split())
+            entry = _champ_entry(champs[scope]['lag'], navn,
+                                lag_klasse.group(1), 'teams')
+            if entry is not lag_sink:
+                lag_sink = entry
+                pending = None
+            sink = None
+            champ_sink = None
             continue
         deltakere = _BLINKEN_DELTAKERE.match(line)
         if deltakere and ovelser:
@@ -631,12 +857,37 @@ def parse_blinken(text):
                 deltakere.group(1)
             )
             continue
+        if champ_sink is not None:
+            row = _parse_blinken_row(line, n_series)
+            if row is not None:
+                if row.get('mrk') in _BLINKEN_MEDAL:
+                    row['medal'] = _BLINKEN_MEDAL[row.pop('mrk')]
+                champ_sink['rows'].append(row)
+            continue
+        if lag_sink is not None:
+            parsed = _parse_blinken_lag_team(line, n_series)
+            if parsed is not None:
+                team, fragments = parsed
+                lag_sink['teams'].append(team)
+                pending = (team, fragments)
+                continue
+            tokens = line.split()
+            if pending is not None and _is_member_continuation(tokens):
+                team, fragments = pending
+                pending = (team, _accumulate_members(
+                    tokens, team['members'], fragments))
+            continue
         if sink is None:
             continue
         row = _parse_blinken_row(line, n_series)
         if row is not None:
             sink['rows'].append(row)
     detail['ovelser'] = ovelser
+    for key, champ in champs.items():
+        if champ['sections'] or champ['lag']:
+            detail[key] = {
+                k: v for k, v in champ.items() if v
+            }
     return detail
 
 
@@ -1088,20 +1339,26 @@ def parse_inrx(text):
                     by_navn[navn] = ovelse
                     ovelser.append(ovelse)
                 classes = ovelse['classes']
+                # Lag/Mix-lag øvelser are team tables: their lines are
+                # team rows with member sublines, exactly like the
+                # championship lag sections
+                is_lag = _LAG_OVELSE.match(navn) is not None
                 if classes and classes[-1]['klasse'] == klasse:
                     class_dict = classes[-1]
                 else:
-                    class_dict = {'klasse': klasse, 'rows': []}
+                    class_dict = {'klasse': klasse,
+                                  ('teams' if is_lag else 'rows'): []}
                     classes.append(class_dict)
-                # open øvelser print championship podiums with the
-                # medal as the first word — strip it on person
-                # øvelser; Lag/Mix-lag øvelser are team tables whose
-                # first word is the printed medal-team shape
-                is_lag = 'lag: ' in navn.lower()
-                current = (
-                    'rows', class_dict, n_series, has_oppr, has_premie,
-                    not is_lag,
-                )
+                if is_lag:
+                    current = ('lag', class_dict, n_series)
+                else:
+                    # open øvelser print championship podiums with
+                    # the medal as the first word — strip it into a
+                    # row field on person øvelser
+                    current = (
+                        'rows', class_dict, n_series, has_oppr,
+                        has_premie, True,
+                    )
             continue
         if current is None:
             continue

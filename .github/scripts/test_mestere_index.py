@@ -121,6 +121,142 @@ class NmClassification(MestereIndexBase):
                            'sum': 298}])
 
 
+class LagOvelseMembers(MestereIndexBase):
+    """v15: lag øvelser carry classes with teams, and team podiums
+    keep their members ({name, personId?, club?, sum?}, club through
+    the comp's API results). Mix-lag øvelser pool their teams under
+    the 'Mix' klasse — the existing km/dm convention, now for nm too.
+    Row-shaped lag classes keep the fused-row fallback."""
+
+    NM_COMP = comp('nmx', competitionTypeName='Norgesmesterskap',
+                  results=[
+                      {'personId': 'p1', 'name': 'Tore Vrålstad',
+                       'club': 'Greipstad Pistolklubb'},
+                      {'personId': 'p2', 'name': 'Kjetil Skogshagen',
+                       'club': 'Farris Sportsskyttere'},
+                  ])
+
+    def test_nm_lag_teams_carry_members(self):
+        d = detail('nmx', [
+            {'navn': 'Lag: Felt Fin', 'classes': [
+                {'klasse': 'Å', 'teams': [
+                    {'medal': 'Gull', 'team': 'Greipstad PK1',
+                     'series': [[27, 0]], 'ix': 76, 'sum': 318,
+                     'members': [
+                         {'name': 'Tore Vrålstad', 'klasse': 'M',
+                          'personId': 'p1', 'ix': 26, 'sum': 107},
+                         {'name': 'Ukjent Skytter', 'klasse': 'K',
+                          'ix': 22, 'sum': 106},
+                     ]},
+                    {'medal': 'Sølv', 'team': 'Bærum PK',
+                     'series': [], 'members': []},
+                ]},
+            ]},
+        ])
+        index = self.build('felt', 2024, [self.NM_COMP], {'nmx': d})
+        self.assertEqual(len(index['comps']), 1)
+        lag = index['comps'][0]['nmLag'][0]
+        self.assertEqual(lag['ovelse'], 'Felt Fin')
+        self.assertEqual(lag['klasse'], 'Å')
+        gull, solv = lag['podium']
+        self.assertEqual(gull['team'], 'Greipstad PK1')
+        self.assertEqual(gull['club'], 'Greipstad Pistolklubb')
+        self.assertEqual(gull.get('members'), [
+            {'name': 'Tore Vrålstad', 'klasse': 'M', 'personId': 'p1',
+             'club': 'Greipstad Pistolklubb', 'sum': 107},
+            {'name': 'Ukjent Skytter', 'klasse': 'K', 'sum': 106},
+        ])
+        self.assertEqual(solv['medal'], 'Sølv')
+        self.assertNotIn('members', solv)
+
+    def test_nm_mix_lag_pools_teams_under_klasse_mix(self):
+        d = detail('nmx', [
+            {'navn': 'Mix-lag: Felt Fin', 'classes': [
+                {'klasse': 'Å', 'teams': [
+                    {'medal': 'Gull', 'team': 'Farris SS1',
+                     'series': [], 'sum': 198, 'members': [
+                         {'name': 'Kjetil Skogshagen', 'personId': 'p2',
+                          'klasse': 'V55', 'sum': 101},
+                     ]},
+                ]},
+                {'klasse': 'V', 'teams': [
+                    {'medal': 'Sølv', 'team': 'Brumunddal PK',
+                     'series': [], 'members': []},
+                ]},
+            ]},
+        ])
+        index = self.build('felt', 2024, [self.NM_COMP], {'nmx': d})
+        self.assertEqual(len(index['comps']), 1)
+        lag = index['comps'][0]['nmLag'][0]
+        self.assertEqual(lag['ovelse'], 'Felt Fin')
+        self.assertEqual(lag['klasse'], 'Mix')
+        gull, solv = lag['podium']
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull.get('members'), [
+            {'name': 'Kjetil Skogshagen', 'klasse': 'V55',
+             'personId': 'p2', 'club': 'Farris Sportsskyttere',
+             'sum': 101},
+        ])
+        self.assertNotIn('members', solv)
+
+    def test_km_mix_lag_teams_carry_members(self):
+        d = detail('k1', [
+            {'navn': 'KM Mix-lag: Felt Fin', 'classes': [
+                {'klasse': 'Å', 'teams': [
+                    {'medal': 'Gull', 'team': 'Farris SS1',
+                     'series': [], 'sum': 198, 'members': [
+                         {'name': 'Kjetil Skogshagen', 'personId': 'p2',
+                          'klasse': 'V55', 'sum': 101},
+                     ]},
+                ]},
+            ]},
+        ])
+        index = self.build(
+            'felt', 2025,
+            [comp('k1', competitionTypeName='Åpent stevne m/KM',
+                  results=self.NM_COMP['results'])],
+            {'k1': d})
+        self.assertEqual(len(index['comps']), 1)
+        lag = index['comps'][0]['kmLag'][0]
+        self.assertEqual(lag['ovelse'], 'Felt Fin')
+        self.assertEqual(lag['klasse'], 'Mix')
+        gull = lag['podium'][0]
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull['club'], 'Farris Sportsskyttere')
+        self.assertEqual(gull.get('members'), [
+            {'name': 'Kjetil Skogshagen', 'klasse': 'V55',
+             'personId': 'p2', 'club': 'Farris Sportsskyttere',
+             'sum': 101},
+        ])
+
+    def test_km_overlay_lag_teams_carry_members(self):
+        d = detail('k2', [], generator='inrX 1.9.0.0',
+                   km={'lag': [{'navn': 'KM Lag: Felt Magnum',
+                                'klasse': 'Å',
+                                'teams': [
+                                    {'medal': 'Gull', 'team': 'GPK 1',
+                                     'sum': 243, 'members': [
+                                         {'name': 'Tore Vrålstad',
+                                          'personId': 'p1',
+                                          'klasse': 'Å', 'sum': 90},
+                                     ]},
+                                ]}]})
+        index = self.build(
+            'felt', 2025,
+            [comp('k2', competitionTypeName='Åpent stevne m/KM',
+                  results=self.NM_COMP['results'])],
+            {'k2': d})
+        self.assertEqual(len(index['comps']), 1)
+        lag = index['comps'][0]['kmLag'][0]
+        self.assertEqual(lag['ovelse'], 'Felt Magnum')
+        self.assertEqual(lag['klasse'], 'Å')
+        gull = lag['podium'][0]
+        self.assertEqual(gull.get('members'), [
+            {'name': 'Tore Vrålstad', 'klasse': 'Å', 'personId': 'p1',
+             'club': 'Greipstad Pistolklubb', 'sum': 90},
+        ])
+
+
 class KmDmClassification(MestereIndexBase):
     def test_t96_ovelser_excluded_everywhere(self):
         d = detail('t1', [
@@ -303,6 +439,8 @@ class KmDmClassification(MestereIndexBase):
         # API results resolve members to canonical clubs, so the team's
         # club comes from its first resolvable member. No resolvable
         # member → no club (the frontend falls back to the lag name).
+        # Members flow through with their own personIds, clubs and sums;
+        # a memberless team carries no members key.
         d = detail('i2', generator='inrX 1.9.1.0', ovelser=[], **{
             'km': {
                 'sections': [],
@@ -323,8 +461,15 @@ class KmDmClassification(MestereIndexBase):
                           ])],
                           {'i2': d})
         podium = index['comps'][0]['kmLag'][0]['podium']
-        self.assertEqual(podium[0], {'medal': 'Gull', 'team': 'GPK 1', 'sum': 287,
-                                     'club': 'Gjøvik Pistolklubb'})
+        self.assertEqual(podium[0], {
+            'medal': 'Gull', 'team': 'GPK 1', 'sum': 287,
+            'club': 'Gjøvik Pistolklubb',
+            'members': [
+                {'name': 'A', 'klasse': 'Å', 'personId': 'p1',
+                 'club': 'Gjøvik Pistolklubb', 'sum': 100},
+                {'name': 'B', 'klasse': 'Å', 'sum': 99},
+            ],
+        })
         self.assertEqual(podium[1], {'medal': 'Sølv', 'team': 'TPK3', 'sum': 280})
 
 

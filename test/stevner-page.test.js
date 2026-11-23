@@ -58,6 +58,28 @@ assert.strictEqual(cards[0].title, 'Vårfelt');
 assert.strictEqual(cards[0].status, 1);
 assert.strictEqual(cards[0].resultFileUrl, 'https://example.test/r.pdf');
 
+// ── cardLinksHtml — the Resultatfil action joins the link row ─────────
+var links1 = SP.cardLinksHtml(cards[0]);
+assert.ok(links1.indexOf('class="stevner-resultfile-btn"') !== -1,
+    'a comp with a result file gets the Resultatfil action');
+assert.ok(links1.indexOf('data-comp-id="c1"') !== -1,
+    'the action carries the comp id');
+assert.ok(links1.indexOf('data-resultfile="https://example.test/r.pdf"') !== -1,
+    'the action carries the result file url for the modal');
+assert.ok(links1.indexOf('data-title="Vårfelt"') !== -1,
+    'the action carries the comp title');
+assert.ok(links1.indexOf('>Resultatfil <span class="nav-beta-tag"') !== -1,
+    'the action carries the beta pill (partial result-file coverage)');
+assert.ok(links1.indexOf('stevner-resultfile-btn') < links1.indexOf('>PDF</a>'),
+    'the Resultatfil action sits before the raw PDF link');
+var links2 = SP.cardLinksHtml(cards[1]);
+assert.ok(links2.indexOf('stevner-resultfile-btn') === -1,
+    'no result file, no Resultatfil action');
+assert.ok(links2.indexOf('>PDF</a>') === -1,
+    'no result file, no PDF link either');
+assert.ok(links2.indexOf('skyting.no</a>') !== -1,
+    'the deep link survives');
+
 // klasse mode keys on discipline|class, so c1's three results form THREE
 // groups (Grovfelt|A, Grovfelt|B, Fellesfelt|A), not two.
 assert.strictEqual(cards[0].groups.length, 3, 'klasse mode groups by discipline+class');
@@ -190,7 +212,7 @@ assert.ok(klasseHtml.indexOf('ranking-rank') === -1 && klasseHtml.indexOf('ranki
     'card table: cells stay completely unclassed (owner ruling — plain look)');
 assert.ok(klasseHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – A</th></tr>') !== -1,
     'card table: group rows via dt-group-row with today\'s labels');
-assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td><span class="medal medal--silver">2</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td><span class="rank-value" style="color:var(--chart-red-text)" title="Under klassen">90.00</span></td></tr>') !== -1,
+assert.ok(klasseHtml.indexOf('<tr data-dt-row="1"><td><span class="medal medal--silver">2</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt" data-date="2025-04-01" data-comp-id="c1" data-class="A">Ola</button></td><td>Klubb A</td><td>Grovfelt</td><td>A</td><td>28</td><td><span class="rank-value" style="color:var(--chart-red-text)" title="Under klassen">90.00</span></td></tr>') !== -1,
     'card table: person button byte-exact, num/toFixed(2) cells with band dots, no cell classes (comparator order: Fellesfelt < Grovfelt puts Ola at index 1)');
 
 // Single-group card (c2): carries the group row TOO — the label row is
@@ -200,7 +222,7 @@ assert.ok(singleSpec.groupRows, 'single-group card carries the groupRows opt');
 var singleHtml = nfRender(singleSpec);
 assert.ok(singleHtml.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="7">Grovfelt – B</th></tr>') !== -1,
     'single-group card renders its group label row');
-assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td><span class="medal medal--gold">1</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td><span class="rank-value" style="color:var(--chart-blue-text)" title="I klassen">92.00</span></td></tr>') !== -1,
+assert.ok(singleHtml.indexOf('<tr data-dt-row="0"><td><span class="medal medal--gold">1</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="2" data-person-name="Kari" data-discipline="Grovfelt" data-date="2025-09-01" data-comp-id="c2" data-class="B">Kari</button></td><td>Klubb B</td><td>Grovfelt</td><td>B</td><td>29</td><td><span class="rank-value" style="color:var(--chart-blue-text)" title="I klassen">92.00</span></td></tr>') !== -1,
     'single-group card: rows keep comparator order beneath the label');
 
 // Single-group card in poeng mode keeps the comparator (poeng desc) order.
@@ -240,7 +262,7 @@ assert.ok(scoreAsc.indexOf('data-person-name="Per"') < scoreAsc.indexOf('data-pe
     && scoreAsc.indexOf('data-person-name="Ola"') < scoreAsc.indexOf('data-person-name="Kari"'),
     'score asc reorders rows INSIDE the Grovfelt group (Ola 28 before Kari 30), group order fixed');
 var nameDesc = nfSorted(ovelseSpec, 'name', 'desc');
-assert.ok(nameDesc.indexOf('<tr data-dt-row="2"><td><span class="medal medal--silver">2</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt">Ola</button></td>') !== -1
+assert.ok(nameDesc.indexOf('<tr data-dt-row="2"><td><span class="medal medal--silver">2</span></td><td><button type="button" class="stevner-person-btn link-btn" data-person-id="1" data-person-name="Ola" data-discipline="Grovfelt" data-date="2025-04-01" data-comp-id="c1" data-class="A">Ola</button></td>') !== -1
     && nameDesc.indexOf('data-person-name="Ola"') < nameDesc.indexOf('data-person-name="Kari"'),
     'name desc: # travels with the row (Ola keeps position 2 and his data index)');
 var posAsc = nfSorted(ovelseSpec, 'position', 'asc');
