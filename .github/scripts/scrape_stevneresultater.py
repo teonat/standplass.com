@@ -270,6 +270,28 @@ def merge_competitions(old_list, new_list):
     return sorted(by_id.values(), key=lambda c: c.get('startDate', ''), reverse=True)
 
 
+# Fields whose change between a stored competition and its live
+# listing entry means the stored copy is stale and the competition
+# should be fetched again even though it was already processed —
+# results attached late, a rename, results added or removed. The
+# listing is fetched on every run anyway, so the diff is free.
+# (Residual class, handled one-off so far: a partial FIRST result
+# list with unchanged metadata is invisible to this diff.)
+MATERIAL_FIELDS = ('title', 'hasResult', 'resultFileUrl')
+
+
+def changed_comp_ids(listed_comps, stored_by_id):
+    """Ids of listed competitions whose stored copy changed materially."""
+    changed = set()
+    for comp in listed_comps:
+        stored = stored_by_id.get(comp['id'])
+        if stored is None:
+            continue  # brand-new comps take the normal unprocessed path
+        if any(comp.get(f) != stored.get(f) for f in MATERIAL_FIELDS):
+            changed.add(comp['id'])
+    return changed
+
+
 def _parse_start(iso):
     if not iso:
         return datetime.min.replace(tzinfo=timezone.utc)
@@ -329,6 +351,16 @@ def process_year(year, pistol_branch_id, group_ids, discipline_names, class_name
         if requeued:
             processed_ids -= requeued
             print(f'  Rolling window: re-queuing {len(requeued)} recently published competition(s)', flush=True)
+
+    # Listing-diff requeue: a processed competition whose listing entry
+    # changed materially (results attached late, a rename, results
+    # removed) is fetched again even outside the rolling window.
+    changed_ids = changed_comp_ids(
+        competitions,
+        {c['id']: c for c in file_data.get('competitions', [])}) & processed_ids
+    if changed_ids:
+        print(f'  Listing diff: re-queuing {len(changed_ids)} materially changed competition(s)', flush=True)
+        processed_ids -= changed_ids
 
     # Filter to those with results and not yet processed
     candidates = [
