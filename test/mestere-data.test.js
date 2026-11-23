@@ -224,20 +224,47 @@ assert.strictEqual(MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p2')
 
 var clubRows = MD.summarizeByClub([feltIndex, baneIndex]);
 assert.deepStrictEqual(clubRows.map(function (r) { return r.club; }),
-    ['Kongsvinger Sportsskyttere', 'Bodø PK', 'Brumunddal Pistolklubb', 'Ukjent klubb'],
-    'sorted by gull desc, then sølv, then bronse');
+    ['Kongsvinger Sportsskyttere', 'Ukjent klubb', 'Bodø PK',
+     'Brumunddal Pistolklubb', 'Hurum SKL'],
+    'sorted by gull desc across all six scope keys, then sølv, then bronse, then name');
 assert.deepStrictEqual(clubRows[0].km, { Gull: 2, Sølv: 1, Bronse: 0 },
     'km medals accumulate across both branches');
 assert.deepStrictEqual(clubRows[0].dm, { Gull: 1, Sølv: 0, Bronse: 0 });
 assert.deepStrictEqual(clubRows[0].nm, { Gull: 1, Sølv: 0, Bronse: 0 });
-assert.deepStrictEqual(clubRows[2].km, { Gull: 0, Sølv: 1, Bronse: 0 });
-assert.deepStrictEqual(clubRows[2].dm, { Gull: 0, Sølv: 0, Bronse: 1 });
-assert.deepStrictEqual(clubRows[3].km, { Gull: 0, Sølv: 0, Bronse: 1 },
-    'podium rows with no club land in a Ukjent klubb bucket');
-clubRows.forEach(function (r) {
-    assert.ok(['Hurum SKL', 'Brumunddal PK', 'Sortland PK'].indexOf(r.club) === -1,
-        'team podium names never count as club medals: ' + r.club);
-});
+assert.deepStrictEqual(clubRows[0].kmLag, { Gull: 0, Sølv: 0, Bronse: 0 },
+    'every row carries all six scope keys');
+assert.deepStrictEqual(clubRows[1].dmLag, { Gull: 1, Sølv: 0, Bronse: 0 },
+    'a clubless memberless team lands in Ukjent klubb (dmLag gull)');
+assert.deepStrictEqual(clubRows[1].nmLag, { Gull: 0, Sølv: 0, Bronse: 1 });
+assert.deepStrictEqual(clubRows[1].km, { Gull: 0, Sølv: 0, Bronse: 1 },
+    'podium rows with no club land in the same bucket');
+assert.deepStrictEqual(clubRows[2].km, { Gull: 1, Sølv: 0, Bronse: 0 });
+assert.deepStrictEqual(clubRows[3].km, { Gull: 0, Sølv: 1, Bronse: 0 });
+assert.deepStrictEqual(clubRows[3].dm, { Gull: 0, Sølv: 0, Bronse: 1 });
+assert.deepStrictEqual(clubRows[4].kmLag, { Gull: 0, Sølv: 1, Bronse: 0 },
+    'a memberless team counts once under its resolved club (owner ruling 2026-11-23)');
+
+// ── summarizeByClub: lag team clubs (owner ruling 2026-11-23) ───────────
+
+var lagClubRows = MD.summarizeByClub([lagIndex]);
+var tysnes = lagClubRows.filter(function (r) { return r.club === 'Tysnes SSK'; })[0];
+assert.deepStrictEqual(tysnes.kmLag, { Gull: 1, Sølv: 0, Bronse: 0 },
+    'two members, one team medal — counted once');
+
+var fallbackIndex = {
+    year: 2025,
+    comps: [comp('f1', {
+        kmLag: [sec('Felt Fin', 'Å', [
+            { medal: 'Sølv', team: 'Fallet Ut PK', members: [
+                { name: 'D', personId: 'p4', club: 'Fallback PK' }
+            ] }
+        ])]
+    })]
+};
+var fallbackRows = MD.summarizeByClub([fallbackIndex]);
+assert.strictEqual(fallbackRows[0].club, 'Fallback PK',
+    'a membered team with no resolved club falls back to the first member club');
+assert.deepStrictEqual(fallbackRows[0].kmLag, { Gull: 0, Sølv: 1, Bronse: 0 });
 
 // ── programRank ────────────────────────────────────────────────────────
 // Specificity-ordered keyword scan: 'Sp-Revolver' contains 'revolver' but

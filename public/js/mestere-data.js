@@ -141,22 +141,48 @@ var StandplassMestereData = (function () {
     }
 
     // indexes: both branches' indexes for one year. Individual podiums
-    // only — team podiums have no club field (a team string is not a
-    // canonical club name), so lag medals never count toward club totals.
-    // Rows with no club at all land in 'Ukjent klubb'.
+    // by the row's club; lag team podiums once per team under the
+    // team's resolved club, falling back to the first member club
+    // (owner ruling 2026-11-23 — a team medal counts toward the club's
+    // total). The six scope keys stay separate so a consumer merges
+    // or splits individual and lag as it chooses. Rows with no club
+    // at all land in 'Ukjent klubb'.
+    var CLUB_SCOPES = ['nm', 'nmLag', 'dm', 'dmLag', 'km', 'kmLag'];
+
     function summarizeByClub(indexes) {
         var clubs = {};
+        function bucket(club) {
+            if (!Object.prototype.hasOwnProperty.call(clubs, club)) {
+                var row = { club: club };
+                CLUB_SCOPES.forEach(function (s) { row[s] = zeroMedals(); });
+                clubs[club] = row;
+            }
+            return clubs[club];
+        }
         (indexes || []).forEach(function (index) {
             (index.comps || []).forEach(function (comp) {
                 INDIVIDUAL_SCOPES.forEach(function (scope) {
                     (comp[scope] || []).forEach(function (section) {
                         (section.podium || []).forEach(function (row) {
-                            var club = row.club || 'Ukjent klubb';
-                            if (!Object.prototype.hasOwnProperty.call(clubs, club)) {
-                                clubs[club] = { club: club, nm: zeroMedals(), dm: zeroMedals(), km: zeroMedals() };
+                            var b = bucket(row.club || 'Ukjent klubb');
+                            if (b[scope][row.medal] != null) {
+                                b[scope][row.medal] += 1;
                             }
-                            if (clubs[club][scope][row.medal] != null) {
-                                clubs[club][scope][row.medal] += 1;
+                        });
+                    });
+                    (comp[scope + 'Lag'] || []).forEach(function (section) {
+                        (section.podium || []).forEach(function (row) {
+                            var club = row.club;
+                            if (!club) {
+                                (row.members || []).some(function (m) {
+                                    if (m.club) { club = m.club; return true; }
+                                    return false;
+                                });
+                            }
+                            var b = bucket(club || 'Ukjent klubb');
+                            var key = scope + 'Lag';
+                            if (b[key][row.medal] != null) {
+                                b[key][row.medal] += 1;
                             }
                         });
                     });
@@ -165,14 +191,13 @@ var StandplassMestereData = (function () {
         });
         return Object.keys(clubs).map(function (name) { return clubs[name]; })
             .sort(function (a, b) {
-                var order = ['nm', 'dm', 'km'];
                 var medals = ['Gull', 'Sølv', 'Bronse'];
                 for (var m = 0; m < medals.length; m++) {
                     var va = 0, vb = 0;
-                    for (var s = 0; s < order.length; s++) {
-                        va += a[order[s]][medals[m]];
-                        vb += b[order[s]][medals[m]];
-                    }
+                    CLUB_SCOPES.forEach(function (s) {
+                        va += a[s][medals[m]];
+                        vb += b[s][medals[m]];
+                    });
                     if (va !== vb) { return vb - va; }
                 }
                 return a.club.localeCompare(b.club, 'no');
