@@ -477,6 +477,56 @@ assert.strictEqual(StandplassPersonModal.renderMeritterBody([], { compLinks: tru
     '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>',
     'empty merits → the honest empty message');
 
+// ── open-from-entry activation helpers ────────────────────────────────
+// Opening the modal from a specific result row should activate that
+// entry like an in-modal row click: dot ring + row highlight. The row
+// button carries the entry's identity (date, competitionId, discipline,
+// class); a ranking chart cannot show an entry without a rank score,
+// so the activation falls back to the poeng graph (owner ruling).
+
+var entryFixture = [
+    { date: '2026-06-06', competition: 'KM felt', competitionId: 'c1',
+      discipline: 'Felt Fin', class: 'Å', rankingScore: 0.91, score: 88, position: 2 },
+    { date: '2026-06-06', competition: 'KM felt', competitionId: 'c1',
+      discipline: 'Felt Grov', class: 'Å', rankingScore: null, score: 94, position: 1 },
+    { date: '2026-07-01', competition: 'Sommerstevne', competitionId: 'c2',
+      discipline: 'Felt Fin', class: 'Å', rankingScore: 0.85, score: 80, position: 4 }
+];
+
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-07-01', competitionId: 'c2', discipline: 'Felt Fin', class: 'Å' }), 2,
+    'the entry is found by its full identity');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Grov' }), 1,
+    'a spec without class still matches (class skipped when absent)');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
+    { date: '2026-06-06', competitionId: 'c9', discipline: 'Felt Fin' }), -1,
+    'another competition is no match');
+assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture, null), -1,
+    'no spec is no match');
+
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null, score: 94 }, 'rankingScore'), 'score',
+    'a rankless entry activates on the poeng graph instead');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 0.91, score: 88 }, 'rankingScore'), 'rankingScore',
+    'a ranked entry keeps the ranking graph');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null }, 'score'), 'score',
+    'the poeng graph is never switched away from');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: null }, 'position'), 'position',
+    'the position graph is never switched away from');
+
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 0.91, score: 88, position: 2 }, 'rankingScore'), true);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: null, score: 88 }, 'rankingScore'), false);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { score: 88 }, 'score'), true);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { position: null }, 'position'), false);
+
 // ── branch switcher (owner ruling 2026-11-23: Alle/Felt/Bane, not ────
 // per-row tags — scales with future branches; rows stay untagged)
 

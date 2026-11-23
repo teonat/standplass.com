@@ -106,6 +106,40 @@ var StandplassPersonModalController = (function () {
             }
         }
 
+        // Opening from a clicked result row: activate that entry like
+        // an in-modal row click (dot ring + chart scroll + row
+        // highlight/focus). A rankless entry has no dot on the ranking
+        // graph, so the poeng graph takes over first (owner ruling) —
+        // the toggle buttons and the URL follow, exactly as a manual
+        // metric switch. An entry with no value on the final metric
+        // either way gets the row highlight only.
+        function activateInitialEntry(spec) {
+            var idx = StandplassPersonModal.findEntryIndex(modalEntries, spec);
+            if (idx < 0) { return; }
+            var entry = modalEntries[idx];
+            var metric = StandplassPersonModal.activationMetric(entry, modalMetric);
+            if (metric !== modalMetric) {
+                modalMetric = metric;
+                Array.prototype.forEach.call(modalEl.querySelectorAll('.person-chart-toggle'), function (b) {
+                    var active = b.getAttribute('data-metric') === metric;
+                    b.classList.toggle('program-btn--active', active);
+                    b.setAttribute('aria-pressed', String(active));
+                });
+                syncCurrentPersonModalUrl();
+                drawChart();
+            }
+            if (chartHandle && StandplassPersonModal.hasMetricValue(entry, modalMetric)) {
+                chartHandle.activateDot(String(idx));
+            } else {
+                var row = modalEl.querySelector('tr[data-idx="' + idx + '"]');
+                if (row) {
+                    row.classList.add('person-row-highlight');
+                    row.scrollIntoView({ block: 'nearest' });
+                    row.focus();
+                }
+            }
+        }
+
         function fetchPersonYear(personId, year) {
             personYearCache[personId] = personYearCache[personId] || {};
             if (personYearCache[personId][year]) { return Promise.resolve(personYearCache[personId][year]); }
@@ -161,7 +195,7 @@ var StandplassPersonModalController = (function () {
             { key: 'position', label: 'Plassering' }
         ];
 
-        function renderPersonModal(personId, personName, initialDisc, urlFilters) {
+        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry) {
             var mySeq = ++personOpenSeq;
             var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
             var entriesByYear = {};
@@ -521,6 +555,7 @@ var StandplassPersonModalController = (function () {
                 var switchTab = wirePersonTabs();
                 if (personTab === 'meritter') { switchTab('meritter'); }
                 refresh();
+                if (initialEntry) { activateInitialEntry(initialEntry); }
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
         }
 
@@ -592,7 +627,7 @@ var StandplassPersonModalController = (function () {
             // Plassering). Without it the last-active metric sticks,
             // exactly like the modal's own toggle buttons.
             renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
-                opts.metric ? { metric: opts.metric } : null);
+                opts.metric ? { metric: opts.metric } : null, opts.entry || null);
         }
 
         function openFromUrl() {

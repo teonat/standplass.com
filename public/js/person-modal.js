@@ -567,6 +567,45 @@ var StandplassPersonModal = (function () {
         ];
     }
 
+    // ── Open-from-entry activation helpers ──────────────────────────
+    // Opening the modal from a clicked result row activates that entry
+    // like an in-modal row click (dot ring + row highlight). The row
+    // button carries the entry's identity; a ranking chart cannot show
+    // an entry without a rank score, so the activation falls back to
+    // the poeng graph (owner ruling 2026-11-23).
+
+    // spec: {date?, competitionId?, discipline?, class?} — present
+    // fields must all match; the first matching index wins, -1 when
+    // nothing matches (or no spec was given).
+    function findEntryIndex(entries, spec) {
+        if (!spec) { return -1; }
+        for (var i = 0; i < (entries || []).length; i++) {
+            var e = entries[i];
+            var match = ['date', 'competitionId', 'discipline', 'class'].every(function (k) {
+                return spec[k] == null || e[k] === spec[k];
+            });
+            if (match) { return i; }
+        }
+        return -1;
+    }
+
+    // The chart metric an entry can actually be activated on: a
+    // rankless entry has no dot on the ranking graph, so the poeng
+    // graph takes over; every other metric stays as-is.
+    function activationMetric(entry, currentMetric) {
+        if (currentMetric === 'rankingScore' && entry.rankingScore == null) {
+            return 'score';
+        }
+        return currentMetric;
+    }
+
+    function hasMetricValue(entry, metric) {
+        if (metric === 'rankingScore') { return entry.rankingScore != null; }
+        if (metric === 'score') { return entry.score != null; }
+        if (metric === 'position') { return entry.position != null; }
+        return false;
+    }
+
     // ── Meritter tab rendering ─────────────────────────────────────────
     // Consumes meritterForPerson's rows. The chips split individual and
     // lag kinds (owner ruling 2026-11-23: separate chips, only non-zero
@@ -734,6 +773,9 @@ var StandplassPersonModal = (function () {
         mergeYearEntries: mergeYearEntries,
         getFilteredEntries: getFilteredEntries,
         resolveInitialFilter: resolveInitialFilter,
+        findEntryIndex: findEntryIndex,
+        activationMetric: activationMetric,
+        hasMetricValue: hasMetricValue,
         parsePersonFilterParams: parsePersonFilterParams,
         buildPersonFilterParams: buildPersonFilterParams
     };

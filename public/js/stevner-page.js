@@ -73,6 +73,10 @@ var StandplassStevnerPage = (function () {
     }
 
     function decorateRow(comp, r) {
+        // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
+        // date" on this string and parses it as UTC midnight, both of which break on
+        // a full datetime.
+        var date = comp.startDate ? String(comp.startDate).slice(0, 10) : '';
         return {
             position: r.position,
             name: r.name,
@@ -85,16 +89,18 @@ var StandplassStevnerPage = (function () {
             competitionType: comp.competitionTypeName || '',
             competition: comp.title,
             competitionId: comp.id,
-            // Date-only, exactly like nsf-ui.js:2166 — the chart code keys "best result per
-            // date" on this string and parses it as UTC midnight, both of which break on
-            // a full datetime.
-            date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
+            date: date,
             applicableForClassification: comp.applicableForClassification === true,
             // data-discipline lets a future click handler resolve initialDisc
             // for the person modal (Task 7) without a second data pass.
+            // data-date/-comp-id/-class identify the exact entry, so opening
+            // the modal from this row can activate it (dot + row highlight).
             nameHtml: '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
                 + esc(r.personId) + '" data-person-name="' + esc(r.name) + '"'
-                + ' data-discipline="' + esc(r.discipline) + '">'
+                + ' data-discipline="' + esc(r.discipline) + '"'
+                + ' data-date="' + esc(date) + '"'
+                + ' data-comp-id="' + esc(comp.id) + '"'
+                + ' data-class="' + esc(r.class || '') + '">'
                 + esc(r.name || '–') + '</button>'
         };
     }
@@ -1020,7 +1026,7 @@ var StandplassStevnerPage = (function () {
                     return flattenRows(yearData).filter(function (r) { return r.personId === personId; })
                         .map(function (r) {
                             return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
-                                competition: r.competition, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                                competition: r.competition, competitionId: r.competitionId, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
                         });
                 });
             },
@@ -1098,7 +1104,13 @@ var StandplassStevnerPage = (function () {
             personModal.open(btn, {
                 personId: btn.dataset.personId,
                 personName: btn.dataset.personName,
-                initialDisc: btn.dataset.discipline || null
+                initialDisc: btn.dataset.discipline || null,
+                entry: btn.dataset.date ? {
+                    date: btn.dataset.date,
+                    competitionId: btn.dataset.compId,
+                    discipline: btn.dataset.discipline,
+                    class: btn.dataset.class || null
+                } : null
             });
         });
 
