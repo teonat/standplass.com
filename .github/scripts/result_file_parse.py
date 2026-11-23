@@ -15,7 +15,7 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 15
+PARSER_VERSION = 16
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
@@ -186,7 +186,8 @@ def _split_name_club(tokens):
     Sp.Sk.', 'Oslo Komm.Tj.M. SKL' — the club starts one word
     before it), a suffix word (…klubb, …lag, PK, SKL — with
     multi-word place parts like 'Horten og Omegn' and 'Nedre
-    Eiker' absorbed), or a medial single initial between two words
+    Eiker' absorbed, and a ', City' tail's comma on the ending
+    token tested stripped), or a medial single initial between two words
     ('Aron S. Drammen'). The split only has to be reasonable: the
     person matcher joins rows against the API results and
     canonicalizes both fields there, so unmatched rows are the
@@ -210,7 +211,10 @@ def _split_name_club(tokens):
                 return ' '.join(tokens[:start]), ' '.join(tokens[start:])
             break
     for i in range(len(tokens) - 1, -1, -1):
-        low = tokens[i].lower()
+        # a ', City' club tail leaves its comma on the ending token
+        # ('Skytterklubb,') — test the token stripped; the club keeps
+        # the printed comma form
+        low = tokens[i].lower().rstrip(',')
         if low.endswith(_CLUB_ENDINGS) or low in _CLUB_ACRONYMS:
             start = max(0, i - 1)
             while start >= 2 and tokens[start - 1].lower() == 'og':

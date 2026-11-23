@@ -15,6 +15,7 @@ from result_file_parse import (
     UnsupportedFormatError,
     _parse_blinken_row,
     _parse_leon_row,
+    _split_name_club,
     detect_family,
     parse_blinken,
     parse_datotid,
@@ -1414,9 +1415,48 @@ class ParseMegalinkDispatch(unittest.TestCase):
                 parse_result(pdf)
 
 
+class ParseInrxCommaClub(unittest.TestCase):
+    """Comma-form club tails ('Aron Skytterklubb, Drammen'): the club
+    ends with ', City', so the club-ending token carries a trailing
+    comma. The split must test the token comma-stripped; the club
+    keeps its printed comma form (the API's registered club names
+    carry it too).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-comma-club.pdf'))
+
+    def test_comma_city_club_splits(self):
+        row = find_row(self.detail, 'Felt Revolver', 'A', 'Rune Hammer')
+        self.assertEqual(row.get('club'), 'Aron Skytterklubb, Drammen')
+
+    def test_another_comma_city_row_splits(self):
+        row = find_row(self.detail, 'Felt Fin', 'B', 'Dag Kristiansen')
+        self.assertEqual(row.get('club'), 'Aron Skytterklubb, Drammen')
+
+    def test_plain_club_rows_unchanged(self):
+        row = find_row(self.detail, 'Felt Fin', 'A', 'Per Andre Kulbraaten')
+        self.assertEqual(row['name'], 'Per Andre Kulbraaten')
+        self.assertEqual(row.get('club'), 'Lillestrøm Og Omegn Pistolklubb')
+
+    def test_split_name_club_comma_city(self):
+        self.assertEqual(
+            _split_name_club(
+                ['Rune', 'Hammer', 'Aron', 'Skytterklubb,', 'Drammen']),
+            ('Rune Hammer', 'Aron Skytterklubb, Drammen'))
+
+    def test_split_name_club_plain(self):
+        self.assertEqual(
+            _split_name_club(
+                ['Per', 'Andre', 'Kulbraaten', 'Lillestrøm', 'Og',
+                 'Omegn', 'Pistolklubb']),
+            ('Per Andre Kulbraaten', 'Lillestrøm Og Omegn Pistolklubb'))
+
+
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_15(self):
-        self.assertEqual(PARSER_VERSION, 15)
+    def test_parser_version_is_16(self):
+        self.assertEqual(PARSER_VERSION, 16)
 
 
 class ParseResultDispatch(unittest.TestCase):
