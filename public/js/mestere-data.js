@@ -86,14 +86,17 @@ var StandplassMestereData = (function () {
         return out;
     }
 
-    // entries: [{year, index}] — one per branch-year, both branches mixed.
-    // Returns one merit per championship podium finish by the person,
-    // newest year first (comp order within a year): individual podiums
-    // matched by row personId, and — owner ruling 2026-11-23 — lag/mix-
-    // lag team podiums matched by the member personId, carrying the
-    // team name and the lag's own class ('Lag Å', 'Mix-lag'). The
-    // merit's region is the krets for km, the distrikt for dm, nothing
-    // for nm; compTitle rides along for the Meritter tab's comp link.
+    // entries: [{year, index, branch?}] — one per branch-year, both
+    // branches mixed. Returns one merit per championship podium finish
+    // by the person, newest year first (comp order within a year):
+    // individual podiums matched by row personId, and — owner ruling
+    // 2026-11-23 — lag/mix-lag team podiums matched by the member
+    // personId, carrying the team name and the lag's own class ('Lag
+    // Å', 'Mix-lag'). The merit's region is the krets for km, the
+    // distrikt for dm, nothing for nm; compTitle rides along for the
+    // Meritter tab's comp link, and the entry's branch (owner ruling
+    // 2026-11-23: the Alle/Felt/Bane switcher filters on it; null when
+    // the caller passes none).
     function meritterForPerson(entries, personId) {
         if (!personId) { return []; }
         var rows = [];
@@ -108,7 +111,8 @@ var StandplassMestereData = (function () {
                 medal: medal,
                 compId: comp.compId,
                 compTitle: comp.title || null,
-                team: team
+                team: team,
+                branch: entry.branch || null
             });
         }
         (entries || []).forEach(function (entry) {

@@ -1297,6 +1297,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .person-modal-tab-panel[hidden] { display: none; }
 
 /* ── Person modal — Meritter tab ── */
+/* The branch switcher (Alle/Felt/Bane) rides above the chips; same
+   toggle chrome as the tab pair. */
+.person-meritt-branch-toggle {
+    margin: 0 0 0.75rem;
+}
+
 .person-meritt-chips {
     display: flex;
     flex-wrap: wrap;

@@ -639,15 +639,33 @@ var StandplassPersonModal = (function () {
         return '<div class="person-meritt-row">' + parts.join('') + '</div>';
     }
 
-    // The Meritter tab's whole body: chips row + year-grouped list.
+    // The Meritter tab's whole body: an Alle/Felt/Bane switcher (owner
+    // ruling 2026-11-23 — only when ≥2 branches are present in the
+    // merits; rows stay untagged), the chips row and the year-grouped
+    // list, all computed from the branch-filtered merits.
     // opts.compLinks renders comp titles as delegated link buttons
-    // (hosts with a comp modal) instead of plain spans.
+    // (hosts with a comp modal) instead of plain spans; opts.branch
+    // (null/undefined = Alle) filters the merits.
+    var BRANCH_ORDER = ['felt', 'bane'];
+
+    function branchBtnHtml(branch, label, active) {
+        return '<button type="button" class="program-btn person-meritt-branch-btn'
+            + (active ? ' program-btn--active' : '') + '" data-branch="' + esc(branch)
+            + '" aria-pressed="' + active + '">' + esc(label) + '</button>';
+    }
+
     function renderMeritterBody(merits, opts) {
         if (!merits || !merits.length) {
             return '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>';
         }
         opts = opts || {};
-        var chipsHtml = meritterChips(merits).map(function (c) {
+        var branches = BRANCH_ORDER.filter(function (b) {
+            return merits.some(function (m) { return m.branch === b; });
+        });
+        var shown = opts.branch
+            ? merits.filter(function (m) { return m.branch === opts.branch; })
+            : merits;
+        var chipsHtml = meritterChips(shown).map(function (c) {
             var counts = MERITT_MEDALS.filter(function (md) { return c.counts[md.name] > 0; })
                 .map(function (md) { return medalSpan(md.name, c.counts[md.name]); })
                 .join('');
@@ -656,7 +674,7 @@ var StandplassPersonModal = (function () {
         }).join('');
         var years = [];
         var byYear = {};
-        (merits || []).forEach(function (m) {
+        shown.forEach(function (m) {
             if (!Object.prototype.hasOwnProperty.call(byYear, m.year)) {
                 byYear[m.year] = [];
                 years.push(m.year);
@@ -668,7 +686,18 @@ var StandplassPersonModal = (function () {
             return '<h3 class="person-meritt-year">' + esc(String(y)) + '</h3>'
                 + byYear[y].map(function (m) { return meritRowHtml(m, !!opts.compLinks); }).join('');
         }).join('');
-        return '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
+        var toggle = '';
+        if (branches.length > 1) {
+            toggle = '<div class="program-toggle person-meritt-branch-toggle" role="group" aria-label="Gren">'
+                + branchBtnHtml('', 'Alle', !opts.branch)
+                + branches.map(function (b) {
+                    return branchBtnHtml(b, b.charAt(0).toUpperCase() + b.slice(1),
+                        opts.branch === b);
+                }).join('')
+                + '</div>';
+        }
+        return toggle
+            + '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
     }
 
     return {

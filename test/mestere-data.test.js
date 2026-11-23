@@ -148,7 +148,7 @@ assert.deepStrictEqual(meritter.map(function (m) { return m.year; }),
 assert.deepStrictEqual(meritter[0], {
     year: 2025, scope: 'km', ovelse: 'Felt Fin', klasse: 'U',
     region: 'Buskerud', medal: 'Gull', compId: 'c1',
-    compTitle: 'Teststevne c1', team: null
+    compTitle: 'Teststevne c1', team: null, branch: null
 }, 'km merit region is the krets; comp title rides along for the comp link');
 assert.strictEqual(meritter[2].scope, 'dm');
 assert.strictEqual(meritter[2].region, 'Østlandet Nord',
@@ -209,7 +209,7 @@ assert.strictEqual(lagMeritter.length, 3,
 assert.deepStrictEqual(lagMeritter[1], {
     year: 2025, scope: 'km', ovelse: 'Felt Fin', klasse: 'Lag Å',
     region: 'Vestlandet', medal: 'Gull', compId: 'l1',
-    compTitle: 'Teststevne l1', team: 'Tysnes SSK 1'
+    compTitle: 'Teststevne l1', team: 'Tysnes SSK 1', branch: null
 }, 'a lag merit carries the team, the lag class form and the comp title');
 assert.strictEqual(lagMeritter[2].klasse, 'Mix-lag',
     'mix teams are Mix-lag, never Lag Mix');
@@ -219,6 +219,20 @@ assert.strictEqual(MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p9')
     'a teammate merits only the shared team medal, not the rivals\'');
 assert.strictEqual(MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p2').length, 1,
     'the second team\'s member merits that medal');
+
+// branch rides along from the entry — the Meritter tab's
+// Alle/Felt/Bane switcher filters on it; entries without a branch
+// (older callers) give merits without one.
+var branchMeritter = MD.meritterForPerson([
+    { year: 2025, index: lagIndex, branch: 'felt' },
+    { year: 2024, index: baneIndex, branch: 'bane' }
+], 'p1');
+assert.strictEqual(branchMeritter.length, 4,
+    '2025 felt merits (3) + 2024 bane merit (1), newest year first');
+branchMeritter.forEach(function (m) {
+    assert.strictEqual(m.branch, m.year === 2025 ? 'felt' : 'bane',
+        'each merit carries its entry\'s branch');
+});
 
 // ── summarizeByClub ────────────────────────────────────────────────────
 

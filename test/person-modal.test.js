@@ -432,3 +432,43 @@ assert.ok(hostile.indexOf('Felt &lt;Fin&gt;') !== -1 && hostile.indexOf('T &lt;&
 assert.strictEqual(StandplassPersonModal.renderMeritterBody([], { compLinks: true }),
     '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>',
     'empty merits → the honest empty message');
+
+// ── branch switcher (owner ruling 2026-11-23: Alle/Felt/Bane, not ────
+// per-row tags — scales with future branches; rows stay untagged)
+
+var branchMerits = [
+    { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null, branch: 'felt' },
+    { year: 2026, scope: 'km', ovelse: '25m Grovpistol', klasse: 'Å', region: 'Hordaland',
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM bane 2026', team: null, branch: 'bane' },
+    { year: 2025, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
+      medal: 'Gull', compId: 'c3', compTitle: 'KM felt 2025 lag', team: 'Tysnes SSK 1', branch: 'felt' }
+];
+
+var branchBody = StandplassPersonModal.renderMeritterBody(branchMerits, { compLinks: false });
+var toggleAt = branchBody.indexOf('person-meritt-branch-toggle');
+assert.ok(toggleAt !== -1, 'mixed-branch merits render the switcher');
+var toggleHtml = branchBody.slice(toggleAt, branchBody.indexOf('</div>', toggleAt));
+assert.deepStrictEqual(
+    (toggleHtml.match(/data-branch="([^"]*)"/g) || []).map(function (s) { return s.slice(13, -1); }),
+    ['', 'felt', 'bane'],
+    'Alle first, then the present branches in fixed order');
+assert.ok(toggleHtml.indexOf('data-branch="" aria-pressed="true"') !== -1,
+    'Alle is the active default');
+assert.ok(branchBody.indexOf('25m Grovpistol') !== -1 && branchBody.indexOf('medal--silver') !== -1,
+    'Alle shows every branch');
+
+var feltBody = StandplassPersonModal.renderMeritterBody(branchMerits, { branch: 'felt' });
+assert.ok(feltBody.indexOf('25m Grovpistol') === -1, 'a branch filter drops the other branch\'s rows');
+assert.ok(feltBody.indexOf('Felt Grov') !== -1, 'the branch\'s own rows stay');
+assert.ok(feltBody.indexOf('medal--silver') === -1,
+    'chips recompute from the filtered merits — the bane sølv is gone');
+assert.ok(feltBody.indexOf('data-branch="felt" aria-pressed="true"') !== -1,
+    'the active branch button is marked');
+assert.ok(feltBody.indexOf('data-branch="" aria-pressed="false"') !== -1,
+    'Alle is no longer active under a branch filter');
+
+assert.ok(StandplassPersonModal.renderMeritterBody(
+    branchMerits.filter(function (m) { return m.branch === 'felt'; }), {}
+).indexOf('person-meritt-branch-toggle') === -1,
+    'single-branch merits render no switcher — nothing to filter');

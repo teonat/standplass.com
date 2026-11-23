@@ -305,6 +305,34 @@ var StandplassPersonModalController = (function () {
             // starts on Resultater by markup default.
             function wirePersonTabs() {
                 var meritterShown = false;
+                var merittBranch = null; // owner ruling 2026-11-23:
+                // the Meritter panel's Alle/Felt/Bane switcher state;
+                // per open, Alle by default
+                function renderMerittPanel(panel) {
+                    panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
+                    ensureMestereEntries().then(function (entries) {
+                        if (mySeq !== personOpenSeq) { return; }
+                        if (!entries.length) {
+                            panel.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste mesterskapsdata.</p>';
+                            return;
+                        }
+                        var merits = StandplassMestereData.meritterForPerson(entries, personId);
+                        panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
+                            compLinks: !!cfg.onOpenComp,
+                            branch: merittBranch
+                        });
+                        // The switcher buttons re-render the panel from
+                        // the instance-cached entries — no refetch.
+                        Array.prototype.forEach.call(
+                            panel.querySelectorAll('.person-meritt-branch-btn'),
+                            function (btn) {
+                                btn.addEventListener('click', function () {
+                                    merittBranch = btn.getAttribute('data-branch') || null;
+                                    renderMerittPanel(panel);
+                                });
+                            });
+                    });
+                }
                 function switchTab(tab) {
                     Array.prototype.forEach.call(
                         modalEl.querySelectorAll('.person-modal-tab-btn'),
@@ -318,18 +346,7 @@ var StandplassPersonModalController = (function () {
                     panel.hidden = tab !== 'meritter';
                     if (tab === 'meritter' && !meritterShown) {
                         meritterShown = true;
-                        panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
-                        ensureMestereEntries().then(function (entries) {
-                            if (mySeq !== personOpenSeq) { return; }
-                            if (!entries.length) {
-                                panel.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste mesterskapsdata.</p>';
-                                return;
-                            }
-                            var merits = StandplassMestereData.meritterForPerson(entries, personId);
-                            panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
-                                compLinks: !!cfg.onOpenComp
-                            });
-                        });
+                        renderMerittPanel(panel);
                     }
                 }
                 Array.prototype.forEach.call(
