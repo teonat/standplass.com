@@ -234,7 +234,20 @@ var StandplassMesterskapPage = (function () {
         if (rows.some(function (r) { return r.sum != null; })) {
             columns.push({
                 key: 'sum', label: 'Sum', align: 'right', sortable: true, defaultDir: 'desc',
-                cell: function (row) { return row.sum == null ? '–' : String(row.sum); }
+                raw: true,
+                // A lag member's sum carries the team's sum as a muted
+                // sub-line under the member's own (owner ruling
+                // 2026-11-23 — mirrors the lag-name sub-line under
+                // Navn); sorting stays on the member's own sum.
+                cell: function (row) {
+                    var main = row.sum == null ? '–' : String(row.sum);
+                    if (row.lag != null && row.lagSum != null) {
+                        return main
+                            + '<span class="mesterskap-lag-sub">'
+                            + String(row.lagSum) + '</span>';
+                    }
+                    return main;
+                }
             });
         }
         if (regionKey) {

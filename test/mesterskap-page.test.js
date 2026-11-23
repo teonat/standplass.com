@@ -247,6 +247,9 @@ assert.ok(ukjentCell.indexOf('mesterskap-lag-tag') === -1,
 assert.strictEqual(mcol('klasse').cell(toreRow), 'Lag Å');
 assert.strictEqual(mcol('klasse').cell(ukjentRow), 'Lag Å',
     'the lag\u2019s own section class — not the member\u2019s');
+assert.strictEqual(mcol('sum').cell(toreRow), '107<span class="mesterskap-lag-sub">318</span>',
+    'the lag score rides under the member\u2019s own sum (owner ruling — mirrors the Navn sub-line)');
+assert.strictEqual(mcol('sum').cell(ukjentRow), '106<span class="mesterskap-lag-sub">318</span>');
 assert.strictEqual(mcol('club').cell({ isTeam: true, lag: 'GPK 1', club: null, name: 'X' }), '–',
     'member rows without a resolved club show a dash, never a lag-name-derived club (owner ruling)');
 assert.strictEqual(mcol('club').cell({ isTeam: true, lag: null, club: null, name: 'GPK 1' }), 'GPK',

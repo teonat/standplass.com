@@ -330,6 +330,7 @@ assert.strictEqual(tore.klasse, 'Lag Å', 'the lag\u2019s own class — the sect
 assert.strictEqual(tore.personId, 'p1');
 assert.strictEqual(tore.club, 'Greipstad Pistolklubb', 'the member\u2019s resolved club');
 assert.strictEqual(tore.sum, 107, 'the member\u2019s own sum');
+assert.strictEqual(tore.lagSum, 318, 'the team\u2019s sum rides on member rows for the Sum sub-line');
 assert.strictEqual(tore.lag, 'Greipstad PK1', 'the lag name rides on the row');
 assert.strictEqual(tore.medal, 'Gull', 'the team\u2019s medal');
 assert.ok(tore.isTeam, 'member rows count as lag for the type filter');
@@ -346,6 +347,8 @@ assert.strictEqual(barum.ovelse, 'Felt Fin');
 assert.strictEqual(barum.klasse, 'Lag Å',
     'the fallback team row uses the same section class');
 assert.strictEqual(barum.sum, 310, 'the team sum on the fallback');
+assert.strictEqual(barum.lagSum, null,
+    'the fallback team row\u2019s sum IS the team sum — no sub-line');
 var kjetil = mRows.filter(function (r) { return r.name === 'Kjetil Skogshagen'; })[0];
 assert.strictEqual(kjetil.ovelse, 'Felt Fin', 'mix sections carry the bare øvelse name too');
 assert.strictEqual(kjetil.klasse, 'Mix-lag',
@@ -353,6 +356,7 @@ assert.strictEqual(kjetil.klasse, 'Mix-lag',
 var mona = mRows.filter(function (r) { return r.name === 'Mona Gjelstad'; })[0];
 assert.strictEqual(mona.klasse, 'Mix-lag');
 assert.strictEqual(mona.club, 'Larvik SK', 'each member carries their own club — mix halves can differ');
+assert.strictEqual(mona.lagSum, 198, 'mix member rows carry the team sum too');
 assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
     ['Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad', 'Solo'],
     'member rows sort by klasse/medal/name like any other row (Lag Å < Mix-lag < Å)');

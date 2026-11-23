@@ -227,10 +227,10 @@ var StandplassMestereData = (function () {
     // membered team into one row per member — the member's name,
     // personId, own sum and resolved club, the team's medal, a
     // 'Lag Å'-style klasse (the section's own class — the lag's class
-    // system, not the member's), and the lag name on the row for the
-    // sub-line under Navn. Teammates share a podiumKey so stats count
-    // the team's medal once. Memberless teams fall back to the team
-    // row (never lose a medal).
+    // system, not the member's), and the lag name + the team's sum on
+    // the row for the sub-lines under Navn and Sum. Teammates share a
+    // podiumKey so stats count the team's medal once. Memberless
+    // teams fall back to the team row (never lose a medal).
     function podiumRows(index, scope) {
         var rows = [];
         var sectionKeys = [scope, scope + 'Lag'];
@@ -268,6 +268,7 @@ var StandplassMestereData = (function () {
                                     personId: m.personId || null,
                                     club: m.club || row.club || null,
                                     sum: m.sum == null ? null : m.sum,
+                                    lagSum: row.sum == null ? null : row.sum,
                                     isTeam: true,
                                     lag: row.team,
                                     podiumKey: podiumKey,
@@ -291,6 +292,7 @@ var StandplassMestereData = (function () {
                             personId: isTeam ? null : (row.personId || null),
                             club: row.club || null,
                             sum: row.sum == null ? null : row.sum,
+                            lagSum: null,
                             isTeam: isTeam,
                             lag: null,
                             podiumKey: podiumKey,
