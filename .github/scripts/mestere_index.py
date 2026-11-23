@@ -122,7 +122,10 @@ def _team_champions(teams, club_map=None):
     the comp's API results carry — PDF team names are often
     abbreviations ('GPK 1'), and members matched to persons give the
     canonical club. No resolvable member → no club; the frontend then
-    falls back to the club embedded in the lag name."""
+    falls back to the club embedded in the lag name. Members flow
+    through as {name, klasse?, personId?, club?, sum?} — the member's
+    own printed class, and each member's club through the same
+    club_map when the member matched a person."""
     club_map = club_map or {}
     out = []
     for t in teams:
@@ -131,11 +134,26 @@ def _team_champions(teams, club_map=None):
         entry = {'medal': t['medal'], 'team': t['team']}
         if t.get('sum') is not None:
             entry['sum'] = t['sum']
+        members = []
         for m in t.get('members') or []:
-            club = club_map.get(m.get('personId'))
-            if club:
-                entry['club'] = club
-                break
+            member = {'name': m.get('name')}
+            if m.get('klasse'):
+                member['klasse'] = m['klasse']
+            if m.get('personId'):
+                member['personId'] = m['personId']
+                club = club_map.get(m['personId'])
+                if club:
+                    member['club'] = club
+            if m.get('sum') is not None:
+                member['sum'] = m['sum']
+            members.append(member)
+        if members:
+            entry['members'] = members
+            if 'club' not in entry:
+                for member in members:
+                    if member.get('club'):
+                        entry['club'] = member['club']
+                        break
         out.append(entry)
     return out
 
@@ -152,6 +170,38 @@ def _sections_from_classes(ovelse_name, classes, podium_fn, region=None):
                 section['region'] = region
             sections.append(section)
     return sections
+
+
+def _lag_sections_from_classes(ovelse_name, classes, club_map):
+    """Lag-øvelse classes → sections with team podiums. v15 classes
+    carry teams (members ride along through _team_champions);
+    row-shaped classes fall back to the fused-row team podium so no
+    medal is lost in transition."""
+    sections = []
+    for c in classes:
+        if 'teams' in c:
+            podium = _team_champions(c['teams'], club_map)
+        else:
+            podium = _team_podium(c.get('rows', []))
+        if podium:
+            sections.append({'ovelse': ovelse_name,
+                             'klasse': c.get('klasse'),
+                             'podium': podium})
+    return sections
+
+
+def _mix_lag_section(ovelse_name, classes, club_map):
+    """Mix-lag øvelser pool their teams across classes under the
+    'Mix' klasse — mixed classes shoot one shared podium."""
+    if any('teams' in c for c in classes):
+        teams = [t for c in classes for t in c.get('teams', [])]
+        podium = _team_champions(teams, club_map)
+    else:
+        rows = [r for c in classes for r in c.get('rows', [])]
+        podium = _team_podium(rows)
+    if not podium:
+        return None
+    return {'ovelse': ovelse_name, 'klasse': 'Mix', 'podium': podium}
 
 
 def _comp_discipline(comp):
@@ -206,8 +256,13 @@ def _classify(detail, comp):
 
         if comp_nm:
             if navn.startswith('Lag: '):
-                out['nmLag'].extend(_sections_from_classes(
-                    navn[len('Lag: '):], classes, _team_podium))
+                out['nmLag'].extend(_lag_sections_from_classes(
+                    navn[len('Lag: '):], classes, club_map))
+            elif navn.startswith('Mix-lag: '):
+                section = _mix_lag_section(navn[len('Mix-lag: '):],
+                                           classes, club_map)
+                if section:
+                    out['nmLag'].append(section)
             else:
                 out['nm'].extend(_sections_from_classes(
                     navn, classes, person_podium))
@@ -218,12 +273,9 @@ def _classify(detail, comp):
             scope = m.group(1).lower()
             name = m.group(2)
             if 'Mix-lag' in navn:
-                pooled = [r for c in classes for r in c.get('rows', [])]
-                podium = _team_podium(pooled)
-                if podium:
-                    out[scope + 'Lag'].append({'ovelse': name,
-                                               'klasse': 'Mix',
-                                               'podium': podium})
+                section = _mix_lag_section(name, classes, club_map)
+                if section:
+                    out[scope + 'Lag'].append(section)
             else:
                 out[scope].extend(_sections_from_classes(
                     name, classes, person_podium))

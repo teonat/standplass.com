@@ -353,7 +353,18 @@ class MestereIndex(unittest.TestCase):
         lag = next(s for s in entry['kmLag'] if s['ovelse'] == 'Hurtig Sp Pistol')
         self.assertEqual(lag['podium'][0],
                          {'medal': 'Gull', 'team': 'GPK 1', 'sum': 1689,
-                          'club': 'Greipstad Pistolklubb'})
+                          'club': 'Greipstad Pistolklubb',
+                          'members': [
+                              {'name': 'Tore Vrålstad', 'klasse': 'Å',
+                               'personId': 'd67204cf-f707-46a2-3fb5-08dae4550a3b',
+                               'club': 'Greipstad Pistolklubb', 'sum': 574},
+                              {'name': 'Stian Rustøen', 'klasse': 'Å',
+                               'personId': 'dea6b0b4-d76b-4494-6b21-08d880cfb35f',
+                               'club': 'Greipstad Pistolklubb', 'sum': 562},
+                              {'name': 'Arne Landsverk', 'klasse': 'Å',
+                               'personId': '2b214c5b-b341-491b-4159-08dae4550a3b',
+                               'club': 'Greipstad Pistolklubb', 'sum': 553},
+                          ]})
 
     def test_nm_comp_over_blinken_pdf_creates_nm_sections(self):
         index = build_mestere_index('felt', '2025', root=self.root)
