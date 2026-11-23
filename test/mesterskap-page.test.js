@@ -213,4 +213,41 @@ var empty = MP.emptyYearCard('bane', 2025, false);
 assert.ok(empty.indexOf('baneskyting') !== -1);
 assert.ok(empty.indexOf('2025') !== -1);
 
+// ── tableSpecFor cells: lag member rows (sub-line under Navn) ────────
+// Owner ruling 2026-11-23: the lag name goes under the person's name as
+// a muted sub-line — no dedicated Lag column.
+
+var memberRows = global.StandplassMestereData.podiumRows({ year: 2025, comps: [comp('mx', {
+    kmLag: [sec('Felt Fin', 'Å', [
+        { medal: 'Gull', team: 'GPK 1', sum: 318, members: [
+            { name: 'Tore Vrålstad', klasse: 'M', personId: 'p1', club: 'Greipstad Pistolklubb', sum: 107 },
+            { name: 'Ukjent Skytter', klasse: 'K', sum: 106 }
+        ] }
+    ])]
+})] }, 'km');
+assert.strictEqual(memberRows.length, 2);
+var mSpec = MP.tableSpecFor(memberRows, 'km');
+function mcol(key) {
+    return mSpec.columns.filter(function (c) { return c.key === key; })[0];
+}
+var toreRow = memberRows.filter(function (r) { return r.personId === 'p1'; })[0];
+var ukjentRow = memberRows.filter(function (r) { return r.name === 'Ukjent Skytter'; })[0];
+var toreCell = mcol('name').cell(toreRow);
+assert.ok(toreCell.indexOf('stevner-person-btn') !== -1
+    && toreCell.indexOf('data-person-id="p1"') !== -1,
+    'matched members link like person rows');
+assert.ok(toreCell.indexOf('Lag: GPK 1') !== -1,
+    'the lag name rides as a sub-line under Navn');
+var ukjentCell = mcol('name').cell(ukjentRow);
+assert.ok(ukjentCell.indexOf('stevner-person-btn') === -1,
+    'unmatched members stay plain text');
+assert.ok(ukjentCell.indexOf('Lag: GPK 1') !== -1);
+assert.ok(ukjentCell.indexOf('mesterskap-lag-tag') === -1,
+    'member rows are persons, not the fallback team row');
+assert.strictEqual(mcol('klasse').cell(toreRow), 'Menn lag');
+assert.strictEqual(mcol('klasse').cell(ukjentRow), 'Kvinner lag',
+    'Kvinner sorts before Menn — the rows arrive name-selected, not index-picked');
+assert.strictEqual(mcol('club').cell({ isTeam: true, lag: 'GPK 1', club: null, name: 'X' }), 'GPK',
+    'member rows without a resolved club show the club from the lag name');
+
 console.log('mesterskap-page.test.js: all assertions passed');

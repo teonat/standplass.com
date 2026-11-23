@@ -139,10 +139,23 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The Navn column: a person-modal button on person rows, escaped
-    // plain text otherwise. Team rows carry the team as name plus a
-    // visible lag tag — without it they read as club-less persons
-    // (owner QA) — the house raw-cell person-link pattern.
+    // plain text otherwise. Lag member rows link like person rows and
+    // carry the lag name as a muted sub-line (owner ruling 2026-11-23
+    // — no dedicated Lag column); fallback team rows keep the lag tag
+    // so they don't read as club-less persons (owner QA) — the house
+    // raw-cell person-link pattern.
     function personCell(row) {
+        if (row.lag != null) {
+            var label = row.personId
+                ? '<button type="button" class="stevner-person-btn link-btn"'
+                    + ' data-person-id="' + esc(row.personId)
+                    + '" data-person-name="' + esc(row.name) + '">'
+                    + esc(row.name) + '</button>'
+                : esc(row.name);
+            return label
+                + '<span class="mesterskap-lag-sub">Lag: '
+                + esc(row.lag) + '</span>';
+        }
         if (row.personId && !row.isTeam) {
             return '<button type="button" class="stevner-person-btn link-btn"'
                 + ' data-person-id="' + esc(row.personId)
@@ -209,7 +222,10 @@ var StandplassMesterskapPage = (function () {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
                 cell: function (row) {
                     if (row.club != null) { return row.club; }
-                    if (row.isTeam) { return StandplassMestereData.teamClub(row.name); }
+                    if (row.isTeam) {
+                        return StandplassMestereData.teamClub(
+                            row.lag != null ? row.lag : row.name);
+                    }
                     return '–';
                 }
             }

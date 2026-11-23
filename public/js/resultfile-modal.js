@@ -81,12 +81,18 @@ var StandplassResultfileModal = (function () {
         var d = detail || {};
         var sections = [];
         (d.ovelser || []).forEach(function (o) {
-            var isLag = LAG_OVELSE.test(o.navn || '');
+            var classes = o.classes || [];
+            // v15 lag øvelser carry teams directly (already in team
+            // shape, members included); the navn check + fused-row
+            // splitting stays as the pre-v15 fallback.
+            var isLag = LAG_OVELSE.test(o.navn || '')
+                || classes.some(function (c) { return c.teams != null; });
             sections.push({
                 navn: o.navn || '',
                 isLag: isLag,
-                classes: (o.classes || []).map(function (c) {
-                    var rows = (c.rows || []).map(isLag ? teamFromRow : identity);
+                classes: classes.map(function (c) {
+                    var rows = c.teams != null ? c.teams
+                        : (c.rows || []).map(isLag ? teamFromRow : identity);
                     return { klasse: c.klasse || '', rows: rows };
                 })
             });

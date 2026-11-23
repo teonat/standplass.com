@@ -2056,6 +2056,15 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   vertical-align: 1px;
 }
 
+/* Lag member rows: the lag name rides as a muted sub-line under the
+   person's name (owner ruling 2026-11-23 — no dedicated Lag column). */
+.mesterskap-lag-sub {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* The medal column reads as the row's anchor — heavier, no color games
    (gull/sølv/bronse tints are a styling rabbit hole in dark mode). */
 .medal-cell { font-weight: 600; }

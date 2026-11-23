@@ -201,25 +201,86 @@ var StandplassMestereData = (function () {
             .trim();
     }
 
+    // A lag row's class cell: the member's own printed class (M/K/V55/
+    // …), the single letters spelled out, with 'lag' appended — 'Menn
+    // lag'. Mix teams are their own type ('Mix lag' — one male + one
+    // female, the participants' classes don't define the team).
+    var KLASSER = { M: 'Menn', K: 'Kvinner' };
+
+    function lagKlasse(klasse) {
+        if (klasse == null) { return null; }
+        return (KLASSER[klasse] || klasse) + ' lag';
+    }
+
     // One row per podium finish for the scope, individual and lag
     // sections together, each stamped with its comp's context and
     // pre-sorted into the order the mesterskap pages open with:
     // øvelse program rank, klasse (Norwegian collation, nulls last),
-    // medal rank, then name. Team rows carry the team string as name
-    // and no personId; their club is the index's member-resolved
-    // canonical club when present, and they keep their lag sum.
+    // medal rank, then name. Lag sections label their øvelse with the
+    // team prefix ('Lag Felt Fin' / 'Mix-lag Felt Fin', ranked on the
+    // bare name) and expand each membered team into one row per
+    // member — the member's name, personId, own sum and resolved
+    // club, the team's medal, a 'Menn lag'-style klasse, and the lag
+    // name on the row for the sub-line under Navn. Teammates share a
+    // podiumKey so stats count the team's medal once. Memberless
+    // teams fall back to the team row (never lose a medal).
     function podiumRows(index, scope) {
         var rows = [];
         var sectionKeys = [scope, scope + 'Lag'];
         ((index || {}).comps || []).forEach(function (comp) {
             sectionKeys.forEach(function (key) {
+                var isLagKey = key !== scope;
                 (comp[key] || []).forEach(function (section) {
+                    var isMix = isLagKey && section.klasse === 'Mix';
+                    var ovelse = isLagKey
+                        ? (isMix ? 'Mix-lag ' : 'Lag ') + section.ovelse
+                        : section.ovelse;
+                    var rank = programRank(section.ovelse);
+                    var context = {
+                        region: comp.region || null,
+                        distrikt: comp.distrikt || null,
+                        date: comp.date || null,
+                        organizer: comp.organizer || null,
+                        compId: comp.compId
+                    };
                     (section.podium || []).forEach(function (row) {
                         var isTeam = row.team != null;
+                        var members = isTeam ? (row.members || []) : [];
+                        var podiumKey = isTeam
+                            ? [comp.compId, key, section.ovelse,
+                               section.klasse, row.medal, row.team].join('|')
+                            : null;
+                        if (members.length) {
+                            members.forEach(function (m) {
+                                rows.push({
+                                    ovelse: ovelse,
+                                    ovelseRank: rank,
+                                    klasse: isMix ? 'Mix lag'
+                                        : lagKlasse(m.klasse != null
+                                            ? m.klasse : section.klasse),
+                                    medal: row.medal,
+                                    medalRank: medalRank(row.medal),
+                                    name: m.name,
+                                    personId: m.personId || null,
+                                    club: m.club || row.club || null,
+                                    sum: m.sum == null ? null : m.sum,
+                                    isTeam: true,
+                                    lag: row.team,
+                                    podiumKey: podiumKey,
+                                    region: context.region,
+                                    distrikt: context.distrikt,
+                                    date: context.date,
+                                    organizer: context.organizer,
+                                    compId: context.compId
+                                });
+                            });
+                            return;
+                        }
                         rows.push({
-                            ovelse: section.ovelse,
-                            ovelseRank: programRank(section.ovelse),
-                            klasse: section.klasse == null ? null : section.klasse,
+                            ovelse: ovelse,
+                            ovelseRank: rank,
+                            klasse: isLagKey ? lagKlasse(section.klasse)
+                                : (section.klasse == null ? null : section.klasse),
                             medal: row.medal,
                             medalRank: medalRank(row.medal),
                             name: isTeam ? row.team : row.name,
@@ -227,11 +288,13 @@ var StandplassMestereData = (function () {
                             club: row.club || null,
                             sum: row.sum == null ? null : row.sum,
                             isTeam: isTeam,
-                            region: comp.region || null,
-                            distrikt: comp.distrikt || null,
-                            date: comp.date || null,
-                            organizer: comp.organizer || null,
-                            compId: comp.compId
+                            lag: null,
+                            podiumKey: podiumKey,
+                            region: context.region,
+                            distrikt: context.distrikt,
+                            date: context.date,
+                            organizer: context.organizer,
+                            compId: context.compId
                         });
                     });
                 });
@@ -284,19 +347,27 @@ var StandplassMestereData = (function () {
 
     // Counts for the stats line over the filtered rows: medals, distinct
     // øvelser, distinct regions (krets for km, distrikt for dm, none for
-    // nm) and distinct clubs (team rows carry none).
+    // nm) and distinct clubs. A team's medal counts once — its member
+    // rows share a podiumKey (owner ruling 2026-11-23).
     function statsFor(rows, scope) {
         var ovelser = {};
         var regions = {};
         var clubs = {};
+        var medals = 0;
+        var teamMedals = {};
         (rows || []).forEach(function (r) {
             ovelser[r.ovelse] = true;
             if (r.club != null) { clubs[r.club] = true; }
             if (scope === 'km' && r.region != null) { regions[r.region] = true; }
             if (scope === 'dm' && r.distrikt != null) { regions[r.distrikt] = true; }
+            if (r.isTeam && r.podiumKey != null) {
+                teamMedals[r.podiumKey] = true;
+            } else {
+                medals += 1;
+            }
         });
         return {
-            medaljer: (rows || []).length,
+            medaljer: medals + Object.keys(teamMedals).length,
             ovselser: Object.keys(ovelser).length,
             regioner: scope === 'nm' ? null : Object.keys(regions).length,
             klubber: Object.keys(clubs).length

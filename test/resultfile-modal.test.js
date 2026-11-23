@@ -103,6 +103,55 @@ assert.deepStrictEqual(RFM.ovelseSections({}), { sections: [], maxFeltPoints: nu
 assert.deepStrictEqual(RFM.ovelseSections(null), { sections: [], maxFeltPoints: null },
     'a null detail is empty sections too');
 
+// ── ovelseSections: v15 teams-key lag øvelser ──────────────────────────
+// Parser v15 stores lag øvelser as classes with teams (the same shape
+// the km/dm overlays carry) — the fused-row shape above stays as a
+// pre-v15 fallback.
+
+var v15Detail = {
+    generator: 'inrX 1.9.0.0',
+    ovelser: [
+        { navn: 'Felt Fin', classes: [{ klasse: 'Å', rows: [
+            { medal: 'Gull', name: 'Eirik Djønne', club: 'Odda Pistolklubb',
+              series: [[9, 5]], ix: 33, sum: 90, personId: 'p1' }
+        ] }] },
+        { navn: 'Lag: Felt Fin', classes: [
+            { klasse: 'Å', teams: [
+                { medal: 'Gull', team: 'Greipstad PK1',
+                  series: [[27, 0], [36, 15]], ix: 76, sum: 318, members: [
+                    { name: 'Tore Vrålstad', klasse: 'M', ix: 26, sum: 107, personId: 'p1' },
+                    { name: 'Ukjent Skytter', klasse: 'K', ix: 22, sum: 106 }
+                ] }
+            ] }
+        ] },
+        { navn: 'Mix-lag: Felt Fin', classes: [
+            { klasse: 'Å', teams: [
+                { medal: 'Gull', team: 'Farris SS1',
+                  series: [[18, 0], [20, 5]], ix: 41, sum: 198, members: [
+                    { name: 'Kjetil Skogshagen', klasse: 'V55', ix: 22, sum: 101 }
+                ] }
+            ] }
+        ] }
+    ]
+};
+var v15Parts = RFM.ovelseSections(v15Detail);
+assert.strictEqual(v15Parts.sections.length, 3);
+assert.ok(v15Parts.sections[1].isLag, 'a teams-key øvelse is a lag section');
+assert.strictEqual(v15Parts.sections[1].classes[0].rows.length, 1,
+    'the teams are the section\u2019s rows, already in team shape');
+assert.strictEqual(v15Parts.sections[1].classes[0].rows[0].team, 'Greipstad PK1');
+assert.strictEqual(v15Parts.sections[1].classes[0].rows[0].members.length, 2);
+assert.ok(v15Parts.sections[2].isLag, 'Mix-lag øvelser with teams are lag sections too');
+var v15Body = RFM.renderDetailBody(v15Detail);
+assert.ok(v15Body.indexOf('<td>Greipstad PK1</td>') !== -1,
+    'the team renders by name');
+assert.ok(v15Body.indexOf('Tore Vrålstad</button> (107)') !== -1,
+    'v15 members render as person buttons with their sums');
+assert.ok(v15Body.indexOf('Ukjent Skytter (106)') !== -1,
+    'unmatched members render with their sums');
+assert.ok(v15Body.indexOf('>Medlemmer<') !== -1,
+    'lag tables with members keep the Medlemmer column');
+
 // ── maxFeltLine ────────────────────────────────────────────────────────
 
 assert.strictEqual(RFM.maxFeltLine({ group1: 80, group2: 70 }),
