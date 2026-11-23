@@ -227,7 +227,16 @@ var StandplassPersonModalController = (function () {
                 discs: (urlFilters && urlFilters.discs) || [],
                 classes: (urlFilters && urlFilters.classes) || []
             };
-            if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
+            // Every fresh open starts on the page's default chart — the
+            // previous session's toggle does not carry across opens
+            // (owner ruling 2026-11-23: too many starting points already
+            // manipulate the metric — p_metric deep links, explicit
+            // entry-point metrics, the activation's rankless fallback —
+            // for an invisible fourth one on top). Explicit starting
+            // points still win: a p_metric deep link or an entry point's
+            // opts.metric.
+            modalMetric = (urlFilters && urlFilters.metric)
+                || cfg.initialMetric || 'rankingScore';
             // Deep-link state for the Meritter tab (p_tab/p_branch);
             // plain row opens never carry it — Resultater/Alle.
             var personTab = (urlFilters && urlFilters.tab) || null;
@@ -663,8 +672,8 @@ var StandplassPersonModalController = (function () {
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
             // ask for a specific chart (a placements leaderboard opens
-            // Plassering). Without it the last-active metric sticks,
-            // exactly like the modal's own toggle buttons.
+            // Plassering). Without it every fresh open starts on the
+            // page's default chart.
             renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
                 opts.metric ? { metric: opts.metric } : null, opts.entry || null);
         }
