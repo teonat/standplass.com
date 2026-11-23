@@ -555,12 +555,130 @@ var StandplassPersonModal = (function () {
         ];
     }
 
+    // ── Meritter tab rendering ─────────────────────────────────────────
+    // Consumes meritterForPerson's rows. The chips split individual and
+    // lag kinds (owner ruling 2026-11-23: separate chips, only non-zero
+    // kinds); the body groups rows by year, newest first, with the lag
+    // team name inline and muted. Medal badges reuse ranking-band's
+    // markup (class names are the contract) so existing CSS styles
+    // them without a module dependency.
+
+    var CHIP_KINDS = [
+        { key: 'nm', label: 'NM' },
+        { key: 'nmLag', label: 'NM-lag' },
+        { key: 'dm', label: 'DM' },
+        { key: 'dmLag', label: 'DM-lag' },
+        { key: 'km', label: 'KM' },
+        { key: 'kmLag', label: 'KM-lag' }
+    ];
+    var MERITT_MEDALS = [
+        { name: 'Gull', pos: 1, cls: 'medal--gold' },
+        { name: 'Sølv', pos: 2, cls: 'medal--silver' },
+        { name: 'Bronse', pos: 3, cls: 'medal--bronze' }
+    ];
+
+    function medalByName(name) {
+        for (var i = 0; i < MERITT_MEDALS.length; i++) {
+            if (MERITT_MEDALS[i].name === name) { return MERITT_MEDALS[i]; }
+        }
+        return null;
+    }
+
+    // A merit row's badge shows the position (1/2/3) like the results
+    // table's Plass cell; a chip's span shows the count instead.
+    function meritBadge(medal) {
+        var m = medalByName(medal);
+        return m ? '<span class="medal ' + m.cls + '">' + String(m.pos) + '</span>' : '';
+    }
+
+    function medalSpan(medal, n) {
+        var m = medalByName(medal);
+        if (!m) { return ''; }
+        return '<span class="medal ' + m.cls + '">' + String(n) + '</span>';
+    }
+
+    // merits → [{key, label, counts}] — key 'kmLag' for a merit with a
+    // team, 'km' without; counts is {Gull, Sølv, Bronse} (zeros kept —
+    // the renderer omits them). Fixed kind order, only non-zero kinds.
+    function meritterChips(merits) {
+        var byKind = {};
+        (merits || []).forEach(function (m) {
+            var kind = m.team != null ? m.scope + 'Lag' : m.scope;
+            if (!Object.prototype.hasOwnProperty.call(byKind, kind)) {
+                byKind[kind] = { Gull: 0, Sølv: 0, Bronse: 0 };
+            }
+            if (byKind[kind][m.medal] != null) { byKind[kind][m.medal] += 1; }
+        });
+        return CHIP_KINDS.filter(function (k) {
+            return Object.prototype.hasOwnProperty.call(byKind, k.key);
+        }).map(function (k) {
+            return { key: k.key, label: k.label, counts: byKind[k.key] };
+        });
+    }
+
+    function meritRowHtml(m, compLinks) {
+        var parts = [meritBadge(m.medal)];
+        parts.push('<span class="person-meritt-ovelse">' + esc(m.ovelse) + '</span>');
+        if (m.klasse != null) {
+            parts.push('<span class="person-meritt-klasse">' + esc(m.klasse) + '</span>');
+        }
+        if (m.team != null) {
+            parts.push('<span class="person-meritt-team">' + esc(m.team) + '</span>');
+        }
+        if (m.region != null) {
+            parts.push('<span class="person-meritt-region">' + esc(m.region) + '</span>');
+        }
+        var title = m.compTitle == null ? '' : esc(m.compTitle);
+        if (compLinks && m.compId != null) {
+            parts.push('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
+                + ' data-comp-id="' + esc(m.compId) + '"'
+                + ' data-comp-title="' + title + '">' + title + '</button>');
+        } else {
+            parts.push('<span class="person-meritt-comp">' + title + '</span>');
+        }
+        return '<div class="person-meritt-row">' + parts.join('') + '</div>';
+    }
+
+    // The Meritter tab's whole body: chips row + year-grouped list.
+    // opts.compLinks renders comp titles as delegated link buttons
+    // (hosts with a comp modal) instead of plain spans.
+    function renderMeritterBody(merits, opts) {
+        if (!merits || !merits.length) {
+            return '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>';
+        }
+        opts = opts || {};
+        var chipsHtml = meritterChips(merits).map(function (c) {
+            var counts = MERITT_MEDALS.filter(function (md) { return c.counts[md.name] > 0; })
+                .map(function (md) { return medalSpan(md.name, c.counts[md.name]); })
+                .join('');
+            return '<span class="person-meritt-chip" data-kind="' + esc(c.key) + '">'
+                + esc(c.label) + counts + '</span>';
+        }).join('');
+        var years = [];
+        var byYear = {};
+        (merits || []).forEach(function (m) {
+            if (!Object.prototype.hasOwnProperty.call(byYear, m.year)) {
+                byYear[m.year] = [];
+                years.push(m.year);
+            }
+            byYear[m.year].push(m);
+        });
+        years.sort(function (a, b) { return b - a; });
+        var listHtml = years.map(function (y) {
+            return '<h3 class="person-meritt-year">' + esc(String(y)) + '</h3>'
+                + byYear[y].map(function (m) { return meritRowHtml(m, !!opts.compLinks); }).join('');
+        }).join('');
+        return '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
+    }
+
     return {
         parsePersonFromUrl: parsePersonFromUrl,
         buildPersonUrl: buildPersonUrl,
         clearPersonFromUrl: clearPersonFromUrl,
         shortDate: shortDate,
         resultsTableColumns: resultsTableColumns,
+        meritterChips: meritterChips,
+        renderMeritterBody: renderMeritterBody,
         chartPoints: chartPoints,
         dotColor: dotColor,
         computeOverlapCounts: computeOverlapCounts,

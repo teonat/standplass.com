@@ -332,3 +332,103 @@ assert.ok(pmTable.indexOf('<td><span class="medal medal--bronze">3</span></td>')
 // every header sortable, Dato carrying the initial aria-sort
 assert.strictEqual((pmTable.match(/dt-sort-btn/g) || []).length, 7, 'seven sortable header buttons');
 assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carries the initial ascending sort');
+
+// ── Meritter tab: chips + body rendering (owner rulings 2026-11-23) ────
+// Merit rows are meritterForPerson's shape; the chips split individual
+// and lag kinds (separate chips), and lag rows carry the muted team span.
+
+var meritFixture = [
+    { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null },
+    { year: 2026, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1' },
+    { year: 2025, scope: 'nm', ovelse: 'Felt Fin', klasse: null, region: null,
+      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null }
+];
+
+var chips = StandplassPersonModal.meritterChips(meritFixture);
+assert.deepStrictEqual(chips.map(function (c) { return c.key; }), ['nm', 'km', 'kmLag'],
+    'chip kinds in the fixed order, lag keyed off team, only non-zero kinds');
+var chipByKey = {};
+chips.forEach(function (c) { chipByKey[c.key] = c; });
+assert.deepStrictEqual(chipByKey.km, { key: 'km', label: 'KM', counts: { Gull: 1, Sølv: 0, Bronse: 0 } },
+    'counts keep all three medals, zeros included');
+assert.deepStrictEqual(chipByKey.kmLag, { key: 'kmLag', label: 'KM-lag', counts: { Gull: 0, Sølv: 1, Bronse: 0 } },
+    'a lag merit counts into its own kmLag chip');
+assert.strictEqual(chipByKey.nm.label, 'NM');
+
+var lagOnlyChips = StandplassPersonModal.meritterChips([
+    { year: 2026, scope: 'dm', ovelse: '25m Grov', klasse: 'Mix-lag', region: 'Østlandet Sør',
+      medal: 'Gull', compId: 'd1', compTitle: 'DM 2026', team: 'Brumunddal PK' }
+]);
+assert.deepStrictEqual(lagOnlyChips.map(function (c) { return c.key; }), ['dmLag'],
+    'a lag-only shooter gets no individual chips');
+assert.strictEqual(lagOnlyChips[0].label, 'DM-lag');
+assert.deepStrictEqual(StandplassPersonModal.meritterChips([]), [], 'no merits → no chips');
+
+var meritBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: true });
+
+// chips row: labels + medal spans with counts, zeros omitted
+var chipsAt = meritBody.indexOf('person-meritt-chips');
+assert.ok(chipsAt !== -1, 'the chips row renders');
+var chipsHtml = meritBody.slice(chipsAt, meritBody.indexOf('</div>', chipsAt));
+['km', 'kmLag', 'nm'].forEach(function (k) {
+    assert.ok(chipsHtml.indexOf('data-kind="' + k + '"') !== -1, 'chip ' + k + ' renders');
+});
+assert.ok(chipsHtml.indexOf('data-kind="nmLag"') === -1 && chipsHtml.indexOf('data-kind="dm"') === -1,
+    'zero kinds get no chip');
+assert.ok(chipsHtml.indexOf('KM') !== -1 && chipsHtml.indexOf('KM-lag') !== -1
+    && chipsHtml.indexOf('NM') !== -1, 'chip labels use the scope + -lag forms');
+assert.strictEqual((chipsHtml.match(/class="medal /g) || []).length, 3,
+    'one medal span per non-zero count');
+assert.ok(chipsHtml.indexOf('>0<') === -1, 'zero counts are omitted from the chips');
+
+// year groups, newest first; per-merit medal badges mirror ranking-band markup
+assert.ok(meritBody.indexOf('person-meritt-year">2026') < meritBody.indexOf('person-meritt-year">2025'),
+    'year headings group the list, newest first');
+assert.ok(meritBody.indexOf('<span class="medal medal--gold">1</span>') !== -1,
+    'a gull merit renders the gold badge with position 1');
+assert.ok(meritBody.indexOf('<span class="medal medal--silver">2</span>') !== -1,
+    'a sølv merit renders the silver badge with position 2');
+assert.ok(meritBody.indexOf('<span class="medal medal--bronze">3</span>') !== -1,
+    'a bronse merit renders the bronze badge with position 3');
+
+// row parts: only when present; the lag team span sits between class and region
+assert.strictEqual((meritBody.match(/person-meritt-klasse/g) || []).length, 2,
+    'klasse renders only when present (2 of 3 merits)');
+assert.strictEqual((meritBody.match(/person-meritt-region/g) || []).length, 2,
+    'region renders only when present (2 of 3 merits)');
+assert.strictEqual((meritBody.match(/person-meritt-team/g) || []).length, 1,
+    'only the lag merit carries a team span');
+var teamAt = meritBody.indexOf('Tysnes SSK 1');
+assert.ok(meritBody.indexOf('Lag Å') < teamAt && teamAt < meritBody.indexOf('Vestlandet'),
+    'the team name sits inline between the class and the region, muted by its class');
+
+// comp links on: buttons carrying id + title for delegation
+assert.ok(meritBody.indexOf('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
+    + ' data-comp-id="c2" data-comp-title="KM felt 2026 lag">KM felt 2026 lag</button>') !== -1,
+    'comp titles render as link buttons carrying id + title for delegation');
+
+// comp links off (and by default): plain spans, no buttons
+var plainBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: false });
+assert.ok(plainBody.indexOf('<button') === -1, 'no link buttons without a comp-modal host');
+assert.ok(plainBody.indexOf('<span class="person-meritt-comp">KM felt 2026</span>') !== -1,
+    'comp titles render as plain spans');
+assert.ok(StandplassPersonModal.renderMeritterBody(meritFixture).indexOf('<button') === -1,
+    'compLinks defaults off');
+
+// every dynamic text goes through esc, attribute values included
+var hostile = StandplassPersonModal.renderMeritterBody([
+    { year: 2026, scope: 'km', ovelse: 'Felt <Fin>', klasse: 'U', region: 'Buske&rud',
+      medal: 'Gull', compId: 'c"<1>', compTitle: '<script>alert("x")</script>', team: 'T <&> PK' }
+], { compLinks: true });
+assert.ok(hostile.indexOf('<script>') === -1, 'a hostile comp title never reaches the DOM raw');
+assert.ok(hostile.indexOf('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;') !== -1);
+assert.ok(hostile.indexOf('data-comp-id="c&quot;&lt;1&gt;"') !== -1, 'attribute values are escaped');
+assert.ok(hostile.indexOf('Felt &lt;Fin&gt;') !== -1 && hostile.indexOf('T &lt;&amp;&gt; PK') !== -1,
+    'øvelse and team are escaped too');
+
+// empty merits → the honest empty message, nothing else
+assert.strictEqual(StandplassPersonModal.renderMeritterBody([], { compLinks: true }),
+    '<p class="ranking-status-msg">Ingen mesterskapsmedaljer funnet.</p>',
+    'empty merits → the honest empty message');
