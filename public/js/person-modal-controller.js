@@ -367,7 +367,7 @@ var StandplassPersonModalController = (function () {
             // (owner QA). HeaderExtras slot on showModal.
             function personModalTabsMarkup() {
                 return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
-                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn program-btn--active" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
                     + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
                     + '</div>';
             }
