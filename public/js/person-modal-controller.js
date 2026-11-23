@@ -97,11 +97,12 @@ var StandplassPersonModalController = (function () {
             if (modalOpener) { modalOpener.focus(); modalOpener = null; }
         }
 
-        function showModal(title, body) {
+        function showModal(title, body, headerExtras) {
             ensureModalEl();
             modalEl.innerHTML = '<div class="person-modal-shell">'
                 + '<div class="comp-modal-header">'
                 + '<h2 class="comp-modal-title" id="' + cfg.idPrefix + '-person-modal-title">' + title + '</h2>'
+                + (headerExtras || '')
                 + '<button type="button" class="comp-modal-close" id="' + cfg.idPrefix + '-person-modal-close" aria-label="Lukk">×</button>'
                 + '</div>'
                 + '<div class="comp-modal-body">' + body + '</div>'
@@ -360,12 +361,19 @@ var StandplassPersonModalController = (function () {
                 });
             }
 
-            function personModalBodyMarkup() {
+            // The tab pair lives in the fixed header, not the scrollable
+            // body: the open-from-row activation scrolls the chart into
+            // view, which would push a body-mounted pair out of sight
+            // (owner QA). HeaderExtras slot on showModal.
+            function personModalTabsMarkup() {
                 return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
                     + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
                     + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
-                    + '</div>'
-                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-resultater">'
+                    + '</div>';
+            }
+
+            function personModalBodyMarkup() {
+                return '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-resultater">'
                     + '<div class="person-filters">'
                     + '<div class="filter-group"><label>År</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-year-filter"></div></div>'
                     + '<div class="filter-group" hidden><label>Stevnetype</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-type-filter"></div></div>'
@@ -593,7 +601,7 @@ var StandplassPersonModalController = (function () {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
                 modalDisplayName = resolvedName || modalDisplayName;
-                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
+                showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup(), personModalTabsMarkup());
                 wirePersonModalFilters();
                 var switchTab = wirePersonTabs();
                 if (personTab === 'meritter') { switchTab('meritter'); }

@@ -1287,7 +1287,19 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
    (.person-modal-shell .program-toggle's width:auto applies here
    too — no full-width tab bar.) */
 .person-modal-tabs {
-    margin: 0 0 1rem;
+    margin: 0;
+}
+
+/* The tabs ride in the fixed header: the title takes the free space so
+   the pair and the close button keep to the right, and the header wraps
+   (title above, tabs + close below) on narrow widths instead of ever
+   scrolling away — the body is the only part that scrolls. */
+.person-modal .comp-modal-header {
+    flex-wrap: wrap;
+}
+
+.person-modal .comp-modal-title {
+    flex: 1;
 }
 
 /* The panels carry no layout display rule of their own, so hidden
