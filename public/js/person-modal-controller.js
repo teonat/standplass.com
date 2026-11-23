@@ -120,25 +120,29 @@ var StandplassPersonModalController = (function () {
 
         // The Meritter tab's data: both branches' mestere indexes, every
         // year, fetched once per widget instance (the underlying fetcher
-        // also dedupes by URL for its TTL). Per-year fetch failures are
-        // skipped years, not a broken tab; only every-fetch-failed
-        // surfaces an error in the panel. cfg.mestereBases defaults to
-        // the site-relative paths every standplass.com-hosted page can
-        // use; only the embeddable pages pass origin-absolute bases.
+        // also dedupes by URL for its TTL). Each entry carries its
+        // branch — the panel's Alle/Felt/Bane switcher filters merits
+        // on it. Per-year fetch failures are skipped years, not a
+        // broken tab; only every-fetch-failed surfaces an error in the
+        // panel. cfg.mestereBases defaults to the site-relative
+        // felt/bane bases every standplass.com-hosted page can use;
+        // only the embeddable pages pass origin-absolute bases.
         var mestereEntriesPromise = null;
         function ensureMestereEntries() {
             if (!mestereEntriesPromise) {
                 var fetcher = StandplassData.createFetcher(
                     cfg.fetchImpl || window.fetch.bind(window));
-                var bases = cfg.mestereBases
-                    || ['/data/felt/mestere', '/data/bane/mestere'];
+                var bases = cfg.mestereBases || [
+                    { branch: 'felt', base: '/data/felt/mestere' },
+                    { branch: 'bane', base: '/data/bane/mestere' }
+                ];
                 var years = [];
                 for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
                 var jobs = [];
                 years.forEach(function (year) {
-                    bases.forEach(function (base) {
-                        jobs.push(fetcher.fetchMestere(base, year).then(function (index) {
-                            return { year: year, index: index };
+                    bases.forEach(function (b) {
+                        jobs.push(fetcher.fetchMestere(b.base, year).then(function (index) {
+                            return { year: year, branch: b.branch, index: index };
                         }));
                     });
                 });

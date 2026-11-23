@@ -1029,8 +1029,10 @@ var StandplassStevnerPage = (function () {
             currentYear: CURRENT_YEAR,
             initialMetric: view === 'bane' ? 'score' : 'rankingScore',
             mestereBases: [
-                mestereOrigin + '/' + (view === 'bane' ? 'bane' : 'felt') + '/mestere',
-                mestereOrigin + '/' + (view === 'bane' ? 'felt' : 'bane') + '/mestere'
+                { branch: view === 'bane' ? 'bane' : 'felt',
+                  base: mestereOrigin + '/' + (view === 'bane' ? 'bane' : 'felt') + '/mestere' },
+                { branch: view === 'bane' ? 'felt' : 'bane',
+                  base: mestereOrigin + '/' + (view === 'bane' ? 'felt' : 'bane') + '/mestere' }
             ],
             // Comp titles in the Meritter tab open the page's comp
             // modal; hosts without one (klubb, nasjonalt, ...) pass no
