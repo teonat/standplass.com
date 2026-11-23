@@ -244,9 +244,9 @@ assert.ok(ukjentCell.indexOf('stevner-person-btn') === -1,
 assert.ok(ukjentCell.indexOf('Lag: GPK 1') !== -1);
 assert.ok(ukjentCell.indexOf('mesterskap-lag-tag') === -1,
     'member rows are persons, not the fallback team row');
-assert.strictEqual(mcol('klasse').cell(toreRow), 'Menn lag');
-assert.strictEqual(mcol('klasse').cell(ukjentRow), 'Kvinner lag',
-    'Kvinner sorts before Menn — the rows arrive name-selected, not index-picked');
+assert.strictEqual(mcol('klasse').cell(toreRow), 'Lag Å');
+assert.strictEqual(mcol('klasse').cell(ukjentRow), 'Lag Å',
+    'the lag\u2019s own section class — not the member\u2019s');
 assert.strictEqual(mcol('club').cell({ isTeam: true, lag: 'GPK 1', club: null, name: 'X' }), '–',
     'member rows without a resolved club show a dash, never a lag-name-derived club (owner ruling)');
 assert.strictEqual(mcol('club').cell({ isTeam: true, lag: null, club: null, name: 'GPK 1' }), 'GPK',

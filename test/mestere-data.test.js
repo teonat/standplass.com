@@ -217,12 +217,10 @@ assert.strictEqual(MD.teamClub(null), '');
 var kmRows = MD.podiumRows(feltIndex, 'km');
 assert.strictEqual(kmRows.length, 6,
     'c1 km (3) + c2 km (1) + c3 kmLag (1) + c4 km (1)');
-var fin = kmRows.filter(function (r) {
-    return r.ovelse === 'Felt Fin' || r.ovelse === 'Lag Felt Fin';
-});
+var fin = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin'; });
 assert.strictEqual(fin.length, 4);
-assert.ok(fin[0].klasse === 'Menn lag' && fin[0].isTeam,
-    'klasse Menn lag sorts before U, so the lag row leads Felt Fin');
+assert.ok(fin[0].klasse === 'Lag Menn' && fin[0].isTeam,
+    'klasse Lag Menn sorts before U, so the lag row leads Felt Fin');
 var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
 assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
 assert.strictEqual(teamRow.personId, null);
@@ -279,8 +277,8 @@ assert.strictEqual(MD.filterPodiumRows(kmRows, null).length, 6,
 // ── statsFor ────────────────────────────────────────────────────────────
 
 assert.deepStrictEqual(MD.statsFor(kmRows, 'km'),
-    { medaljer: 6, ovselser: 3, regioner: 2, klubber: 4 },
-    'øvelser count Felt Fin + Lag Felt Fin + Felt Grov; klubber include the lag club (KSS+Brumunddal+Bodø+Hurum)');
+    { medaljer: 6, ovselser: 2, regioner: 2, klubber: 4 },
+    'øvelser count Felt Fin + Felt Grov (lag variants merge into their øvelse); klubber include the lag club (KSS+Brumunddal+Bodø+Hurum)');
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: 'Hurum SKL', navn: '', type: '' }).length, 1,
     'the klubb filter matches lag rows via their resolved club');
 assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, null, 'nm has no region stat');
@@ -288,11 +286,13 @@ assert.deepStrictEqual(MD.statsFor(nmRows, 'nm'),
     { medaljer: 2, ovselser: 2, regioner: null, klubber: 1 });
 
 // ── podiumRows: lag member expansion (v15 team members) ───────────────
-// Owner rulings 2026-11-23: one row per member; Klasse = the member's own
-// class (Menn/Kvinner/…) with 'lag' appended, or 'Mix lag' for mix teams
-// (a mix team is one male + one female — the team type is the class);
-// Klubb = the member's resolved club (never the lag name); the lag name
-// rides under Navn (page level); stats count the team medal once.
+// Owner rulings 2026-11-23 (v2): one row per member; Øvelse keeps its
+// bare name (lag variants merge into their øvelse); Klasse = the
+// lag's OWN class from the section ('Lag Å', 'Lag Menn' — M/K spelled
+// out), 'Mix-lag' for mix teams (the team type is the class, the
+// participants' own classes do not show); Klubb = the member's
+// resolved club (never the lag name); the lag name rides under Navn
+// (page level); stats count the team medal once.
 
 function memberFilters(over) {
     var f = { ovelse: [], klasse: [], region: [], distrikt: [], klubb: '', navn: '', type: '' };
@@ -325,8 +325,8 @@ var mRows = MD.podiumRows(memberIndex, 'nm');
 assert.strictEqual(mRows.length, 6,
     'one row per member; the memberless team keeps its single team row');
 var tore = mRows.filter(function (r) { return r.name === 'Tore Vrålstad'; })[0];
-assert.strictEqual(tore.ovelse, 'Lag Felt Fin', 'lag rows carry the Lag-prefixed øvelse label');
-assert.strictEqual(tore.klasse, 'Menn lag', 'the member\u2019s own class with lag appended');
+assert.strictEqual(tore.ovelse, 'Felt Fin', 'lag rows carry the bare øvelse name');
+assert.strictEqual(tore.klasse, 'Lag Å', 'the lag\u2019s own class — the section\u2019s, not the member\u2019s');
 assert.strictEqual(tore.personId, 'p1');
 assert.strictEqual(tore.club, 'Greipstad Pistolklubb', 'the member\u2019s resolved club');
 assert.strictEqual(tore.sum, 107, 'the member\u2019s own sum');
@@ -334,34 +334,35 @@ assert.strictEqual(tore.lag, 'Greipstad PK1', 'the lag name rides on the row');
 assert.strictEqual(tore.medal, 'Gull', 'the team\u2019s medal');
 assert.ok(tore.isTeam, 'member rows count as lag for the type filter');
 var ukjent = mRows.filter(function (r) { return r.name === 'Ukjent Skytter'; })[0];
-assert.strictEqual(ukjent.klasse, 'Kvinner lag');
+assert.strictEqual(ukjent.klasse, 'Lag Å',
+    'teammates share the section class regardless of their own');
 assert.strictEqual(ukjent.personId, null);
 assert.strictEqual(ukjent.club, 'Greipstad Pistolklubb',
     'members without their own club fall back to the team\u2019s resolved club');
 assert.strictEqual(tore.podiumKey, ukjent.podiumKey, 'teammates share one podium key');
 var barum = mRows.filter(function (r) { return r.name === 'Bærum PK'; })[0];
 assert.ok(barum.isTeam, 'a memberless team falls back to the team row');
-assert.strictEqual(barum.ovelse, 'Lag Felt Fin');
-assert.strictEqual(barum.klasse, 'Å lag',
-    'the fallback team row uses the section class + lag (no members to read)');
+assert.strictEqual(barum.ovelse, 'Felt Fin');
+assert.strictEqual(barum.klasse, 'Lag Å',
+    'the fallback team row uses the same section class');
 assert.strictEqual(barum.sum, 310, 'the team sum on the fallback');
 var kjetil = mRows.filter(function (r) { return r.name === 'Kjetil Skogshagen'; })[0];
-assert.strictEqual(kjetil.ovelse, 'Mix-lag Felt Fin', 'mix sections label Mix-lag');
-assert.strictEqual(kjetil.klasse, 'Mix lag',
+assert.strictEqual(kjetil.ovelse, 'Felt Fin', 'mix sections carry the bare øvelse name too');
+assert.strictEqual(kjetil.klasse, 'Mix-lag',
     'a mix team\u2019s class is the team type — the participants\u2019 own classes do not show');
 var mona = mRows.filter(function (r) { return r.name === 'Mona Gjelstad'; })[0];
-assert.strictEqual(mona.klasse, 'Mix lag');
+assert.strictEqual(mona.klasse, 'Mix-lag');
 assert.strictEqual(mona.club, 'Larvik SK', 'each member carries their own club — mix halves can differ');
 assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
-    ['Ukjent Skytter', 'Tore Vrålstad', 'Kjetil Skogshagen', 'Mona Gjelstad', 'Solo', 'Bærum PK'],
-    'member rows sort by klasse/medal/name like any other row (Kvinner lag < Menn lag < Mix lag < Å < Å lag for the fallback)');
+    ['Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad', 'Solo'],
+    'member rows sort by klasse/medal/name like any other row (Lag Å < Mix-lag < Å)');
 
 assert.deepStrictEqual(MD.statsFor(mRows, 'nm'),
-    { medaljer: 4, ovselser: 3, regioner: null, klubber: 4 },
-    'the team medal counts once (1 individual + 3 teams); øvelser count the lag variants');
-assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ ovelse: ['Lag Felt Fin'], type: 'lag' })).length, 3,
-    'the øvelse filter lists the Lag variant as its own entry');
-assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix lag'] })).length, 2);
+    { medaljer: 4, ovselser: 1, regioner: null, klubber: 4 },
+    'the team medal counts once (1 individual + 3 teams); the lag variants merge into their øvelse');
+assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ ovelse: ['Felt Fin'], type: 'lag' })).length, 5,
+    'the øvelse filter keeps individual and lag rows of the same øvelse; the type filter narrows');
+assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix-lag'] })).length, 2);
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ navn: 'tore' })).length, 1,
     'navn search finds team members');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ type: 'individuelt' })).length, 1);

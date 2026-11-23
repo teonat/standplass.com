@@ -201,10 +201,12 @@ var StandplassMestereData = (function () {
             .trim();
     }
 
-    // A lag row's class cell: the member's own printed class (M/K/V55/
-    // …), the single letters spelled out, with 'lag' appended — 'Menn
-    // lag'. Mix teams are their own type ('Mix lag' — one male + one
-    // female, the participants' classes don't define the team).
+    // A lag row's class cell: the lag's OWN class, read from the
+    // section — lag øvelser carry their own class system (Å, M, K,
+    // V55… — per the official NM lag table), the single letters
+    // spelled out, prefixed with 'Lag': 'Lag Å', 'Lag Menn'. Mix
+    // teams are their own type ('Mix-lag' — one male + one female;
+    // the participants' classes don't define the team).
     var KLASSER = { M: 'Menn', K: 'Kvinner' };
 
     function lagKlasse(klasse) {
@@ -212,21 +214,23 @@ var StandplassMestereData = (function () {
         var full = Object.prototype.hasOwnProperty.call(KLASSER, klasse)
             ? KLASSER[klasse]
             : klasse;
-        return full + ' lag';
+        return 'Lag ' + full;
     }
 
     // One row per podium finish for the scope, individual and lag
     // sections together, each stamped with its comp's context and
     // pre-sorted into the order the mesterskap pages open with:
     // øvelse program rank, klasse (Norwegian collation, nulls last),
-    // medal rank, then name. Lag sections label their øvelse with the
-    // team prefix ('Lag Felt Fin' / 'Mix-lag Felt Fin', ranked on the
-    // bare name) and expand each membered team into one row per
-    // member — the member's name, personId, own sum and resolved
-    // club, the team's medal, a 'Menn lag'-style klasse, and the lag
-    // name on the row for the sub-line under Navn. Teammates share a
-    // podiumKey so stats count the team's medal once. Memberless
-    // teams fall back to the team row (never lose a medal).
+    // medal rank, then name. Øvelse keeps its bare name on every row
+    // (owner ruling — the lag variants merge into their øvelse; the
+    // type filter separates row kinds). Lag sections expand each
+    // membered team into one row per member — the member's name,
+    // personId, own sum and resolved club, the team's medal, a
+    // 'Lag Å'-style klasse (the section's own class — the lag's class
+    // system, not the member's), and the lag name on the row for the
+    // sub-line under Navn. Teammates share a podiumKey so stats count
+    // the team's medal once. Memberless teams fall back to the team
+    // row (never lose a medal).
     function podiumRows(index, scope) {
         var rows = [];
         var sectionKeys = [scope, scope + 'Lag'];
@@ -235,9 +239,7 @@ var StandplassMestereData = (function () {
                 var isLagKey = key !== scope;
                 (comp[key] || []).forEach(function (section) {
                     var isMix = isLagKey && section.klasse === 'Mix';
-                    var ovelse = isLagKey
-                        ? (isMix ? 'Mix-lag ' : 'Lag ') + section.ovelse
-                        : section.ovelse;
+                    var ovelse = section.ovelse;
                     var rank = programRank(section.ovelse);
                     var context = {
                         region: comp.region || null,
@@ -258,9 +260,8 @@ var StandplassMestereData = (function () {
                                 rows.push({
                                     ovelse: ovelse,
                                     ovelseRank: rank,
-                                    klasse: isMix ? 'Mix lag'
-                                        : lagKlasse(m.klasse != null
-                                            ? m.klasse : section.klasse),
+                                    klasse: isMix ? 'Mix-lag'
+                                        : lagKlasse(section.klasse),
                                     medal: row.medal,
                                     medalRank: medalRank(row.medal),
                                     name: m.name,
