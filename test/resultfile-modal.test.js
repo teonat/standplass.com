@@ -35,7 +35,16 @@ var detail = {
                 { name: 'Ung Ut', club: 'Klubb C', series: [[5, null]], sum: 30 }
             ] }
         ] },
-        { navn: 'Felt Grov', classes: [{ klasse: 'Å', rows: [] }] }
+        { navn: 'Felt Grov', classes: [{ klasse: 'Å', rows: [] }] },
+        // NM-style lag øvelse: teams print as fused medal+name rows in
+        // the øvelser list, no members (the member lines under each
+        // team in the PDF are not captured by any family yet).
+        { navn: 'Lag: Felt Fin', classes: [
+            { klasse: 'Å', rows: [
+                { name: 'Gull Greipstad PK1', series: [[27, 0], [36, 15]], ix: 76, sum: 318 },
+                { name: 'Sølv Bærum PK', series: [[27, 0], [36, 12]], ix: 74, sum: 310 }
+            ] }
+        ] }
     ],
     km: {
         sections: [
@@ -49,7 +58,13 @@ var detail = {
                 { medal: 'Gull', team: 'Odda Pistolklubb', series: [[27, 15], [30, 13]],
                   ix: 95, sum: 265, members: [
                     { name: 'Eirik Djønne', klasse: 'Å', ix: 33, sum: 90, personId: 'p1' },
-                    { name: 'Jakob Kråkevik', klasse: 'Å', ix: 30, sum: 85 }
+                    { name: 'Jakob Kråkevik', klasse: 'Å', ix: 30, sum: 85 },
+                    { name: 'Kari Nordmann', klasse: 'Å', ix: 32, sum: 90 },
+                    // a two-team club prints all six shooters under
+                    // each team line — every one of them renders
+                    { name: 'Nina Nilsson', klasse: 'Å', ix: 20, sum: 60 },
+                    { name: 'Ola Olsen', klasse: 'Å', ix: 21, sum: 62 },
+                    { name: 'Per Persen', klasse: 'Å', ix: 22, sum: 63 }
                   ] }
             ] }
         ]
@@ -57,8 +72,8 @@ var detail = {
 };
 
 var parts = RFM.ovelseSections(detail);
-assert.strictEqual(parts.sections.length, 4,
-    'øvelser + km sections + km lag all become sections');
+assert.strictEqual(parts.sections.length, 5,
+    'øvelser (incl. Lag: øvelser) + km sections + km lag all become sections');
 assert.strictEqual(parts.sections[0].navn, 'Felt Fin');
 assert.ok(!parts.sections[0].isLag, 'program øvelser are person sections');
 assert.strictEqual(parts.sections[0].classes.length, 2,
@@ -67,11 +82,19 @@ assert.strictEqual(parts.sections[0].classes[1].klasse, 'U');
 assert.strictEqual(parts.sections[1].navn, 'Felt Grov');
 assert.strictEqual(parts.sections[1].classes[0].rows.length, 0,
     'an empty øvelse keeps its empty classes (no synthetic rows)');
-assert.strictEqual(parts.sections[2].navn, 'KM Fin felt',
+assert.strictEqual(parts.sections[2].navn, 'Lag: Felt Fin');
+assert.ok(parts.sections[2].isLag,
+    'a Lag: øvelse is a lag section even inside ovelser');
+assert.strictEqual(parts.sections[2].classes[0].rows[0].team, 'Greipstad PK1',
+    'the fused medal+team name splits into team and medal');
+assert.strictEqual(parts.sections[2].classes[0].rows[0].medal, 'Gull');
+assert.strictEqual(parts.sections[2].classes[0].rows[1].team, 'Bærum PK',
+    'Sølv rows split too');
+assert.strictEqual(parts.sections[3].navn, 'KM Fin felt',
     'championship sections join the list after the program øvelser');
-assert.strictEqual(parts.sections[3].navn, 'KM Lag: Felt Magnum-1');
-assert.ok(parts.sections[3].isLag, 'lag sections are flagged');
-assert.strictEqual(parts.sections[3].classes[0].rows[0].team, 'Odda Pistolklubb',
+assert.strictEqual(parts.sections[4].navn, 'KM Lag: Felt Magnum-1');
+assert.ok(parts.sections[4].isLag, 'lag sections are flagged');
+assert.strictEqual(parts.sections[4].classes[0].rows[0].team, 'Odda Pistolklubb',
     'a lag section carries teams as its rows');
 assert.deepStrictEqual(parts.maxFeltPoints, { group1: 80, group2: 70 },
     'the comp-level max-felt facts ride along on the section list');
@@ -131,8 +154,18 @@ assert.ok(body.indexOf('<span class="medal medal--silver">2</span>') !== -1,
     'championship medal rows render their chips too');
 assert.ok(body.indexOf('Odda Pistolklubb</button>') === -1,
     'team names are not person buttons');
-assert.ok(body.indexOf('Jakob Kråkevik') !== -1,
-    'team members render');
+assert.ok(body.indexOf('Jakob Kråkevik (85)') !== -1,
+    'members render with their sums');
+assert.ok(body.indexOf('Eirik Djønne</button> (90)') !== -1,
+    'person-linked members carry their sum outside the button');
+assert.ok(body.indexOf('Per Persen (63)') !== -1,
+    'every member of a two-team club renders (all six, not three)');
+assert.ok(body.indexOf('<td>Greipstad PK1</td>') !== -1,
+    'NM lag teams render by their split team name');
+assert.ok(body.indexOf('<td>Gull Greipstad PK1</td>') === -1,
+    'the fused name never renders whole');
+assert.ok(body.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="5">Å</th></tr>') !== -1,
+    'a memberless lag table drops the Medlemmer column (colspan 5)');
 assert.ok(body.indexOf('Ingen rader tolket') !== -1,
     'an øvelse whose rows never attached shows the honest empty message');
 

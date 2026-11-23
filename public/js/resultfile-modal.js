@@ -36,21 +36,58 @@ var StandplassResultfileModal = (function () {
     // Detail files carry three section sources: the program øvelser
     // (per øvelse, per class), and the inrX championship overlays
     // (km/dm sections for individuals, km/dm lag for teams — each
-    // entry one (navn, klasse) pair, regrouped here by navn). All
-    // become one flat section list; lag sections are flagged so the
-    // renderer knows their rows are teams. maxFeltPoints is a
+    // entry one (navn, klasse) pair, regrouped here by navn). Øvelser
+    // whose navn marks a team result ('Lag: X', 'Mix-lag: X', 'KM
+    // Mix-lag: X' — the NM-family shape, where teams print as fused
+    // medal+name rows inside the ordinary øvelser list) become lag
+    // sections with the rows split into teams. maxFeltPoints is a
     // comp-level fact from the PDF header (e.g. 'Maks poeng felt
     // gr. 1: 80') with no per-øvelse mapping in the data — it rides
     // along on the list and renders once in the modal's meta line.
+    var LAG_OVELSE = /^(?:[A-ZÆØÅ]{2} )?(?:Mix-)?[Ll]ag: /;
+    var MEDALS = ['Gull', 'Sølv', 'Bronse'];
+    var POS_TO_MEDAL = { 1: 'Gull', 2: 'Sølv', 3: 'Bronse' };
+    var FUSED_TEAM = /^(Gull|Sølv|Bronse)(?:\s+(.*))?$/;
+
+    // Fused team rows ('Gull Greipstad PK1', a pos-ranked 'Orkla3',
+    // or a bare 'Gull' with the team in club) split into the team
+    // shape the km/dm lag teams already carry. Rows that match no
+    // medal shape still render — as an unranked team with the whole
+    // name — so no team silently vanishes.
+    function teamFromRow(r) {
+        var name = r.name || '';
+        var medal = r.medal || null;
+        var team = r.team != null ? r.team : null;
+        if (team == null && MEDALS.indexOf(name) !== -1) {
+            medal = medal || name;
+            team = r.club || '';
+        }
+        if (team == null) {
+            var m = FUSED_TEAM.exec(name);
+            if (m) { medal = medal || m[1]; team = m[2] || ''; }
+        }
+        if (team == null) { team = name; }
+        if (!medal && r.pos != null && POS_TO_MEDAL[r.pos]) {
+            medal = POS_TO_MEDAL[r.pos];
+        }
+        return {
+            medal: medal, team: team,
+            series: r.series || [], ix: r.ix, sum: r.sum,
+            members: r.members || []
+        };
+    }
+
     function ovelseSections(detail) {
         var d = detail || {};
         var sections = [];
         (d.ovelser || []).forEach(function (o) {
+            var isLag = LAG_OVELSE.test(o.navn || '');
             sections.push({
                 navn: o.navn || '',
-                isLag: false,
+                isLag: isLag,
                 classes: (o.classes || []).map(function (c) {
-                    return { klasse: c.klasse || '', rows: c.rows || [] };
+                    var rows = (c.rows || []).map(isLag ? teamFromRow : identity);
+                    return { klasse: c.klasse || '', rows: rows };
                 })
             });
         });
@@ -112,14 +149,19 @@ var StandplassResultfileModal = (function () {
         return esc(r.status || '–');
     }
 
+    function identity(x) { return x; }
+
     function memberCellHtml(t) {
         var names = (t.members || []).map(function (m) {
-            if (m.personId) {
-                return '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
+            var label = m.personId
+                ? '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
                     + esc(m.personId) + '" data-person-name="' + esc(m.name) + '">'
-                    + esc(m.name) + '</button>';
-            }
-            return esc(m.name);
+                    + esc(m.name) + '</button>'
+                : esc(m.name);
+            // The member's own sum rides along when printed — for a
+            // km/dm team the members' sums add up to the team sum,
+            // which is the check the display invites.
+            return m.sum != null ? label + ' (' + esc(m.sum) + ')' : label;
         });
         return names.length ? names.join(' · ') : '–';
     }
@@ -159,6 +201,19 @@ var StandplassResultfileModal = (function () {
             tableClass: 'ranking-full-table ranking-table' };
     }
 
+    // A memberless lag table (the NM-family shape — the member lines
+    // under each team are not captured by any parser family yet)
+    // drops the Medlemmer column instead of rendering a column of
+    // dashes.
+    function lagColumnsFor(section) {
+        var anyMembers = (section.classes || []).some(function (c) {
+            return (c.rows || []).some(function (t) { return (t.members || []).length; });
+        });
+        return anyMembers ? LAG_COLUMNS : LAG_COLUMNS.filter(function (col) {
+            return col.key !== 'members';
+        });
+    }
+
     function renderDetailBody(detail) {
         var parts = ovelseSections(detail);
         if (!parts.sections.length) {
@@ -167,7 +222,7 @@ var StandplassResultfileModal = (function () {
         var out = [];
         parts.sections.forEach(function (s, i) {
             out.push('<p class="comp-modal-section-title">' + esc(s.navn) + '</p>');
-            var spec = sectionTableSpec(s, s.isLag ? LAG_COLUMNS : PERSON_COLUMNS);
+            var spec = sectionTableSpec(s, s.isLag ? lagColumnsFor(s) : PERSON_COLUMNS);
             if (!spec) {
                 // The known empty-øvelse families (datotid, plain-NO)
                 // parse class headers but attach no rows — say so
