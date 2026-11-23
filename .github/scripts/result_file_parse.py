@@ -15,12 +15,17 @@ import re
 
 # Bump when parsing behavior changes: stored detail files carry the
 # version they were parsed with, and older files are re-parsed.
-PARSER_VERSION = 14
+PARSER_VERSION = 15
 
 _INRX_FOOTER = re.compile(r'inrX\s*\d+\.\d+')
 _INRX_STAMP = re.compile(r'inrX (\d+(?:\.\d+)*)')
 _MAX_FELT = re.compile(r'Maks poeng felt gr\. (\d+): (\d+)')
 _TABLE_HEADER = re.compile(r'^(.+?) :: Klasse (.+)$')
+# 'Lag: Felt Fin', 'Mix-lag: Felt Fin', 'KM Mix-lag: Standard' — øvelser
+# that are team tables, with or without a championship prefix. The
+# champ-prefixed 'KM Lag: '/'DM Lag: ' forms are intercepted by the
+# dispatch's championship branches before this regex is consulted.
+_LAG_OVELSE = re.compile(r'^(?:(?:KM|DM) )?(?:Mix-)?[Ll]ag: ')
 _SERIES_CELL = re.compile(r'^(\d+)(?:/(\d+))?$')
 _SERIES_PAIR = re.compile(r'^\d+/\d+$')
 _PREMIE_CELL = re.compile(r'^\*?(\d+)$')
@@ -1088,20 +1093,26 @@ def parse_inrx(text):
                     by_navn[navn] = ovelse
                     ovelser.append(ovelse)
                 classes = ovelse['classes']
+                # Lag/Mix-lag øvelser are team tables: their lines are
+                # team rows with member sublines, exactly like the
+                # championship lag sections
+                is_lag = _LAG_OVELSE.match(navn) is not None
                 if classes and classes[-1]['klasse'] == klasse:
                     class_dict = classes[-1]
                 else:
-                    class_dict = {'klasse': klasse, 'rows': []}
+                    class_dict = {'klasse': klasse,
+                                  ('teams' if is_lag else 'rows'): []}
                     classes.append(class_dict)
-                # open øvelser print championship podiums with the
-                # medal as the first word — strip it on person
-                # øvelser; Lag/Mix-lag øvelser are team tables whose
-                # first word is the printed medal-team shape
-                is_lag = 'lag: ' in navn.lower()
-                current = (
-                    'rows', class_dict, n_series, has_oppr, has_premie,
-                    not is_lag,
-                )
+                if is_lag:
+                    current = ('lag', class_dict, n_series)
+                else:
+                    # open øvelser print championship podiums with
+                    # the medal as the first word — strip it into a
+                    # row field on person øvelser
+                    current = (
+                        'rows', class_dict, n_series, has_oppr,
+                        has_premie, True,
+                    )
             continue
         if current is None:
             continue

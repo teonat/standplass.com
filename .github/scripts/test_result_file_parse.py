@@ -187,6 +187,20 @@ def find_champ_lag(detail, key, navn):
     raise AssertionError(f'lag not found: {key} / {navn}')
 
 
+def find_lag_class(detail, navn, klasse):
+    """The class dict of one lag øvelse, requiring the teams shape."""
+    for o in detail['ovelser']:
+        if o['navn'] == navn:
+            for c in o['classes']:
+                if c['klasse'] == klasse:
+                    if 'teams' not in c:
+                        raise AssertionError(
+                            f'{navn} / {klasse} carries no teams '
+                            f'(keys: {sorted(c)})')
+                    return c
+    raise AssertionError(f'lag class not found: {navn} / {klasse}')
+
+
 class ParseInrXFeltDmSections(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -315,14 +329,98 @@ class ParseInrXLagRobustness(unittest.TestCase):
         self.assertEqual([m['name'] for m in team['members']], ['Per Hansen'])
 
 
+class ParseInrxLagOvelser(unittest.TestCase):
+    """v15: 'Lag: '/'Mix-lag: ' øvelser parse as team tables inside
+    the øvelser list. Their team lines used to parse as fused person
+    rows ('Gull Greipstad PK1' as a name, the medal kept fused) and
+    the member sublines ('Name (Klasse) ix sum' — no series) were
+    dropped by the person-row grammar; they now carry the same team
+    shape as the championship lag sections, members included.
+
+    Fixture: comp 02afbbe1 (felt 2024, NM), inrX 1.9.0.0."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.detail = parse_inrx(fixture_text('inrx-lag-ovelse.pdf'))
+
+    def test_first_team_with_series_and_members(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Greipstad PK1')
+        self.assertEqual(gull['ix'], 76)
+        self.assertEqual(gull['sum'], 318)
+        self.assertEqual(gull['series'][:2], [[27, 0], [36, 15]])
+        self.assertEqual(
+            [(m['name'], m['klasse'], m['ix'], m['sum'])
+             for m in gull['members']],
+            [('Tore Vrålstad', 'M', 26, 107),
+             ('Ingunn Marie Engelsen', 'K', 22, 106),
+             ('Arne Landsverk', 'M', 28, 105)],
+        )
+
+    def test_silver_and_pos_ranked_teams(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'Å')['teams']
+        solv = teams[1]
+        self.assertEqual(solv['medal'], 'Sølv')
+        self.assertEqual(solv['team'], 'Bærum PK')
+        self.assertEqual(solv['sum'], 310)
+        self.assertEqual(len(solv['members']), 3)
+        pos4 = next(t for t in teams if t.get('pos') == 4)
+        self.assertEqual(pos4['team'], 'Bergen PK1')
+        self.assertEqual(pos4['sum'], 301)
+
+    def test_second_class_merges_under_same_ovelse(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Fin', 'V')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull['sum'], 306)
+        self.assertEqual(
+            [m['name'] for m in gull['members']],
+            ['Tormod Strand', 'Bjørn Einar Norén', 'Per Arve Iversen'],
+        )
+
+    def test_mix_lag_is_a_lag_ovelse(self):
+        teams = find_lag_class(self.detail, 'Mix-lag: Felt Fin',
+                               'Å')['teams']
+        self.assertEqual(len(teams), 27)
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Farris SS1')
+        self.assertEqual(gull['sum'], 198)
+        self.assertEqual(
+            [(m['name'], m['sum']) for m in gull['members']],
+            [('Kjetil Skogshagen', 101), ('Mona Gjelstad', 97)],
+        )
+
+    def test_lag_ovelser_carry_teams_not_rows(self):
+        for o in self.detail['ovelser']:
+            if 'lag: ' in o['navn'].lower():
+                for c in o['classes']:
+                    self.assertNotIn('rows', c, o['navn'])
+                    self.assertIn('teams', c, o['navn'])
+
+    def test_ordinary_ovelse_in_same_file_unchanged(self):
+        fin = next(o for o in self.detail['ovelser']
+                   if o['navn'] == 'Felt Fin')
+        counts = {c['klasse']: len(c['rows']) for c in fin['classes']}
+        self.assertEqual(counts, {
+            'U': 9, 'Jk': 4, 'Jm': 4, 'K': 57, 'M': 220,
+            'V55': 105, 'V65': 49, 'V73': 25,
+        })
+        first = find_row(self.detail, 'Felt Fin', 'U', 'Nikolai Rico Hansen')
+        self.assertEqual(first['medal'], 'Gull')
+        self.assertEqual(first['sum'], 95)
+
+
 class ParseInrXMedalRows(unittest.TestCase):
     """inrX open øvelser print championship podiums with the medal as
     the first word ('Gull <name> <club> …'); NM comps carry all their
     results this way, so without the strip every podium row fails
     person matching and no mestere nm sections appear. Person øvelser
     now strip the medal into a row field (the KM/DM tables always
-    did); Lag/Mix-lag øvelser keep the printed team shape — their
-    rows are team rows. Multi-word club place parts ('Horten og
+    did); Lag/Mix-lag øvelser are team tables — see
+    ParseInrxLagOvelser. Multi-word club place parts ('Horten og
     Omegn PK', 'Nedre Eiker PK') used to leak into the name; the
     split now absorbs the connector pair and place-forming prefix.
 
@@ -367,17 +465,21 @@ class ParseInrXMedalRows(unittest.TestCase):
         self.assertEqual(row['name'], 'Tore Vrålstad')
         self.assertEqual(row['club'], 'Greipstad Pistolklubb')
 
-    def test_lag_ovelse_keeps_printed_team_shape(self):
-        row = find_row(self.detail, 'Lag: Felt Sp-Pistol', 'Å', 'Gull')
-        self.assertNotIn('medal', row)
-        self.assertEqual(row['name'], 'Gull')
-        self.assertEqual(row['club'], 'Brumunddal Pistolklubb 1 SP-Pistol')
+    def test_lag_ovelse_is_a_team_table(self):
+        teams = find_lag_class(self.detail, 'Lag: Felt Sp-Pistol',
+                               'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Brumunddal Pistolklubb 1 SP-Pistol')
+        self.assertTrue(gull['members'])
 
-    def test_mix_lag_ovelse_keeps_printed_team_shape(self):
-        row = find_row(self.detail, 'Mix-lag: Felt Sp-Pistol', 'Å', 'Gull')
-        self.assertNotIn('medal', row)
-        self.assertEqual(row['name'], 'Gull')
-        self.assertEqual(row['club'], 'Bjørkelangen Pistolklubb SP-Pistol')
+    def test_mix_lag_ovelse_is_a_team_table(self):
+        teams = find_lag_class(self.detail, 'Mix-lag: Felt Sp-Pistol',
+                               'Å')['teams']
+        gull = teams[0]
+        self.assertEqual(gull['medal'], 'Gull')
+        self.assertEqual(gull['team'], 'Bjørkelangen Pistolklubb SP-Pistol')
+        self.assertTrue(gull['members'])
 
     def test_place_prefix_rules_on_synthetic_text(self):
         text = '\n'.join([
@@ -1313,8 +1415,8 @@ class ParseMegalinkDispatch(unittest.TestCase):
 
 
 class ParserVersionBump(unittest.TestCase):
-    def test_parser_version_is_14(self):
-        self.assertEqual(PARSER_VERSION, 14)
+    def test_parser_version_is_15(self):
+        self.assertEqual(PARSER_VERSION, 15)
 
 
 class ParseResultDispatch(unittest.TestCase):
