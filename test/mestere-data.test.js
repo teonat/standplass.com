@@ -147,8 +147,9 @@ assert.deepStrictEqual(meritter.map(function (m) { return m.year; }),
     [2025, 2025, 2025, 2025, 2024], 'newest year first');
 assert.deepStrictEqual(meritter[0], {
     year: 2025, scope: 'km', ovelse: 'Felt Fin', klasse: 'U',
-    region: 'Buskerud', medal: 'Gull', compId: 'c1'
-}, 'km merit region is the krets');
+    region: 'Buskerud', medal: 'Gull', compId: 'c1',
+    compTitle: 'Teststevne c1', team: null
+}, 'km merit region is the krets; comp title rides along for the comp link');
 assert.strictEqual(meritter[2].scope, 'dm');
 assert.strictEqual(meritter[2].region, 'Østlandet Nord',
     'dm merit region is the distrikt');
@@ -160,6 +161,64 @@ assert.deepStrictEqual(MD.meritterForPerson([{ year: 2025, index: feltIndex }], 
     'unknown person → no merits');
 assert.deepStrictEqual(MD.meritterForPerson([{ year: 2025, index: feltIndex }], null), [],
     'null personId → no merits');
+
+// ── meritterForPerson: lag merits (owner ruling 2026-11-23) ───────────
+// A team championship is a medal the person won as a member — matched
+// by the member's personId. The merit carries the team name and the
+// lag's own class form ('Lag Å', 'Mix-lag').
+
+var lagIndex = {
+    year: 2025,
+    comps: [
+        comp('l1', {
+            region: 'Vestlandet',
+            km: [sec('Felt Grov', null, [
+                { medal: 'Bronse', personId: 'p1', name: 'Anne', club: 'X PK' }
+            ])],
+            kmLag: [sec('Felt Fin', 'Å', [
+                { medal: 'Gull', team: 'Tysnes SSK 1', sum: 1417, club: 'Tysnes SSK',
+                  members: [
+                      { name: 'Ronnie Borgen', personId: 'p1', sum: 457 },
+                      { name: 'Steffen Fosli', personId: 'p9', sum: 480 }
+                  ] },
+                { medal: 'Sølv', team: 'Odda PK', club: 'Odda PK', members: [
+                    { name: 'Annen Person', personId: 'p2' }
+                ] }
+            ])]
+        }),
+        comp('l2', {
+            kmLag: [sec('Felt Fin', 'Mix', [
+                { medal: 'Gull', team: 'Brumunddal PK', club: 'Brumunddal PK',
+                  members: [
+                      { name: 'Kvinna', personId: 'p1' },
+                      { name: 'Mannen', personId: 'p10' }
+                  ] }
+            ])]
+        }),
+        comp('l3', {
+            // memberless: no personId anywhere to match
+            kmLag: [sec('Felt Grov', 'V55', [
+                { medal: 'Gull', team: 'Hurum SKL' }
+            ])]
+        })
+    ]
+};
+var lagMeritter = MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p1');
+assert.strictEqual(lagMeritter.length, 3,
+    'individual + two lag merits for p1; memberless teams produce none');
+assert.deepStrictEqual(lagMeritter[1], {
+    year: 2025, scope: 'km', ovelse: 'Felt Fin', klasse: 'Lag Å',
+    region: 'Vestlandet', medal: 'Gull', compId: 'l1',
+    compTitle: 'Teststevne l1', team: 'Tysnes SSK 1'
+}, 'a lag merit carries the team, the lag class form and the comp title');
+assert.strictEqual(lagMeritter[2].klasse, 'Mix-lag',
+    'mix teams are Mix-lag, never Lag Mix');
+assert.strictEqual(lagMeritter[2].region, null,
+    'region-less comps give lag merits no region');
+assert.strictEqual(MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p9').length, 1,
+    'a teammate merits only the shared team medal, not the rivals\'');
+assert.strictEqual(MD.meritterForPerson([{ year: 2025, index: lagIndex }], 'p2').length, 1,
+    'the second team\'s member merits that medal');
 
 // ── summarizeByClub ────────────────────────────────────────────────────
 

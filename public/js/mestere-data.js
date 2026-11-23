@@ -87,13 +87,30 @@ var StandplassMestereData = (function () {
     }
 
     // entries: [{year, index}] — one per branch-year, both branches mixed.
-    // Returns one row per individual podium finish by the person, newest
-    // year first (comp order within a year). Team podiums carry no
-    // personId and never produce merits. The merit's region is the krets
-    // for km, the distrikt for dm, nothing for nm.
+    // Returns one merit per championship podium finish by the person,
+    // newest year first (comp order within a year): individual podiums
+    // matched by row personId, and — owner ruling 2026-11-23 — lag/mix-
+    // lag team podiums matched by the member personId, carrying the
+    // team name and the lag's own class ('Lag Å', 'Mix-lag'). The
+    // merit's region is the krets for km, the distrikt for dm, nothing
+    // for nm; compTitle rides along for the Meritter tab's comp link.
     function meritterForPerson(entries, personId) {
         if (!personId) { return []; }
         var rows = [];
+        function push(entry, comp, scope, section, medal, klasse, team) {
+            rows.push({
+                year: entry.year,
+                scope: scope,
+                ovelse: section.ovelse,
+                klasse: klasse,
+                region: scope === 'km' ? (comp.region || null)
+                    : scope === 'dm' ? (comp.distrikt || null) : null,
+                medal: medal,
+                compId: comp.compId,
+                compTitle: comp.title || null,
+                team: team
+            });
+        }
         (entries || []).forEach(function (entry) {
             var index = entry.index || {};
             (index.comps || []).forEach(function (comp) {
@@ -101,15 +118,18 @@ var StandplassMestereData = (function () {
                     (comp[scope] || []).forEach(function (section) {
                         (section.podium || []).forEach(function (row) {
                             if (row.personId !== personId) { return; }
-                            rows.push({
-                                year: entry.year,
-                                scope: scope,
-                                ovelse: section.ovelse,
-                                klasse: section.klasse == null ? null : section.klasse,
-                                region: scope === 'km' ? (comp.region || null)
-                                    : scope === 'dm' ? (comp.distrikt || null) : null,
-                                medal: row.medal,
-                                compId: comp.compId
+                            push(entry, comp, scope, section, row.medal,
+                                section.klasse == null ? null : section.klasse,
+                                null);
+                        });
+                    });
+                    (comp[scope + 'Lag'] || []).forEach(function (section) {
+                        (section.podium || []).forEach(function (row) {
+                            (row.members || []).forEach(function (m) {
+                                if (m.personId !== personId) { return; }
+                                push(entry, comp, scope, section, row.medal,
+                                    lagRowKlasse(section.klasse),
+                                    row.team || null);
                             });
                         });
                     });
@@ -217,6 +237,14 @@ var StandplassMestereData = (function () {
         return 'Lag ' + full;
     }
 
+    // The one lag-class form every consumer renders (owner rulings
+    // 2026-11-23): 'Mix-lag' for mix teams — the natural noun, never
+    // 'Lag Mix' — else lagKlasse's 'Lag Å'/'Lag Menn'.
+    function lagRowKlasse(klasse) {
+        if (klasse === 'Mix') { return 'Mix-lag'; }
+        return lagKlasse(klasse);
+    }
+
     // One row per podium finish for the scope, individual and lag
     // sections together, each stamped with its comp's context and
     // pre-sorted into the order the mesterskap pages open with:
@@ -238,7 +266,6 @@ var StandplassMestereData = (function () {
             sectionKeys.forEach(function (key) {
                 var isLagKey = key !== scope;
                 (comp[key] || []).forEach(function (section) {
-                    var isMix = isLagKey && section.klasse === 'Mix';
                     var ovelse = section.ovelse;
                     var rank = programRank(section.ovelse);
                     var context = {
@@ -260,8 +287,7 @@ var StandplassMestereData = (function () {
                                 rows.push({
                                     ovelse: ovelse,
                                     ovelseRank: rank,
-                                    klasse: isMix ? 'Mix-lag'
-                                        : lagKlasse(section.klasse),
+                                    klasse: lagRowKlasse(section.klasse),
                                     medal: row.medal,
                                     medalRank: medalRank(row.medal),
                                     name: m.name,
@@ -284,7 +310,7 @@ var StandplassMestereData = (function () {
                         rows.push({
                             ovelse: ovelse,
                             ovelseRank: rank,
-                            klasse: isLagKey ? lagKlasse(section.klasse)
+                            klasse: isLagKey ? lagRowKlasse(section.klasse)
                                 : (section.klasse == null ? null : section.klasse),
                             medal: row.medal,
                             medalRank: medalRank(row.medal),
