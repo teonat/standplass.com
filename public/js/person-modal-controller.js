@@ -45,9 +45,24 @@ var StandplassPersonModalController = (function () {
         var personOpenSeq = 0;
         var modalMetric = cfg.initialMetric || 'rankingScore';
         var modalEntries = [];
+        // The activated entry's identity (p_entry): set by every
+        // activation path — chart dot click, table row click, opening
+        // from a result row or a shared link — and cleared by
+        // deactivation or by anything that re-renders the table/chart
+        // (metric toggle, filter change), mirroring the visual
+        // activation. syncPersonModalUrl serializes it.
+        var activeEntrySpec = null;
         var chartHandle = null; // set by drawChart; row clicks use it to
                                 // activate the chart's dot for that entry
         var syncCurrentPersonModalUrl = function () {};
+
+        // The identity spec an activated entry serializes as — the same
+        // fields the felt/bane row buttons carry and findEntryIndex
+        // matches on.
+        function entrySpecOf(e) {
+            return e ? { date: e.date, competitionId: e.competitionId,
+                         discipline: e.discipline, class: e.class } : null;
+        }
 
         // Same "use it if the host page already rendered one, otherwise
         // make it" pattern stevner-page.js's own competition-modal code
@@ -137,6 +152,11 @@ var StandplassPersonModalController = (function () {
                     row.scrollIntoView({ block: 'nearest' });
                     row.focus();
                 }
+                // No dot on either metric — the row highlight is the whole
+                // activation, so the URL carries it here rather than through
+                // the chart's notify path.
+                activeEntrySpec = entrySpecOf(entry);
+                syncCurrentPersonModalUrl();
             }
         }
 
@@ -212,6 +232,9 @@ var StandplassPersonModalController = (function () {
             // plain row opens never carry it — Resultater/Alle.
             var personTab = (urlFilters && urlFilters.tab) || null;
             var merittBranch = (urlFilters && urlFilters.branch) || null;
+            // A fresh open starts unactivated; a p_entry deep link
+            // activates after the year data lands.
+            activeEntrySpec = null;
 
             function knownValues(key) {
                 var all = {};
@@ -226,7 +249,8 @@ var StandplassPersonModalController = (function () {
                     selectedYears: selectedYears, activeYear: cfg.defaultYear,
                     types: filters.types, discs: filters.discs, classes: filters.classes,
                     metric: modalMetric, defaultMetric: cfg.initialMetric || 'rankingScore',
-                    tab: personTab, branch: merittBranch
+                    tab: personTab, branch: merittBranch,
+                    entry: activeEntrySpec
                 });
                 var qs = new URLSearchParams(cfg.urlState.getSearch());
                 Object.keys(patch).forEach(function (k) {
@@ -302,6 +326,11 @@ var StandplassPersonModalController = (function () {
             }
 
             function refresh() {
+                // The table and chart re-render below — the current
+                // activation (row highlight, dot ring, p_entry) dies with
+                // them. The open flow re-activates after refresh; filter
+                // changes land unactivated.
+                activeEntrySpec = null;
                 syncPersonModalUrl();
                 var merged = StandplassPersonModal.mergeYearEntries(entriesByYear, selectedYears);
                 modalEntries = StandplassPersonModal.getFilteredEntries(merged, filters);
@@ -581,8 +610,9 @@ var StandplassPersonModalController = (function () {
                 b.setAttribute('aria-pressed', String(isActive));
             });
             // The chart re-renders (killing any linked-dot ring), so the
-            // row tint must not linger either.
+            // row tint must not linger either — nor the p_entry param.
             clearRowHighlight();
+            activeEntrySpec = null;
             syncCurrentPersonModalUrl();
             drawChart();
         });
@@ -601,13 +631,22 @@ var StandplassPersonModalController = (function () {
         }
         function onChartDotSelected(dotEl) {
             clearRowHighlight();
-            if (!dotEl) { return; }
-            var row = modalEl.querySelector('tr[data-idx="' + dotEl.getAttribute('data-idx') + '"]');
-            if (row) {
-                row.classList.add('person-row-highlight');
-                row.scrollIntoView({ block: 'nearest' });
-                row.focus();
+            // Every activation path reports here (chart dot click,
+            // table row click via activateDot, open-from-row/URL) — so the
+            // p_entry param tracks the activation, and deactivation
+            // (dotEl null) strips it.
+            activeEntrySpec = null;
+            if (dotEl) {
+                activeEntrySpec = entrySpecOf(
+                    modalEntries[parseInt(dotEl.getAttribute('data-idx'), 10)]);
+                var row = modalEl.querySelector('tr[data-idx="' + dotEl.getAttribute('data-idx') + '"]');
+                if (row) {
+                    row.classList.add('person-row-highlight');
+                    row.scrollIntoView({ block: 'nearest' });
+                    row.focus();
+                }
             }
+            syncCurrentPersonModalUrl();
         }
         modalEl.addEventListener('click', function (e) {
             var row = e.target.closest('tr[data-idx]');
@@ -633,7 +672,11 @@ var StandplassPersonModalController = (function () {
         function openFromUrl() {
             var personState = StandplassPersonModal.parsePersonFromUrl(cfg.urlState.getSearch());
             if (personState) {
-                renderPersonModal(personState.personId, null, null, StandplassPersonModal.parsePersonFilterParams(cfg.urlState.getSearch()));
+                var urlFilters = StandplassPersonModal.parsePersonFilterParams(cfg.urlState.getSearch());
+                // A p_entry deep link activates its entry after the data
+                // lands, exactly like opening from a clicked result row.
+                renderPersonModal(personState.personId, null, null, urlFilters,
+                    urlFilters.entry || null);
             }
         }
 

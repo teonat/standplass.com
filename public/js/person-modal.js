@@ -22,7 +22,7 @@ var StandplassPersonModal = (function () {
     }
 
     var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric',
-                             'p_tab', 'p_branch'];
+                             'p_tab', 'p_branch', 'p_entry'];
 
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
@@ -31,6 +31,32 @@ var StandplassPersonModal = (function () {
         FILTER_PARAM_KEYS.forEach(function (k) { params.delete(k); });
         var qs = params.toString();
         return qs ? '?' + qs : '';
+    }
+
+    // p_entry: the activated entry's identity, 'date~competitionId~
+    // discipline~class' — shareable, re-activated on open by the same
+    // findEntryIndex the row buttons' identity goes through. Empty
+    // parts are wildcards on the match; a value with no anchor at all
+    // would match the first entry and parses as no entry instead.
+    function parseEntryParam(v) {
+        if (!v) { return null; }
+        var parts = v.split('~');
+        if (parts.length !== 4) { return null; }
+        var spec = {
+            date: parts[0] || null,
+            competitionId: parts[1] || null,
+            discipline: parts[2] || null,
+            class: parts[3] || null
+        };
+        return (spec.date || spec.competitionId || spec.discipline || spec.class) ? spec : null;
+    }
+
+    function formatEntryParam(spec) {
+        if (!spec) { return null; }
+        var v = [spec.date, spec.competitionId, spec.discipline, spec.class].map(function (x) {
+            return x == null ? '' : String(x);
+        }).join('~');
+        return v === '~~~' ? null : v;
     }
 
     // Reads the p_year/p_type/p_disc/p_class/p_metric params a deep link may
@@ -58,7 +84,8 @@ var StandplassPersonModal = (function () {
             classes: splitList('p_class'),
             metric: params.get('p_metric') || null,
             tab: params.get('p_tab') === 'meritter' ? 'meritter' : null,
-            branch: branch === 'felt' || branch === 'bane' ? branch : null
+            branch: branch === 'felt' || branch === 'bane' ? branch : null,
+            entry: parseEntryParam(params.get('p_entry'))
         };
     }
 
@@ -85,7 +112,8 @@ var StandplassPersonModal = (function () {
             p_class: list(state.classes),
             p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null,
             p_tab: state.tab === 'meritter' ? 'meritter' : null,
-            p_branch: branch
+            p_branch: branch,
+            p_entry: formatEntryParam(state.entry)
         };
     }
 

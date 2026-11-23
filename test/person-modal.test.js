@@ -31,6 +31,11 @@ assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_tab=meritter&p_branch=felt'),
     '?klubb=eksempel'
 );
+// ...and the activated entry param
+assert.strictEqual(
+    StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_entry=2026-06-06~c1~Felt+Fin~%C3%85'),
+    '?klubb=eksempel'
+);
 
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");
 
@@ -38,19 +43,19 @@ assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15.
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42'),
     { years: null, types: null, discs: null, classes: null, metric: null,
-      tab: null, branch: null }
+      tab: null, branch: null, entry: null }
 );
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_year=2024,2025&p_disc=Felt,Bane&p_metric=score'),
     { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score',
-      tab: null, branch: null }
+      tab: null, branch: null, entry: null }
 );
 // p_tab/p_branch: the Meritter deep link — only the meritter tab and a
 // real branch value parse; anything else falls back to the defaults
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=felt'),
     { years: null, types: null, discs: null, classes: null, metric: null,
-      tab: 'meritter', branch: 'felt' }
+      tab: 'meritter', branch: 'felt', entry: null }
 );
 assert.strictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=resultater&p_branch=xyz').tab,
@@ -58,6 +63,25 @@ assert.strictEqual(
 assert.strictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=xyz').branch,
     null, 'an unknown branch value falls back to Alle');
+
+// p_entry: the activated entry's identity, date~competitionId~discipline~
+// class — shareable, re-activated on open. Empty parts are wildcards on
+// the match; a value with no anchor at all would match everything and
+// parses as no entry.
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=2026-06-06~c1~Felt Fin~Å').entry,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: 'Å' },
+    'a full p_entry parses into the entry identity');
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=2026-06-06~c1~Felt Fin~').entry,
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: null },
+    'an empty trailing class part is a wildcard');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=not-enough-parts').entry,
+    null, 'a malformed p_entry (not four parts) is no entry');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=~~~').entry,
+    null, 'an all-empty p_entry is no entry (it would match the first row)');
 
 // buildPersonFilterParams: default state (single selected year === activeYear,
 // no filters, default metric) writes nothing -- a plain ?person=X&year=Y link
@@ -68,7 +92,7 @@ assert.deepStrictEqual(
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
     { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
-      p_tab: null, p_branch: null }
+      p_tab: null, p_branch: null, p_entry: null }
 );
 // a real change to each -- multi-year, a filter, and a non-default metric
 assert.deepStrictEqual(
@@ -77,7 +101,7 @@ assert.deepStrictEqual(
         metric: 'score', defaultMetric: 'rankingScore'
     }),
     { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score',
-      p_tab: null, p_branch: null }
+      p_tab: null, p_branch: null, p_entry: null }
 );
 // the unfiltered state (empty filter lists) serializes to no params —
 // an all-unticked or never-touched filter never writes p_* clutter,
@@ -88,7 +112,7 @@ assert.deepStrictEqual(
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
     { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
-      p_tab: null, p_branch: null }
+      p_tab: null, p_branch: null, p_entry: null }
 );
 // the Meritter tab + branch filter ride the same patch, non-default only
 assert.deepStrictEqual(
@@ -98,8 +122,30 @@ assert.deepStrictEqual(
         tab: 'meritter', branch: 'felt'
     }),
     { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
-      p_tab: 'meritter', p_branch: 'felt' }
+      p_tab: 'meritter', p_branch: 'felt', p_entry: null }
 );
+// the activated entry rides along too, and round-trips through the parse
+var entryState = {
+    selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
+    metric: 'rankingScore', defaultMetric: 'rankingScore',
+    entry: { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: 'Å' }
+};
+var entryPatch = StandplassPersonModal.buildPersonFilterParams(entryState);
+assert.strictEqual(entryPatch.p_entry, '2026-06-06~c1~Felt Fin~Å',
+    'an active entry writes its identity');
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_entry=' + entryPatch.p_entry).entry,
+    entryState.entry,
+    'the written p_entry parses back into the same spec');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(Object.assign({}, entryState,
+        { entry: { date: '2026-06-06', competitionId: 'c1', discipline: 'Felt Fin', class: null } })).p_entry,
+    '2026-06-06~c1~Felt Fin~',
+    'a null class part serializes as empty');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(Object.assign({}, entryState,
+        { entry: { date: null, competitionId: null, discipline: null, class: null } })).p_entry,
+    null, 'an all-null entry spec writes nothing');
 
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },
