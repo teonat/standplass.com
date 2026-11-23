@@ -159,6 +159,7 @@ var StandplassEmbed = (function () {
     var DEPENDENCY_PATHS = [
         '/js/format.js', '/js/data-fetch-cache.js', '/js/data-table.js',
         '/js/pagination.js', '/js/ranking-band.js', '/js/person-modal.js', '/js/person-modal-controller.js',
+        '/js/mestere-data.js',
         '/js/filter-widgets.js', '/js/url-state.js', '/js/mode-resolve.js',
         '/js/embed-builder.js', '/js/stevner-page.js', '/js/comp-modal.js',
         '/js/resultfile-modal.js',

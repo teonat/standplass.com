@@ -1005,7 +1005,13 @@ var StandplassStevnerPage = (function () {
 
         loadYear(activeYear);
 
-        var personModal = StandplassPersonModalController.create({
+        // Both branches' mestere bases for the person modal's Meritter
+        // tab. Derived from this page's own data base so an embed's
+        // absolute origin carries through, same as the resultfile
+        // modal's detailBase; the felt/bane segment swaps for the
+        // sibling branch.
+        var mestereOrigin = String(config.dataBase || '').replace(/\/(felt|bane)$/, '');
+        var personModalCfg = {
             idPrefix: config.idPrefix,
             root: root,
             urlState: urlState,
@@ -1021,8 +1027,19 @@ var StandplassStevnerPage = (function () {
             defaultYear: activeYear,
             firstYear: FIRST_YEAR,
             currentYear: CURRENT_YEAR,
-            initialMetric: view === 'bane' ? 'score' : 'rankingScore'
-        });
+            initialMetric: view === 'bane' ? 'score' : 'rankingScore',
+            mestereBases: [
+                mestereOrigin + '/' + (view === 'bane' ? 'bane' : 'felt') + '/mestere',
+                mestereOrigin + '/' + (view === 'bane' ? 'felt' : 'bane') + '/mestere'
+            ],
+            // Comp titles in the Meritter tab open the page's comp
+            // modal; hosts without one (klubb, nasjonalt, ...) pass no
+            // callback and get plain text instead.
+            onOpenComp: function (compId, compTitle) {
+                compModalHost.open(compId, compTitle);
+            }
+        };
+        var personModal = StandplassPersonModalController.create(personModalCfg);
 
         // Competition-detail modal (native <dialog>, not the person modal's
         // activeModalCloser system -- <dialog> handles Escape/focus-trap on

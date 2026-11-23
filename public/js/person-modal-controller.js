@@ -118,6 +118,39 @@ var StandplassPersonModalController = (function () {
             });
         }
 
+        // The Meritter tab's data: both branches' mestere indexes, every
+        // year, fetched once per widget instance (the underlying fetcher
+        // also dedupes by URL for its TTL). Per-year fetch failures are
+        // skipped years, not a broken tab; only every-fetch-failed
+        // surfaces an error in the panel. cfg.mestereBases defaults to
+        // the site-relative paths every standplass.com-hosted page can
+        // use; only the embeddable pages pass origin-absolute bases.
+        var mestereEntriesPromise = null;
+        function ensureMestereEntries() {
+            if (!mestereEntriesPromise) {
+                var fetcher = StandplassData.createFetcher(
+                    cfg.fetchImpl || window.fetch.bind(window));
+                var bases = cfg.mestereBases
+                    || ['/data/felt/mestere', '/data/bane/mestere'];
+                var years = [];
+                for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
+                var jobs = [];
+                years.forEach(function (year) {
+                    bases.forEach(function (base) {
+                        jobs.push(fetcher.fetchMestere(base, year).then(function (index) {
+                            return { year: year, index: index };
+                        }));
+                    });
+                });
+                mestereEntriesPromise = Promise.all(jobs.map(function (job) {
+                    return job.catch(function () { return null; });
+                })).then(function (entries) {
+                    return entries.filter(Boolean);
+                });
+            }
+            return mestereEntriesPromise;
+        }
+
         var METRICS = [
             { key: 'rankingScore', label: 'Ranking' },
             { key: 'score', label: 'Poeng', title: 'Poengsum varierer med stevnets maks-score — ikke direkte sammenlignbar på tvers av stevner' },
@@ -242,7 +275,12 @@ var StandplassPersonModalController = (function () {
             }
 
             function personModalBodyMarkup() {
-                return '<div class="person-filters">'
+                return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
+                    + '</div>'
+                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-resultater">'
+                    + '<div class="person-filters">'
                     + '<div class="filter-group"><label>År</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-year-filter"></div></div>'
                     + '<div class="filter-group" hidden><label>Stevnetype</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-type-filter"></div></div>'
                     + '<div class="filter-group" hidden><label>Øvelse</label><div class="checkbox-dropdown" id="' + cfg.idPrefix + '-person-disc-filter"></div></div>'
@@ -255,7 +293,52 @@ var StandplassPersonModalController = (function () {
                             + (m.title ? ' title="' + esc(m.title) + '"' : '') + '>' + m.label + '</button>';
                     }).join('') + '</div></div>'
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
-                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>';
+                    + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>'
+                    + '</div>'
+                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-meritter" hidden></div>';
+            }
+
+            // The Resultater/Meritter tab pair. The buttons are fresh
+            // per open (showModal replaces the body), so they're wired
+            // per open too; the active tab lives entirely in the DOM
+            // (button classes + panel hidden), and every fresh open
+            // starts on Resultater by markup default.
+            function wirePersonTabs() {
+                var meritterShown = false;
+                function switchTab(tab) {
+                    Array.prototype.forEach.call(
+                        modalEl.querySelectorAll('.person-modal-tab-btn'),
+                        function (b) {
+                            var active = b.getAttribute('data-person-tab') === tab;
+                            b.classList.toggle('program-btn--active', active);
+                            b.setAttribute('aria-pressed', String(active));
+                        });
+                    id('-person-tab-resultater').hidden = tab !== 'resultater';
+                    var panel = id('-person-tab-meritter');
+                    panel.hidden = tab !== 'meritter';
+                    if (tab === 'meritter' && !meritterShown) {
+                        meritterShown = true;
+                        panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
+                        ensureMestereEntries().then(function (entries) {
+                            if (mySeq !== personOpenSeq) { return; }
+                            if (!entries.length) {
+                                panel.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste mesterskapsdata.</p>';
+                                return;
+                            }
+                            var merits = StandplassMestereData.meritterForPerson(entries, personId);
+                            panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
+                                compLinks: !!cfg.onOpenComp
+                            });
+                        });
+                    }
+                }
+                Array.prototype.forEach.call(
+                    modalEl.querySelectorAll('.person-modal-tab-btn'),
+                    function (btn) {
+                        btn.addEventListener('click', function () {
+                            switchTab(btn.getAttribute('data-person-tab'));
+                        });
+                    });
             }
 
             function toggleSetValue(current, v, checked) {
@@ -405,12 +488,23 @@ var StandplassPersonModalController = (function () {
                 modalDisplayName = resolvedName || modalDisplayName;
                 showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
+                wirePersonTabs();
                 refresh();
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
         }
 
         wireGlobalEscapeHandler();
         ensureModalEl();
+        // Meritter-tab comp links (delegated once on the persistent
+        // modal element -- the buttons are re-rendered per person).
+        // Only rendered as buttons at all when the host passed an
+        // onOpenComp; the guard keeps a stray click a no-op even if
+        // markup changed underneath.
+        modalEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.person-meritt-comp');
+            if (!btn || !cfg.onOpenComp) { return; }
+            cfg.onOpenComp(btn.getAttribute('data-comp-id'), btn.getAttribute('data-comp-title'));
+        });
         modalEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.person-chart-toggle');
             if (!btn) { return; }
