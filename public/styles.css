@@ -1345,6 +1345,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .person-meritt-row .person-meritt-comp { align-self: center; }
 /* Lag merits: the team name rides inline after the class, muted like
    the mesterskap member rows' lag sub-line. */
+.person-meritt-scope,
 .person-meritt-team,
 .person-meritt-region { color: var(--text-muted); }
 

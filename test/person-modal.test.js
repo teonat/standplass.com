@@ -393,10 +393,21 @@ assert.ok(meritBody.indexOf('<span class="medal medal--silver">2</span>') !== -1
 assert.ok(meritBody.indexOf('<span class="medal medal--bronze">3</span>') !== -1,
     'a bronse merit renders the bronze badge with position 3');
 
+// each row names its championship kind between the medal and the øvelse
+assert.ok(meritBody.indexOf('<span class="person-meritt-scope">KM</span>') !== -1,
+    'a km merit names its kind');
+assert.ok(meritBody.indexOf('<span class="person-meritt-scope">NM</span>') !== -1,
+    'an nm merit names its kind');
+var goldBadgeAt = meritBody.indexOf('<span class="medal medal--gold">1</span>');
+var kmScopeAt = meritBody.indexOf('<span class="person-meritt-scope">KM</span>');
+var firstOvelseAt = meritBody.indexOf('<span class="person-meritt-ovelse">Felt Fin</span>');
+assert.ok(goldBadgeAt !== -1 && kmScopeAt !== -1 && firstOvelseAt !== -1
+    && goldBadgeAt < kmScopeAt && kmScopeAt < firstOvelseAt,
+    'the scope sits between the medal badge and the øvelse');
+
 // row parts: only when present; the lag team span sits between class and region
 assert.strictEqual((meritBody.match(/person-meritt-klasse/g) || []).length, 2,
-    'klasse renders only when present (2 of 3 merits)');
-assert.strictEqual((meritBody.match(/person-meritt-region/g) || []).length, 2,
+    'klasse renders only when present (2 of 3 merits)');assert.strictEqual((meritBody.match(/person-meritt-region/g) || []).length, 2,
     'region renders only when present (2 of 3 merits)');
 assert.strictEqual((meritBody.match(/person-meritt-team/g) || []).length, 1,
     'only the lag merit carries a team span');

@@ -616,8 +616,13 @@ var StandplassPersonModal = (function () {
         });
     }
 
+    var SCOPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };
+
     function meritRowHtml(m, compLinks) {
         var parts = [meritBadge(m.medal)];
+        parts.push('<span class="person-meritt-scope">'
+            + esc(SCOPE_LABELS[m.scope] || String(m.scope || '').toUpperCase())
+            + '</span>');
         parts.push('<span class="person-meritt-ovelse">' + esc(m.ovelse) + '</span>');
         if (m.klasse != null) {
             parts.push('<span class="person-meritt-klasse">' + esc(m.klasse) + '</span>');
