@@ -193,8 +193,8 @@ var StandplassMestereData = (function () {
     // The club inside a lag name: team names carry the club with a
     // trailing team number, spaced ('GPK 1') or fused ('SSSK10').
     // Names without digits are already the club. Display-level
-    // derivation only — the row's club field stays null for team rows
-    // (club filters and stats stay individual-only by ruling).
+    // derivation only — member rows carry their resolved club, so
+    // this feeds just the memberless team-row fallback.
     function teamClub(team) {
         return String(team == null ? '' : team)
             .replace(/\s*\d+$/, '')
@@ -209,7 +209,10 @@ var StandplassMestereData = (function () {
 
     function lagKlasse(klasse) {
         if (klasse == null) { return null; }
-        return (KLASSER[klasse] || klasse) + ' lag';
+        var full = Object.prototype.hasOwnProperty.call(KLASSER, klasse)
+            ? KLASSER[klasse]
+            : klasse;
+        return full + ' lag';
     }
 
     // One row per podium finish for the scope, individual and lag

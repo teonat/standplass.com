@@ -195,9 +195,11 @@ var StandplassMesterskapPage = (function () {
     // column or a filter. Navn leads (owner ruling — the person is the
     // row's identity). Øvelse and Medalje display names but sort by
     // their rank fields (the base compares cells as strings — a name
-    // key cannot sort Gull first). Team rows show the club embedded in
-    // the lag name in their Klubb cell (display-only — row.club stays
-    // null, so club filters and stats stay individual-only). The
+    // key cannot sort Gull first). Klubb: member rows carry their
+    // resolved club, and one with nothing resolved shows '–' (owner
+    // ruling — never a club derived from the lag name); only the
+    // memberless team-row fallback derives a display club from the
+    // lag name. The
     // region column (krets on km, distrikt on dm) is defaultHidden
     // behind its group row; nm carries neither column nor grouping.
     // hideBelow tiers follow the norgesfelt search table (700/900).
@@ -222,9 +224,8 @@ var StandplassMesterskapPage = (function () {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
                 cell: function (row) {
                     if (row.club != null) { return row.club; }
-                    if (row.isTeam) {
-                        return StandplassMestereData.teamClub(
-                            row.lag != null ? row.lag : row.name);
+                    if (row.isTeam && row.lag == null) {
+                        return StandplassMestereData.teamClub(row.name);
                     }
                     return '–';
                 }
