@@ -621,14 +621,21 @@ var StandplassPersonModal = (function () {
     // rankless entry has no dot on the ranking graph, so the poeng
     // graph takes over; every other metric stays as-is.
     function activationMetric(entry, currentMetric) {
-        if (currentMetric === 'rankingScore' && entry.rankingScore == null) {
+        if (currentMetric === 'rankingScore' && !hasMetricValue(entry, 'rankingScore')) {
             return 'score';
         }
         return currentMetric;
     }
 
+    // Whether an entry gets a dot on a metric's chart — the chart's own
+    // dot predicate (chartPoints), which the activation must agree with
+    // exactly: the listing encodes "no ranking" as zero, not just null,
+    // and chartPoints excludes ranking-0 rows from the ranking series.
+    // A zero poeng sum is a real dot; positions are 1-based.
     function hasMetricValue(entry, metric) {
-        if (metric === 'rankingScore') { return entry.rankingScore != null; }
+        if (metric === 'rankingScore') {
+            return entry.rankingScore != null && Number(entry.rankingScore) !== 0;
+        }
         if (metric === 'score') { return entry.score != null; }
         if (metric === 'position') { return entry.position != null; }
         return false;

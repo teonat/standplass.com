@@ -554,9 +554,15 @@ assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture, null), -1,
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: null, score: 94 }, 'rankingScore'), 'score',
     'a rankless entry activates on the poeng graph instead');
+// The listing encodes "no ranking" as zero, not just null — chartPoints
+// excludes ranking-0 rows from the ranking series, so the activation
+// helpers must agree with the chart's own dot predicate.
 assert.strictEqual(StandplassPersonModal.activationMetric(
-    { rankingScore: 0.91, score: 88 }, 'rankingScore'), 'rankingScore',
-    'a ranked entry keeps the ranking graph');
+    { rankingScore: 0, score: 94 }, 'rankingScore'), 'score',
+    'a zero-ranking entry activates on the poeng graph instead');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 88, score: 94 }, 'rankingScore'), 'rankingScore',
+    'a real ranking keeps the ranking graph');
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: null }, 'score'), 'score',
     'the poeng graph is never switched away from');
@@ -569,7 +575,13 @@ assert.strictEqual(StandplassPersonModal.hasMetricValue(
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { rankingScore: null, score: 88 }, 'rankingScore'), false);
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 0, score: 94 }, 'rankingScore'), false,
+    'a zero ranking has no dot on the ranking chart');
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { score: 88 }, 'score'), true);
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { score: 0 }, 'score'), true,
+    'a zero poeng sum is still a dot on the poeng chart');
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { position: null }, 'position'), false);
 
