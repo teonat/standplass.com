@@ -26,18 +26,38 @@ assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_year=2024,2025&p_disc=Felt'),
     '?klubb=eksempel'
 );
+// ...including the meritter tab + branch params
+assert.strictEqual(
+    StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_tab=meritter&p_branch=felt'),
+    '?klubb=eksempel'
+);
 
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");
 
 // parsePersonFilterParams: absent params -> nulls (defaults), not empty arrays
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42'),
-    { years: null, types: null, discs: null, classes: null, metric: null }
+    { years: null, types: null, discs: null, classes: null, metric: null,
+      tab: null, branch: null }
 );
 assert.deepStrictEqual(
     StandplassPersonModal.parsePersonFilterParams('?person=42&p_year=2024,2025&p_disc=Felt,Bane&p_metric=score'),
-    { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score' }
+    { years: [2024, 2025], types: null, discs: ['Felt', 'Bane'], classes: null, metric: 'score',
+      tab: null, branch: null }
 );
+// p_tab/p_branch: the Meritter deep link — only the meritter tab and a
+// real branch value parse; anything else falls back to the defaults
+assert.deepStrictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=felt'),
+    { years: null, types: null, discs: null, classes: null, metric: null,
+      tab: 'meritter', branch: 'felt' }
+);
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=resultater&p_branch=xyz').tab,
+    null, 'an unknown tab value is not the meritter tab');
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?person=42&p_tab=meritter&p_branch=xyz').branch,
+    null, 'an unknown branch value falls back to Alle');
 
 // buildPersonFilterParams: default state (single selected year === activeYear,
 // no filters, default metric) writes nothing -- a plain ?person=X&year=Y link
@@ -47,7 +67,8 @@ assert.deepStrictEqual(
         selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
-    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: null, p_branch: null }
 );
 // a real change to each -- multi-year, a filter, and a non-default metric
 assert.deepStrictEqual(
@@ -55,7 +76,8 @@ assert.deepStrictEqual(
         selectedYears: [2025, 2024], activeYear: 2026, types: null, discs: ['Felt'], classes: null,
         metric: 'score', defaultMetric: 'rankingScore'
     }),
-    { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score' }
+    { p_year: '2024,2025', p_type: null, p_disc: 'Felt', p_class: null, p_metric: 'score',
+      p_tab: null, p_branch: null }
 );
 // the unfiltered state (empty filter lists) serializes to no params —
 // an all-unticked or never-touched filter never writes p_* clutter,
@@ -65,7 +87,18 @@ assert.deepStrictEqual(
         selectedYears: [2026], activeYear: 2026, types: [], discs: [], classes: [],
         metric: 'rankingScore', defaultMetric: 'rankingScore'
     }),
-    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null }
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: null, p_branch: null }
+);
+// the Meritter tab + branch filter ride the same patch, non-default only
+assert.deepStrictEqual(
+    StandplassPersonModal.buildPersonFilterParams({
+        selectedYears: [2026], activeYear: 2026, types: null, discs: null, classes: null,
+        metric: 'rankingScore', defaultMetric: 'rankingScore',
+        tab: 'meritter', branch: 'felt'
+    }),
+    { p_year: null, p_type: null, p_disc: null, p_class: null, p_metric: null,
+      p_tab: 'meritter', p_branch: 'felt' }
 );
 
 var entries = [

@@ -174,6 +174,10 @@ var StandplassPersonModalController = (function () {
                 classes: (urlFilters && urlFilters.classes) || []
             };
             if (urlFilters && urlFilters.metric) { modalMetric = urlFilters.metric; }
+            // Deep-link state for the Meritter tab (p_tab/p_branch);
+            // plain row opens never carry it — Resultater/Alle.
+            var personTab = (urlFilters && urlFilters.tab) || null;
+            var merittBranch = (urlFilters && urlFilters.branch) || null;
 
             function knownValues(key) {
                 var all = {};
@@ -187,7 +191,8 @@ var StandplassPersonModalController = (function () {
                 var patch = StandplassPersonModal.buildPersonFilterParams({
                     selectedYears: selectedYears, activeYear: cfg.defaultYear,
                     types: filters.types, discs: filters.discs, classes: filters.classes,
-                    metric: modalMetric, defaultMetric: cfg.initialMetric || 'rankingScore'
+                    metric: modalMetric, defaultMetric: cfg.initialMetric || 'rankingScore',
+                    tab: personTab, branch: merittBranch
                 });
                 var qs = new URLSearchParams(cfg.urlState.getSearch());
                 Object.keys(patch).forEach(function (k) {
@@ -304,14 +309,14 @@ var StandplassPersonModalController = (function () {
 
             // The Resultater/Meritter tab pair. The buttons are fresh
             // per open (showModal replaces the body), so they're wired
-            // per open too; the active tab lives entirely in the DOM
-            // (button classes + panel hidden), and every fresh open
-            // starts on Resultater by markup default.
+            // per open too; the active tab lives in the DOM (button
+            // classes + panel hidden), every fresh open starts on
+            // Resultater by markup default — unless the URL deep-links
+            // the Meritter tab, which the open flow handles with the
+            // returned switcher. Both the tab and the branch filter
+            // sync to p_tab/p_branch (non-default only).
             function wirePersonTabs() {
                 var meritterShown = false;
-                var merittBranch = null; // owner ruling 2026-11-23:
-                // the Meritter panel's Alle/Felt/Bane switcher state;
-                // per open, Alle by default
                 function renderMerittPanel(panel) {
                     panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
                     ensureMestereEntries().then(function (entries) {
@@ -333,11 +338,13 @@ var StandplassPersonModalController = (function () {
                                 btn.addEventListener('click', function () {
                                     merittBranch = btn.getAttribute('data-branch') || null;
                                     renderMerittPanel(panel);
+                                    syncCurrentPersonModalUrl();
                                 });
                             });
                     });
                 }
                 function switchTab(tab) {
+                    personTab = tab;
                     Array.prototype.forEach.call(
                         modalEl.querySelectorAll('.person-modal-tab-btn'),
                         function (b) {
@@ -352,6 +359,7 @@ var StandplassPersonModalController = (function () {
                         meritterShown = true;
                         renderMerittPanel(panel);
                     }
+                    syncCurrentPersonModalUrl();
                 }
                 Array.prototype.forEach.call(
                     modalEl.querySelectorAll('.person-modal-tab-btn'),
@@ -360,6 +368,7 @@ var StandplassPersonModalController = (function () {
                             switchTab(btn.getAttribute('data-person-tab'));
                         });
                     });
+                return switchTab;
             }
 
             function toggleSetValue(current, v, checked) {
@@ -509,7 +518,8 @@ var StandplassPersonModalController = (function () {
                 modalDisplayName = resolvedName || modalDisplayName;
                 showModal(esc(resolvedName || 'Ukjent skytter'), personModalBodyMarkup());
                 wirePersonModalFilters();
-                wirePersonTabs();
+                var switchTab = wirePersonTabs();
+                if (personTab === 'meritter') { switchTab('meritter'); }
                 refresh();
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
         }

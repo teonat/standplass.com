@@ -21,7 +21,8 @@ var StandplassPersonModal = (function () {
         return '?' + params.toString();
     }
 
-    var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric'];
+    var FILTER_PARAM_KEYS = ['p_year', 'p_type', 'p_disc', 'p_class', 'p_metric',
+                             'p_tab', 'p_branch'];
 
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
@@ -37,6 +38,8 @@ var StandplassPersonModal = (function () {
     // reads these, it always starts from defaults. For p_type/p_disc/
     // p_class, an absent param and an empty list are the same thing --
     // unfiltered -- so the caller normalizes both to [] at init.
+    // p_tab/p_branch deep-link the Meritter tab and its branch filter;
+    // unknown values fall back to the defaults (Resultater / Alle).
     function parsePersonFilterParams(search) {
         var params = new URLSearchParams(search);
         function splitList(key) {
@@ -47,33 +50,42 @@ var StandplassPersonModal = (function () {
         var years = yearsRaw
             ? yearsRaw.split(',').map(function (y) { return parseInt(y, 10); }).filter(function (y) { return !isNaN(y); })
             : null;
+        var branch = params.get('p_branch');
         return {
             years: years && years.length ? years : null,
             types: splitList('p_type'),
             discs: splitList('p_disc'),
             classes: splitList('p_class'),
-            metric: params.get('p_metric') || null
+            metric: params.get('p_metric') || null,
+            tab: params.get('p_tab') === 'meritter' ? 'meritter' : null,
+            branch: branch === 'felt' || branch === 'bane' ? branch : null
         };
     }
 
-    // Builds a { p_year, p_type, p_disc, p_class, p_metric } patch -- each
-    // value is either the param to set, or null to remove it -- so the URL
-    // never carries a param that just repeats the default state (a plain
-    // ?person=X&year=Y should stay exactly that until something's actually
-    // changed inside the modal). state: { selectedYears, activeYear, types,
-    // discs, classes, metric, defaultMetric }.
+    // Builds a { p_year, p_type, p_disc, p_class, p_metric, p_tab,
+    // p_branch } patch -- each value is either the param to set, or
+    // null to remove it -- so the URL never carries a param that just
+    // repeats the default state (a plain ?person=X&year=Y should stay
+    // exactly that until something's actually changed inside the
+    // modal). state: { selectedYears, activeYear, types, discs,
+    // classes, metric, defaultMetric, tab?, branch? } -- tab is
+    // 'meritter' or null, branch 'felt'/'bane' or null (Alle).
     function buildPersonFilterParams(state) {
         var isDefaultYears = state.selectedYears.length === 1 && state.selectedYears[0] === state.activeYear;
         // Empty filter list = unfiltered, so it writes no param (same as
         // null): a bookmark never carries p_type=p_disc=p_class clutter
         // for the default view.
         function list(v) { return v && v.length ? v.join(',') : null; }
+        var branch = state.branch === 'felt' || state.branch === 'bane'
+            ? state.branch : null;
         return {
             p_year: isDefaultYears ? null : state.selectedYears.slice().sort(function (a, b) { return a - b; }).join(','),
             p_type: list(state.types),
             p_disc: list(state.discs),
             p_class: list(state.classes),
-            p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null
+            p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null,
+            p_tab: state.tab === 'meritter' ? 'meritter' : null,
+            p_branch: branch
         };
     }
 
