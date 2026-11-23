@@ -28,6 +28,16 @@ def ovelse_detail(rows):
     ]}
 
 
+def lag_ovelse_detail(members):
+    return {'ovelser': [
+        {'navn': 'Lag: Felt Fin', 'classes': [{'klasse': 'Å', 'teams': [
+            {'medal': 'Gull', 'team': 'Greipstad PK1', 'series': [[27, 0]],
+             'ix': 76, 'sum': 318, 'members': members},
+            {'medal': 'Sølv', 'team': 'Bærum PK', 'series': [], 'members': []},
+        ]}]},
+    ]}
+
+
 class Normalize(unittest.TestCase):
     def test_folds_case_punctuation_and_whitespace(self):
         self.assertEqual(normalize('  GUSTAV   Tisthamar. '), 'gustav tisthamar')
@@ -205,6 +215,34 @@ class ClubTailStrip(unittest.TestCase):
         attach_person_ids(detail, self.API)
         row = detail['ovelser'][0]['classes'][0]['rows'][0]
         self.assertNotIn('personId', row)
+
+
+class LagOvelseMembers(unittest.TestCase):
+    """v15: lag øvelser carry classes with teams; their members are
+    person rows matched on the name alone (the km/dm lag rule —
+    members print no club), and the team rows themselves are not
+    person rows."""
+
+    def test_members_match_by_name_and_count_as_person_rows(self):
+        detail = lag_ovelse_detail([
+            {'name': 'Tore Vrålstad', 'klasse': 'M', 'ix': 26, 'sum': 107},
+            {'name': 'Ingunn Marie Engelsen', 'klasse': 'K',
+             'ix': 22, 'sum': 106},
+        ])
+        attach_person_ids(detail, API_RESULTS)
+        members = detail['ovelser'][0]['classes'][0]['teams'][0]['members']
+        self.assertEqual(members[0]['personId'], 'p3')
+        self.assertNotIn('personId', members[1])
+        # the members are person rows; the team rows are not
+        self.assertEqual(match_stats(detail), (1, 2))
+
+    def test_ambiguous_member_name_stays_unmatched(self):
+        detail = lag_ovelse_detail([
+            {'name': 'Gustav Tisthamar', 'klasse': 'A', 'ix': 1, 'sum': 2},
+        ])
+        attach_person_ids(detail, API_RESULTS)
+        member = detail['ovelser'][0]['classes'][0]['teams'][0]['members'][0]
+        self.assertNotIn('personId', member)
 
 
 class MatchStats(unittest.TestCase):

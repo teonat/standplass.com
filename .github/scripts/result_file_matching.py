@@ -117,7 +117,14 @@ def _iter_person_rows(detail):
     """Yield every row that represents one person, across the detail."""
     for ovelse in detail.get('ovelser', []):
         for cls in ovelse['classes']:
-            yield from cls['rows']
+            if 'teams' in cls:
+                # v15 lag øvelser: the members are person rows (they
+                # print name + klasse + numbers, no club — the
+                # name-only lag rule applies); the team rows are not
+                for team in cls['teams']:
+                    yield from team.get('members', [])
+            else:
+                yield from cls['rows']
     for key in ('km', 'dm'):
         champ = detail.get(key)
         if not champ:
