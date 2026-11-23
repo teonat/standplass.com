@@ -149,13 +149,30 @@ var StandplassResultfileModal = (function () {
         return esc(r.name || '–');
     }
 
-    function placeCellHtml(r) {
-        var n = r.pos != null ? r.pos : (MEDAL_POS[r.medal] || null);
-        if (n != null) { return StandplassRankingBand.positionCellHtml(n); }
-        return esc(r.status || '–');
+    function identity(x) { return x; }
+
+    // DNS/DNF/DSQ rows are marked as such — a muted badge in the
+    // Plass column, the Norwegian expansion on hover (owner ruling
+    // 2026-11-23: show them and mark them, don't silently dash them).
+    // The status wins over a printed position: a row that did not
+    // finish is not placed.
+    var STATUS_TITLES = {
+        DNS: 'Ikke startet', DNF: 'Fullførte ikke', DSQ: 'Diskvalifisert'
+    };
+
+    function statusBadgeHtml(status) {
+        var title = STATUS_TITLES[status];
+        return '<span class="resultfile-status"'
+            + (title ? ' title="' + esc(title) + '"' : '')
+            + '>' + esc(status) + '</span>';
     }
 
-    function identity(x) { return x; }
+    function placeCellHtml(r) {
+        if (r.status) { return statusBadgeHtml(r.status); }
+        var n = r.pos != null ? r.pos : (MEDAL_POS[r.medal] || null);
+        if (n != null) { return StandplassRankingBand.positionCellHtml(n); }
+        return '–';
+    }
 
     function memberCellHtml(t) {
         var names = (t.members || []).map(function (m) {
@@ -337,6 +354,7 @@ var StandplassResultfileModal = (function () {
     return {
         ensureDialog: ensureDialog,
         seriesCellHtml: seriesCellHtml,
+        placeCellHtml: placeCellHtml,
         ovelseSections: ovelseSections,
         maxFeltLine: maxFeltLine,
         renderFallback: renderFallback,

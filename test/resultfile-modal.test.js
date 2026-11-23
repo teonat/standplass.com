@@ -218,12 +218,37 @@ assert.ok(body.indexOf('<tr class="dt-group-row"><th scope="colgroup" colspan="5
 assert.ok(body.indexOf('Ingen rader tolket') !== -1,
     'an øvelse whose rows never attached shows the honest empty message');
 
+// ── status rows (DNS/DNF/DSQ) show and are marked as such ─────────────
+// Owner ruling 2026-11-23: status entries render — with a muted badge
+// in the Plass column carrying the Norwegian expansion on hover, not
+// a silently dashed row. The status wins over a printed position: a
+// row that did not finish is not placed.
+
 var dnfDetail = { ovelser: [{ navn: 'Felt Fin', classes: [{ klasse: 'Å', rows: [
     { status: 'DNF', name: 'Gunn Gikk', club: 'X PK', series: [[3, 0]], ix: 1 }
 ] }] }] };
 var dnfBody = RFM.renderDetailBody(dnfDetail);
-assert.ok(dnfBody.indexOf('<td>DNF</td>') !== -1,
-    'status rows show their status in the plass column');
+assert.ok(dnfBody.indexOf(
+    '<span class="resultfile-status" title="Fullførte ikke">DNF</span>') !== -1,
+    'status rows show their marked badge in the plass column');
 assert.ok(dnfBody.indexOf('Gunn Gikk') !== -1, 'status rows still render');
+
+assert.strictEqual(RFM.placeCellHtml({ status: 'DNS' }),
+    '<span class="resultfile-status" title="Ikke startet">DNS</span>',
+    'a DNS row renders the muted status badge with its expansion');
+assert.strictEqual(RFM.placeCellHtml({ status: 'DSQ', pos: 3 }),
+    '<span class="resultfile-status" title="Diskvalifisert">DSQ</span>',
+    'the status mark wins over a printed position');
+assert.strictEqual(RFM.placeCellHtml({ pos: 4 }),
+    StandplassRankingBand.positionCellHtml(4),
+    'placed rows keep the ranking band');
+assert.strictEqual(RFM.placeCellHtml({ medal: 'Gull' }),
+    StandplassRankingBand.positionCellHtml(1),
+    'medal rows keep the medal-mapped band');
+assert.strictEqual(RFM.placeCellHtml({ status: 'XXX' }),
+    '<span class="resultfile-status">XXX</span>',
+    'unknown statuses mark too, without an invented title');
+assert.strictEqual(RFM.placeCellHtml({}), '–',
+    'nothing to place and no status renders a dash');
 
 console.log('resultfile-modal.test.js: all assertions passed');
