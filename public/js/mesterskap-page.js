@@ -219,6 +219,23 @@ var StandplassMesterskapPage = (function () {
         return cls ? '<span class="medal ' + cls + '">' + esc(medal) + '</span>' : esc(medal);
     }
 
+    // Ruling 15 (2026-11-24): the Arrangement column carries the
+    // resultfile link — the parsed result file in its own dialog (the
+    // "Resultatfil beta" action from the felt/bane pages). Rows
+    // without a compId or branch render plain text; the button mirrors
+    // the felt/bane trigger's attributes so the click wiring stays the
+    // same shape.
+    function arrangementCell(row) {
+        if (row.title == null) { return '–'; }
+        if (row.compId == null || row.gren == null) { return esc(row.title); }
+        return '<button type="button" class="stevner-resultfile-btn"'
+            + ' data-comp-id="' + esc(row.compId) + '"'
+            + ' data-gren="' + esc(row.gren) + '"'
+            + ' data-title="' + esc(row.title) + '">'
+            + esc(row.title)
+            + ' <span class="nav-beta-tag" aria-hidden="true">beta</span></button>';
+    }
+
     var TYPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };
 
     // The distinct championship types present in a row set — rows are
@@ -320,6 +337,12 @@ var StandplassMesterskapPage = (function () {
                 cell: function (row) { return row.champRegion == null ? '–' : row.champRegion; }
             });
         }
+        // Ruling 15 (2026-11-24): the Arrangement column (the stevne
+        // name) carries the resultfile link — see arrangementCell.
+        columns.push({
+            key: 'title', label: 'Arrangement', sortable: true, defaultDir: 'asc',
+            raw: true, cell: arrangementCell
+        });
         columns.push({
             key: 'date', label: 'Dato', sortable: true, defaultDir: 'desc', defaultHidden: true,
             cell: function (row) { return row.date == null ? '–' : row.date; }
@@ -371,6 +394,18 @@ var StandplassMesterskapPage = (function () {
             if (index && index.comps) { comps = comps.concat(index.comps); }
         });
         return { comps: comps };
+    }
+
+    // Branch-stamps an index's comps (felt/bane) so podium rows can
+    // address the right detaljer directory for the Arrangement
+    // column's resultfile link (ruling 15). Mutates and returns the
+    // index — each comp belongs to exactly one branch's index, so
+    // re-stamping is idempotent.
+    function stampGren(index, gren) {
+        if (index && index.comps) {
+            index.comps.forEach(function (c) { c.gren = gren; });
+        }
+        return index;
     }
 
     // Region-filter availability is data-driven: a dropdown renders only
@@ -500,6 +535,32 @@ var StandplassMesterskapPage = (function () {
             var btn = e.target.closest('.stevner-comp-btn');
             if (!btn) { return; }
             compModalHost.open(btn.dataset.compId, btn.dataset.compTitle || btn.textContent);
+        });
+        // Resultatfil modal (ruling 15): the Arrangement links open the
+        // parsed result file. Every open carries the row's branch via
+        // comp.detailBase — the host default never matters here;
+        // person buttons inside route through the page's person modal.
+        var resultfileHost = StandplassResultfileModal.ensureDialog({
+            idPrefix: 'mesterskap',
+            root: root,
+            onPerson: function (btn) {
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: btn.dataset.discipline || null
+                });
+            }
+        });
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-resultfile-btn');
+            if (!btn) { return; }
+            resultfileHost.open({
+                id: btn.dataset.compId,
+                year: ar,
+                title: btn.dataset.title || '',
+                resultFileUrl: btn.dataset.resultfile || null,
+                detailBase: '/data/detaljer/' + btn.dataset.gren
+            });
         });
         personModal.openFromUrl();
 
@@ -903,17 +964,19 @@ var StandplassMesterskapPage = (function () {
         // vanishes into the merge so the other renders. Both null →
         // null, the page's failed-year signal.
         function fetchMestereIndex() {
-            function from(base) {
-                return fetcher.fetchMestere(base, ar).catch(function () { return null; });
+            function from(grenName) {
+                return fetcher.fetchMestere('/data/' + grenName + '/mestere', ar)
+                    .then(function (index) { return stampGren(index, grenName); })
+                    .catch(function () { return null; });
             }
             if (gren === 'alle') {
-                return Promise.all([from('/data/felt/mestere'), from('/data/bane/mestere')])
+                return Promise.all([from('felt'), from('bane')])
                     .then(function (pair) {
                         if (pair[0] == null && pair[1] == null) { return null; }
                         return mergeMestereIndexes(pair);
                     });
             }
-            return from('/data/' + gren + '/mestere');
+            return from(gren);
         }
 
         function load() {
@@ -965,6 +1028,7 @@ var StandplassMesterskapPage = (function () {
         tableSpecFor: tableSpecFor,
         bareSpec: bareSpec,
         mergeMestereIndexes: mergeMestereIndexes,
+        stampGren: stampGren,
         regionDropdownsFor: regionDropdownsFor,
         regionFilterAvailability: regionFilterAvailability,
         initialSortFor: initialSortFor,

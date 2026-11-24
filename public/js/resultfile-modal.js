@@ -280,6 +280,15 @@ var StandplassResultfileModal = (function () {
         return renderDetailBody(detail);
     }
 
+    // The detail file's URL: the host's configured base, or a
+    // comp-level override for pages whose rows span branches (the
+    // unified mesterskap page passes /data/detaljer/felt or -bane per
+    // row). Pure so the open() wiring stays untested DOM glue.
+    function detailUrl(base, comp) {
+        var c = comp || {};
+        return (c.detailBase || base) + '/' + c.year + '/' + c.id + '.json';
+    }
+
     // ── the dialog host (wiring — manual QA per house rule) ───────────
 
     // comp-modal.js's createDialogHost pattern: a native <dialog>
@@ -334,7 +343,7 @@ var StandplassResultfileModal = (function () {
                 bodyEl.innerHTML = renderFallback(c);
                 return;
             }
-            fetchImpl(detailBase + '/' + c.year + '/' + c.id + '.json')
+            fetchImpl(detailUrl(detailBase, c))
                 .then(function (res) {
                     if (!res.ok) { throw new Error('HTTP ' + res.status); }
                     return res.json();
@@ -353,6 +362,7 @@ var StandplassResultfileModal = (function () {
 
     return {
         ensureDialog: ensureDialog,
+        detailUrl: detailUrl,
         seriesCellHtml: seriesCellHtml,
         placeCellHtml: placeCellHtml,
         ovelseSections: ovelseSections,

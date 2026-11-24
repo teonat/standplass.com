@@ -150,7 +150,7 @@ function col(key) {
     return spec.columns.filter(function (c) { return c.key === key; })[0];
 }
 assert.deepStrictEqual(spec.columns.map(function (c) { return c.key; }),
-    ['name', 'ovelseRank', 'klasse', 'medalRank', 'club', 'sum', 'region', 'date', 'organizer'],
+    ['name', 'ovelseRank', 'klasse', 'medalRank', 'club', 'sum', 'region', 'title', 'date', 'organizer'],
     'Navn leads — the person is the row\u2019s identity (owner ruling)');
 assert.strictEqual(col('ovelseRank').label, 'Øvelse');
 assert.strictEqual(col('ovelseRank').cell(rows[0]), rows[0].ovelse,
@@ -163,6 +163,23 @@ assert.strictEqual(col('region').defaultHidden, true,
     'the region column hides behind the group row');
 assert.ok(spec.columns.every(function (c) { return c.key !== 'distrikt'; }),
     'km has no distrikt column');
+
+// Ruling 15 (2026-11-24): the Arrangement column (the stevne name)
+// carries the resultfile link — the parsed result file, the
+// "Resultatfil beta" modal from the felt/bane pages.
+assert.strictEqual(col('title').label, 'Arrangement');
+assert.ok(!col('title').defaultHidden, 'Arrangement is visible — it carries the resultfile link');
+var rfLink = col('title').cell({ title: 'Aron SK Feltpistol', compId: 'c9', gren: 'felt' });
+assert.ok(rfLink.indexOf('stevner-resultfile-btn') !== -1
+    && rfLink.indexOf('data-comp-id="c9"') !== -1
+    && rfLink.indexOf('data-gren="felt"') !== -1
+    && rfLink.indexOf('data-title="Aron SK Feltpistol"') !== -1
+    && rfLink.indexOf('nav-beta-tag') !== -1,
+    'the arrangement cell links the parsed result file, beta-tagged');
+assert.strictEqual(col('title').cell({ title: 'Bare stevne' }), 'Bare stevne',
+    'no compId renders plain text, no button');
+assert.strictEqual(col('title').cell({ compId: 'c9', gren: 'felt' }), '–',
+    'no title renders a dash');
 var link = col('name').cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
 assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
     'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
@@ -246,6 +263,13 @@ assert.strictEqual(mixedKeys.indexOf('typeRank') < mixedKeys.indexOf('champRegio
 assert.deepStrictEqual(MP.mergeMestereIndexes([null, { comps: [{ compId: 'a' }] }]).comps,
     [{ compId: 'a' }], 'a failed branch fetch (null) vanishes; the other renders');
 assert.strictEqual(MP.mergeMestereIndexes([null, null]).comps.length, 0);
+
+// stampGren: the load path annotates each fetched index's comps with
+// its branch, so rows can address the right detaljer directory for
+// the resultfile link (ruling 15).
+assert.deepStrictEqual(MP.stampGren({ comps: [{ compId: 'a' }] }, 'bane').comps,
+    [{ compId: 'a', gren: 'bane' }], 'comps get their branch stamped');
+assert.strictEqual(MP.stampGren(null, 'felt'), null, 'a failed fetch passes through');
 assert.strictEqual(MP.mergeMestereIndexes().comps.length, 0);
 
 assert.deepStrictEqual(MP.regionDropdownsFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm')),
@@ -395,5 +419,11 @@ assert.ok(styles.indexOf('.filter-group--inactive') !== -1,
     'styles.css carries the .filter-group--inactive greying rule');
 assert.ok(styles.indexOf('.filter-group[hidden]') !== -1,
     'styles.css carries the .filter-group[hidden] display:none companion rule');
+
+// The resultfile modal (ruling 15) must be loaded by the page — the
+// Arrangement links die without it.
+var page = fs.readFileSync(__dirname + '/../public/mesterskap/index.html', 'utf8');
+assert.ok(page.indexOf('/js/resultfile-modal.js') !== -1,
+    'the mesterskap page loads the resultfile modal script');
 
 console.log('mesterskap-page.test.js: all assertions passed');

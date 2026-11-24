@@ -22,7 +22,7 @@ var feltIndex = {
     year: 2025,
     comps: [
         comp('c1', {
-            region: 'Buskerud', distrikt: 'Østlandet Sør',
+            region: 'Buskerud', distrikt: 'Østlandet Sør', gren: 'felt',
             km: [sec('Felt Fin', 'U', [
                 { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Kongsvinger Sportsskyttere', sum: 88 },
                 { medal: 'Sølv', personId: 'p2', name: 'Berit', club: 'Brumunddal Pistolklubb', sum: 68 },
@@ -521,7 +521,7 @@ var mixedIndex = {
     year: 2026,
     comps: [
         comp('m1', {
-            region: 'Buskerud', distrikt: 'Østlandet Sør',
+            region: 'Buskerud', distrikt: 'Østlandet Sør', gren: 'felt',
             km: [sec('Felt Fin', 'U', [
                 { medal: 'Gull', personId: 'p2', name: 'Berit', club: 'Hurum SKL', sum: 88 }
             ])]
@@ -541,7 +541,7 @@ var mixedIndex = {
         comp('m4', {
             // dual km+dm: one championship counted at both levels — Anne
             // tops both podiums (ruling 11: two entries, one km one dm)
-            region: 'Vestfold', distrikt: 'Østlandet Sør',
+            region: 'Vestfold', distrikt: 'Østlandet Sør', gren: 'felt',
             km: [sec('Felt Magnum-1', 'Å', [
                 { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Larvik PK', sum: 80 }
             ])],
@@ -581,6 +581,12 @@ assert.strictEqual(byType.nm.champRegion, null);
 // link passes it as the modal header (ruling 14).
 assert.strictEqual(byType.km.title, 'Teststevne ' + byType.km.compId,
     'rows carry their comp title');
+
+// The branch (felt/bane) rides on rows too — the Arrangement column's
+// resultfile link needs it to address the right detaljer directory
+// (ruling 15).
+assert.strictEqual(byType.km.gren, 'felt', 'rows carry their comp branch');
+assert.strictEqual(byType.nm.gren, null, 'comps without a branch stamp carry null');
 
 // Ruling 11: a dual km+dm comp emits one entry per scope — Anne on
 // both podiums gets two rows (KM-gull and DM-gull), never a merged
