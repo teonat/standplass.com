@@ -2148,6 +2148,21 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   vertical-align: 1px;
 }
 
+/* The mixed view's Mesterskap column: NM/DM/KM chips, the lag tag's
+   visual language minus the inline-suffix margin (the whole cell is
+   the chip). */
+.mesterskap-type-chip {
+  display: inline-block;
+  padding: 0 0.375rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
 /* Lag member rows: the lag name rides as a muted sub-line under the
    person's name (owner ruling 2026-11-23 — no dedicated Lag column). */
 .mesterskap-lag-sub {
