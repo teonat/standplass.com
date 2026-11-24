@@ -507,4 +507,81 @@ assert.strictEqual(mosjoenRows.length, 4,
 assert.strictEqual(MD.statsFor(mosjoenRows, 'nm').medaljer, 2,
     'each team of a two-team club counts its own medal');
 
+// ── podiumRows: multi-scope stamping (unified view) ────────────────────
+// Spec: 2026-11-24-mesterskap-unified-view-design.md — podiumRows takes a
+// scopes list (string | array | absent = all three) and stamps every row
+// with its championship type (type/typeRank) and the championship's own
+// region (champRegion: krets for km, distrikt for dm, null for nm).
+// Ruling 11: dual km+dm comps emit one entry per scope — a person on
+// both podiums gets two rows, never a merged or deduped one.
+
+var mixedIndex = {
+    year: 2026,
+    comps: [
+        comp('m1', {
+            region: 'Buskerud', distrikt: 'Østlandet Sør',
+            km: [sec('Felt Fin', 'U', [
+                { medal: 'Gull', personId: 'p2', name: 'Berit', club: 'Hurum SKL', sum: 88 }
+            ])]
+        }),
+        comp('m2', {
+            region: 'Hedmark', distrikt: 'Østlandet Nord',
+            dm: [sec('Felt Grov', null, [
+                { medal: 'Gull', personId: 'p3', name: 'Carl', club: 'Brumunddal Pistolklubb', sum: 90 }
+            ])]
+        }),
+        comp('m3', {
+            // nm comps carry neither region nor distrikt
+            nm: [sec('Felt Magnum-2', 'Å', [
+                { medal: 'Gull', personId: 'p4', name: 'Dag', club: 'Bodø PK', sum: 150 }
+            ])]
+        }),
+        comp('m4', {
+            // dual km+dm: one championship counted at both levels — Anne
+            // tops both podiums (ruling 11: two entries, one km one dm)
+            region: 'Vestfold', distrikt: 'Østlandet Sør',
+            km: [sec('Felt Magnum-1', 'Å', [
+                { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Larvik PK', sum: 80 }
+            ])],
+            dm: [sec('Felt Magnum-1', 'Å', [
+                { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Larvik PK', sum: 80 }
+            ])]
+        })
+    ]
+};
+
+// Multi-scope default: no scopes arg returns rows from all three types.
+var allRows = MD.podiumRows(mixedIndex);
+var mixedTypes = {};
+allRows.forEach(function (r) { mixedTypes[r.type] = true; });
+assert.deepStrictEqual(Object.keys(mixedTypes).sort(), ['dm', 'km', 'nm'],
+    'no scopes arg = all three types');
+
+// A string arg stays a one-element list (old callers keep working).
+var kmOnlyMixed = MD.podiumRows(mixedIndex, 'km');
+assert.ok(kmOnlyMixed.every(function (r) { return r.type === 'km'; }),
+    'string scope arg keeps the old single-scope behavior');
+assert.ok(kmOnlyMixed.length > 0 && MD.podiumRows(mixedIndex, ['dm']).length > 0);
+
+// Type stamps and ranks.
+var byType = {};
+allRows.forEach(function (r) { byType[r.type] = r; });
+assert.strictEqual(byType.km.typeRank, 3);
+assert.strictEqual(byType.dm.typeRank, 2);
+assert.strictEqual(byType.nm.typeRank, 1);
+
+// champRegion: krets for km, distrikt for dm, null for nm.
+assert.strictEqual(byType.km.champRegion, byType.km.region);
+assert.strictEqual(byType.dm.champRegion, byType.dm.distrikt);
+assert.strictEqual(byType.nm.champRegion, null);
+
+// Ruling 11: a dual km+dm comp emits one entry per scope — Anne on
+// both podiums gets two rows (KM-gull and DM-gull), never a merged
+// or deduped one.
+var anneDual = allRows.filter(function (r) {
+    return r.personId === 'p1' && r.ovelse === 'Felt Magnum-1';
+});
+assert.strictEqual(anneDual.length, 2, 'one entry per scope, never merged');
+assert.deepStrictEqual(anneDual.map(function (r) { return r.type; }).sort(), ['dm', 'km']);
+
 console.log('mestere-data.test.js: all assertions passed');

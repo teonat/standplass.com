@@ -11,6 +11,7 @@ var StandplassMestereData = (function () {
 
     var MEDALS = ['Gull', 'Sølv', 'Bronse'];
     var INDIVIDUAL_SCOPES = ['nm', 'dm', 'km'];
+    var TYPE_RANKS = { nm: 1, dm: 2, km: 3 };
 
     // Region names normalize for grouping only (casefold, collapse
     // dashes/slashes to spaces): 'Østlandet-Nord' and 'østlandet nord'
@@ -288,12 +289,25 @@ var StandplassMestereData = (function () {
     // the row for the sub-lines under Navn and Sum. Teammates share a
     // podiumKey so stats count the team's medal once. Memberless
     // teams fall back to the team row (never lose a medal).
-    function podiumRows(index, scope) {
+    function podiumRows(index, scopes) {
+        // scopes: a 'nm'|'dm'|'km' string (the historical single-scope
+        // form), a list of them, or null/undefined for all three. A dual
+        // comp (km+dm sections in one) contributes to both scopes — one
+        // entry per scope's podium, never merged (owner ruling
+        // 2026-11-24).
+        if (scopes == null) { scopes = ['nm', 'dm', 'km']; }
+        if (typeof scopes === 'string') { scopes = [scopes]; }
         var rows = [];
-        var sectionKeys = [scope, scope + 'Lag'];
+        var sectionKeys = [];
+        scopes.forEach(function (scope) {
+            sectionKeys.push({ key: scope, scope: scope, isLagKey: false });
+            sectionKeys.push({ key: scope + 'Lag', scope: scope, isLagKey: true });
+        });
         ((index || {}).comps || []).forEach(function (comp) {
-            sectionKeys.forEach(function (key) {
-                var isLagKey = key !== scope;
+            sectionKeys.forEach(function (sk) {
+                var key = sk.key;
+                var isLagKey = sk.isLagKey;
+                var scope = sk.scope;
                 (comp[key] || []).forEach(function (section) {
                     var ovelse = section.ovelse;
                     var rank = programRank(section.ovelse);
@@ -302,7 +316,11 @@ var StandplassMestereData = (function () {
                         distrikt: comp.distrikt || null,
                         date: comp.date || null,
                         organizer: comp.organizer || null,
-                        compId: comp.compId
+                        compId: comp.compId,
+                        type: scope,
+                        typeRank: TYPE_RANKS[scope],
+                        champRegion: scope === 'km' ? (comp.region || null)
+                            : scope === 'dm' ? (comp.distrikt || null) : null
                     };
                     (section.podium || []).forEach(function (row) {
                         var isTeam = row.team != null;
@@ -331,7 +349,10 @@ var StandplassMestereData = (function () {
                                     distrikt: context.distrikt,
                                     date: context.date,
                                     organizer: context.organizer,
-                                    compId: context.compId
+                                    compId: context.compId,
+                                    type: context.type,
+                                    typeRank: context.typeRank,
+                                    champRegion: context.champRegion
                                 });
                             });
                             return;
@@ -355,7 +376,10 @@ var StandplassMestereData = (function () {
                             distrikt: context.distrikt,
                             date: context.date,
                             organizer: context.organizer,
-                            compId: context.compId
+                            compId: context.compId,
+                            type: context.type,
+                            typeRank: context.typeRank,
+                            champRegion: context.champRegion
                         });
                     });
                 });
