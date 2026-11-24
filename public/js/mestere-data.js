@@ -268,10 +268,15 @@ var StandplassMestereData = (function () {
     }
 
     // The one lag-class form every consumer renders (owner rulings
-    // 2026-11-23): 'Mix-lag' for mix teams — the natural noun, never
-    // 'Lag Mix' — else lagKlasse's 'Lag Å'/'Lag Menn'.
+    // 2026-11-23; 2026-11-24): 'Mix-lag U' for mix teams — the class
+    // is the team's registered mix class ('Mix U', 'Mix Jr'…);
+    // a bare 'Mix' (older parses without class granularity) renders
+    // 'Mix-lag'; else lagKlasse's 'Lag Å'/'Lag Menn'.
     function lagRowKlasse(klasse) {
         if (klasse === 'Mix') { return 'Mix-lag'; }
+        if (typeof klasse === 'string' && klasse.indexOf('Mix ') === 0) {
+            return 'Mix-lag' + klasse.slice(3);
+        }
         return lagKlasse(klasse);
     }
 

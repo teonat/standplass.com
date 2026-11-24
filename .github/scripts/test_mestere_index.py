@@ -124,9 +124,10 @@ class NmClassification(MestereIndexBase):
 class LagOvelseMembers(MestereIndexBase):
     """v15: lag øvelser carry classes with teams, and team podiums
     keep their members ({name, personId?, club?, sum?}, club through
-    the comp's API results). Mix-lag øvelser pool their teams under
-    the 'Mix' klasse — the existing km/dm convention, now for nm too.
-    Row-shaped lag classes keep the fused-row fallback."""
+    the comp's API results). Mix-lag øvelser carry one podium per mix
+    class — the class (U, Jr, Å…) is the team's registered mix class,
+    each with its own medals; a classless entry pools under the bare
+    'Mix' klasse. Row-shaped lag classes keep the fused-row fallback."""
 
     NM_COMP = comp('nmx', competitionTypeName='Norgesmesterskap',
                   results=[
@@ -169,7 +170,10 @@ class LagOvelseMembers(MestereIndexBase):
         self.assertEqual(solv['medal'], 'Sølv')
         self.assertNotIn('members', solv)
 
-    def test_nm_mix_lag_pools_teams_under_klasse_mix(self):
+    def test_nm_mix_lag_one_section_per_mix_class(self):
+        """One podium per mix class: pooling under 'Mix' hid which
+        class a team shot in (NM 2026's two gold mix teams were a
+        junior and an ungdom team, indistinguishable)."""
         d = detail('nmx', [
             {'navn': 'Mix-lag: Felt Fin', 'classes': [
                 {'klasse': 'Å', 'teams': [
@@ -187,17 +191,35 @@ class LagOvelseMembers(MestereIndexBase):
         ])
         index = self.build('felt', 2024, [self.NM_COMP], {'nmx': d})
         self.assertEqual(len(index['comps']), 1)
-        lag = index['comps'][0]['nmLag'][0]
-        self.assertEqual(lag['ovelse'], 'Felt Fin')
-        self.assertEqual(lag['klasse'], 'Mix')
-        gull, solv = lag['podium']
+        lag = index['comps'][0]['nmLag']
+        self.assertEqual([s['klasse'] for s in lag], ['Mix Å', 'Mix V'])
+        self.assertEqual(lag[0]['ovelse'], 'Felt Fin')
+        gull = lag[0]['podium'][0]
         self.assertEqual(gull['team'], 'Farris SS1')
         self.assertEqual(gull.get('members'), [
             {'name': 'Kjetil Skogshagen', 'klasse': 'V55',
              'personId': 'p2', 'club': 'Farris Sportsskyttere',
              'sum': 101},
         ])
-        self.assertNotIn('members', solv)
+        self.assertEqual(lag[1]['klasse'], 'Mix V')
+        self.assertEqual(lag[1]['podium'][0]['medal'], 'Sølv')
+        self.assertNotIn('members', lag[1]['podium'][0])
+
+    def test_nm_mix_lag_classless_entry_pools_under_mix(self):
+        """Older parses can carry mix øvelser without class
+        granularity — those keep the bare 'Mix' klasse."""
+        d = detail('nmx', [
+            {'navn': 'Mix-lag: Felt Fin', 'classes': [
+                {'klasse': None, 'teams': [
+                    {'medal': 'Gull', 'team': 'Farris SS1',
+                     'series': [], 'members': []},
+                ]},
+            ]},
+        ])
+        index = self.build('felt', 2024, [self.NM_COMP], {'nmx': d})
+        lag = index['comps'][0]['nmLag']
+        self.assertEqual([s['klasse'] for s in lag], ['Mix'])
+        self.assertEqual(lag[0]['podium'][0]['team'], 'Farris SS1')
 
     def test_km_mix_lag_teams_carry_members(self):
         d = detail('k1', [
@@ -219,7 +241,7 @@ class LagOvelseMembers(MestereIndexBase):
         self.assertEqual(len(index['comps']), 1)
         lag = index['comps'][0]['kmLag'][0]
         self.assertEqual(lag['ovelse'], 'Felt Fin')
-        self.assertEqual(lag['klasse'], 'Mix')
+        self.assertEqual(lag['klasse'], 'Mix Å')
         gull = lag['podium'][0]
         self.assertEqual(gull['team'], 'Farris SS1')
         self.assertEqual(gull['club'], 'Farris Sportsskyttere')
@@ -291,7 +313,7 @@ class KmDmClassification(MestereIndexBase):
                            {'m1': d})
         section = index['comps'][0]['kmLag'][0]
         self.assertEqual(section['ovelse'], 'Felt Fin')
-        self.assertEqual(section['klasse'], 'Mix')
+        self.assertEqual(section['klasse'], 'Mix Å')
         self.assertEqual(section['podium'], [
             {'medal': 'Gull', 'team': 'SSSK10', 'sum': 205},
             {'medal': 'Sølv', 'team': 'Oppdal8', 'sum': 200},

@@ -416,7 +416,7 @@ var memberIndex = { year: 2024, comps: [comp('m1', {
             ] },
             { medal: 'Sølv', team: 'Bærum PK', sum: 310, members: [] }
         ]),
-        sec('Felt Fin', 'Mix', [
+        sec('Felt Fin', 'Mix U', [
             { medal: 'Gull', team: 'Farris SS1', sum: 198, members: [
                 { name: 'Kjetil Skogshagen', klasse: 'V55', personId: 'p2', club: 'Farris SS', sum: 101 },
                 { name: 'Mona Gjelstad', klasse: 'K', personId: 'p3', club: 'Larvik SK', sum: 97 }
@@ -455,10 +455,10 @@ assert.strictEqual(barum.lagSum, null,
     'the fallback team row\u2019s sum IS the team sum — no sub-line');
 var kjetil = mRows.filter(function (r) { return r.name === 'Kjetil Skogshagen'; })[0];
 assert.strictEqual(kjetil.ovelse, 'Felt Fin', 'mix sections carry the bare øvelse name too');
-assert.strictEqual(kjetil.klasse, 'Mix-lag',
-    'a mix team\u2019s class is the team type — the participants\u2019 own classes do not show');
+assert.strictEqual(kjetil.klasse, 'Mix-lag U',
+    'mix teams render their registered mix class (Mix U -> Mix-lag U)');
 var mona = mRows.filter(function (r) { return r.name === 'Mona Gjelstad'; })[0];
-assert.strictEqual(mona.klasse, 'Mix-lag');
+assert.strictEqual(mona.klasse, 'Mix-lag U');
 assert.strictEqual(mona.club, 'Larvik SK', 'each member carries their own club — mix halves can differ');
 assert.strictEqual(mona.lagSum, 198, 'mix member rows carry the team sum too');
 assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
@@ -470,7 +470,7 @@ assert.deepStrictEqual(MD.statsFor(mRows, 'nm'),
     'the team medal counts once (1 individual + 3 teams); the lag variants merge into their øvelse');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ ovelse: ['Felt Fin'], type: 'lag' })).length, 5,
     'the øvelse filter keeps individual and lag rows of the same øvelse; the type filter narrows');
-assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix-lag'] })).length, 2);
+assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix-lag U'] })).length, 2);
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ navn: 'tore' })).length, 1,
     'navn search finds team members');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ type: 'individuelt' })).length, 1);
