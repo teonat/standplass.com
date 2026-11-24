@@ -1,13 +1,16 @@
 // public/js/mesterskap-page.js
 //
-// The /mesterskap/{nm,dm,km} pages: felt/bane toggle + year picker over
-// the per-year mestere indexes, one dense podium table per page (the
-// norgesfelt-search pattern): program-ordered rows, filter row above
-// (øvelse, klasse, krets — region on km, krets→distrikt finder on dm —
-// klubb, navn, type), group rows by region (krets on km, distrikt on
-// dm, flat on nm), person links opening the person modal. The pure
+// The unified /mesterskap/ page: felt/bane/alle toggle + year picker
+// over the per-year mestere indexes, one dense podium table
+// (the norgesfelt-search pattern): program-ordered rows, filter row
+// above (mesterskapstype, øvelse, klasse, krets, distrikt, klubb,
+// navn, type), person links opening the person modal. The table
+// shape follows the rows' own stamped types: single-type views group
+// by region (krets on km, distrikt on dm; nm flat), mixed views go
+// flat with Mesterskap and Region columns seeded type-first. The pure
 // helpers (resolveInitial, grenDisplayName, resolveFilters,
-// filterParams, filterBarMarkup, tableSpecFor, emptyYearCard) are
+// filterParams, filterBarMarkup, tableSpecFor, mergeMestereIndexes,
+// regionDropdownsFor, initialSortFor, emptyYearCard) are
 // node-testable; init() is the DOM wiring, verified by manual QA
 // (house rule).
 var StandplassMesterskapPage = (function () {
@@ -22,29 +25,37 @@ var StandplassMesterskapPage = (function () {
     }
 
     function grenDisplayName(gren) {
-        return gren === 'bane' ? 'baneskyting' : 'feltskyting';
+        if (gren === 'bane') { return 'baneskyting'; }
+        if (gren === 'alle') { return 'feltskyting og baneskyting'; }
+        return 'feltskyting';
     }
 
-    // '?gren=bane&ar=2024' → {gren, ar} with felt/current-year defaults;
+    // '?gren=bane&ar=2024' → {gren, ar} with alle/current-year defaults
+    // (the unified page opens fully merged — owner ruling 2026-11-24);
     // invalid or out-of-range values fall back to the defaults.
     function resolveInitial(search, currentYear) {
         var params = new URLSearchParams(search || '');
-        var gren = params.get('gren') === 'bane' ? 'bane' : 'felt';
+        var gren = params.get('gren');
+        if (gren !== 'felt' && gren !== 'bane' && gren !== 'alle') { gren = 'alle'; }
         var ar = parseInt(params.get('ar'), 10);
         if (isNaN(ar) || ar < FIRST_YEAR || ar > currentYear) { ar = currentYear; }
         return { gren: gren, ar: ar };
     }
 
-    // The filter URL codec. Params: ovelse, class, krets, distrikt are
-    // comma-joined, per-element-encoded lists (the felt/bane disc
-    // convention); klubb, name, type are single values. resolveFilters
-    // parses, filterParams inverts — the page writes pairs via
-    // URLSearchParams.set so the browser round-trip is exact.
+    // The filter URL codec. Params: mesterskap, ovelse, class, krets,
+    // distrikt are comma-joined, per-element-encoded lists (the
+    // felt/bane disc convention); klubb, name, type are single values.
+    // mesterskap validates its values (nm/dm/km — junk drops out).
+    // resolveFilters parses, filterParams inverts — the page writes
+    // pairs via URLSearchParams.set so the browser round-trip is exact.
     function resolveFilters(search) {
         var params = new URLSearchParams(search || '');
         var type = params.get('type');
         if (type !== 'individuelt' && type !== 'lag') { type = ''; }
         return {
+            mesterskap: StandplassFormat.decodeIdList(params.get('mesterskap')).filter(function (v) {
+                return v === 'nm' || v === 'dm' || v === 'km';
+            }),
             ovelse: StandplassFormat.decodeIdList(params.get('ovelse')),
             klasse: StandplassFormat.decodeIdList(params.get('class')),
             medal: StandplassFormat.decodeIdList(params.get('medal')),
@@ -59,6 +70,7 @@ var StandplassMesterskapPage = (function () {
     function filterParams(filters) {
         var f = filters || {};
         var out = [];
+        if (f.mesterskap && f.mesterskap.length) { out.push(['mesterskap', StandplassFormat.encodeIdList(f.mesterskap)]); }
         if (f.ovelse && f.ovelse.length) { out.push(['ovelse', StandplassFormat.encodeIdList(f.ovelse)]); }
         if (f.klasse && f.klasse.length) { out.push(['class', StandplassFormat.encodeIdList(f.klasse)]); }
         if (f.medal && f.medal.length) { out.push(['medal', StandplassFormat.encodeIdList(f.medal)]); }
@@ -71,10 +83,19 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The filter row, JS-built (the felt/bane embed pattern — one
-    // implementation behind all three pages, scope differences included:
-    // nm has no krets filter, dm's krets filter doubles as the
-    // krets→distrikt finder). Static markup only — widget items are
-    // injected at runtime through textContent, no escaping surface.
+    // implementation for the unified page: every dropdown always in
+    // the markup, availability data-driven at runtime by what the
+    // loaded rows carry). Static markup only — widget items are
+    // injected at runtime through textContent, no escaping surface.    // Select-all stores ids, never the {id, name} label objects the
+    // mesterskapstype dropdown's items carry — every other dropdown's
+    // raw items are the ids themselves, and the filter state must hold
+    // one shape for matching, labels and the URL codec alike.
+    function toItemIds(items) {
+        return (items || []).map(function (n) {
+            return typeof n === 'string' ? n : n.id;
+        });
+    }
+
     function dropdownGroup(param, label, listLabel) {
         return '<div class="filter-group">'
             + '<label>' + label + '</label>'
@@ -92,17 +113,14 @@ var StandplassMesterskapPage = (function () {
             + '</div>';
     }
 
-    function filterBarMarkup(scope) {
+    function filterBarMarkup() {
         var out = [];
+        out.push(dropdownGroup('mesterskap', 'Mesterskapstype', 'Alle mesterskap'));
         out.push(dropdownGroup('ovelse', 'Øvelse', 'Alle øvelser'));
         out.push(dropdownGroup('klasse', 'Klasse', 'Alle klasser'));
         out.push(dropdownGroup('medal', 'Medalje', 'Alle medaljer'));
-        if (scope === 'km') {
-            out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
-        }
-        if (scope !== 'nm') {
-            out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
-        }
+        out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
+        out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
         out.push('<div class="filter-group">'
             + '<label>Klubb</label>'
             + '<ul class="tag-list" id="mesterskap-klubb-tags" aria-label="Valgte klubber" aria-live="polite"></ul>'
@@ -149,7 +167,9 @@ var StandplassMesterskapPage = (function () {
             var label = row.personId
                 ? '<button type="button" class="stevner-person-btn link-btn"'
                     + ' data-person-id="' + esc(row.personId)
-                    + '" data-person-name="' + esc(row.name) + '">'
+                    + '" data-person-name="' + esc(row.name)
+                    + '" data-comp-id="' + esc(row.compId == null ? '' : row.compId)
+                    + '" data-sum="' + (row.sum == null ? '' : esc(String(row.sum))) + '">'
                     + esc(row.name) + '</button>'
                 : esc(row.name);
             return label
@@ -159,7 +179,9 @@ var StandplassMesterskapPage = (function () {
         if (row.personId && !row.isTeam) {
             return '<button type="button" class="stevner-person-btn link-btn"'
                 + ' data-person-id="' + esc(row.personId)
-                + '" data-person-name="' + esc(row.name) + '">'
+                + '" data-person-name="' + esc(row.name)
+                + '" data-comp-id="' + esc(row.compId == null ? '' : row.compId)
+                + '" data-sum="' + (row.sum == null ? '' : esc(String(row.sum))) + '">'
                 + esc(row.name) + '</button>';
         }
         if (row.isTeam) {
@@ -191,6 +213,42 @@ var StandplassMesterskapPage = (function () {
         return groups;
     }
 
+    // Ruling 13 (2026-11-24): the Medalje column renders medal chips —
+    // golden/silver/bronze like the other tables' badges; unknown
+    // medal names stay plain text.
+    var MEDAL_CLASSES = { 'Gull': 'medal--gold', 'Sølv': 'medal--silver', 'Bronse': 'medal--bronze' };
+
+    function medalChip(medal) {
+        var cls = MEDAL_CLASSES[medal];
+        return cls ? '<span class="medal ' + cls + '">' + esc(medal) + '</span>' : esc(medal);
+    }
+
+    // Ruling 15 (2026-11-24): the Arrangement column carries the
+    // resultfile link — the parsed result file in its own dialog (the
+    // "Resultatfil beta" action from the felt/bane pages). Rows
+    // without a compId or branch render plain text; the button mirrors
+    // the felt/bane trigger's attributes so the click wiring stays the
+    // same shape.
+    function arrangementCell(row) {
+        if (row.title == null) { return '–'; }
+        if (row.compId == null || row.gren == null) { return esc(row.title); }
+        return '<button type="button" class="stevner-resultfile-btn"'
+            + ' data-comp-id="' + esc(row.compId) + '"'
+            + ' data-gren="' + esc(row.gren) + '"'
+            + ' data-title="' + esc(row.title) + '">'
+            + esc(row.title) + '</button>';
+    }
+
+    var TYPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };
+
+    // The distinct championship types present in a row set — rows are
+    // stamped by podiumRows; test-shaped bare rows carry none.
+    function typesPresent(rows) {
+        var seen = {};
+        (rows || []).forEach(function (r) { if (r.type) { seen[r.type] = true; } });
+        return Object.keys(seen);
+    }
+
     // The dense podium table: one row per medal, everything else a
     // column or a filter. Navn leads (owner ruling — the person is the
     // row's identity). Øvelse and Medalje display names but sort by
@@ -199,13 +257,29 @@ var StandplassMesterskapPage = (function () {
     // resolved club, and one with nothing resolved shows '–' (owner
     // ruling — never a club derived from the lag name); only the
     // memberless team-row fallback derives a display club from the
-    // lag name. The
-    // region column (krets on km, distrikt on dm) is defaultHidden
-    // behind its group row; nm carries neither column nor grouping.
+    // lag name.
+    // Single type in view: exactly the per-type page shape — km
+    // carries the krets column behind its group row, dm the distrikt
+    // column, nm neither. Mixed types (spec ruling 6): flat, no
+    // groupRows, with the Mesterskap column (NM/DM/KM chips, sorted
+    // by typeRank so NM → DM → KM, øvelse program order tie-breaking)
+    // and the unified Region column (the row's own championship
+    // region, visible by default, '–' for nm rows).
     // hideBelow tiers follow the norgesfelt search table (700/900).
-    function tableSpecFor(rows, scope) {
+    function tableSpecFor(rows) {
         rows = rows || [];
-        var regionKey = scope === 'km' ? 'region' : scope === 'dm' ? 'distrikt' : null;
+        var types = typesPresent(rows);
+        var mixed = types.length > 1;
+        var regionKey = !mixed && types[0] === 'km' ? 'region'
+            : !mixed && types[0] === 'dm' ? 'distrikt' : null;
+        // Owner ruling 2026-11-24: Mesterskap first, Medalje second —
+        // the championship type and the medal are the primary scanning
+        // keys. Single-type views have no Mesterskap column (the type
+        // is the block header), so Medalje leads there.
+        var medalCol = {
+            key: 'medalRank', label: 'Medalje', align: 'center', sortable: true, defaultDir: 'asc',
+            cellClass: 'medal-cell', raw: true, cell: function (row) { return medalChip(row.medal); }
+        };
         var columns = [
             { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true, cell: personCell },
             {
@@ -215,10 +289,6 @@ var StandplassMesterskapPage = (function () {
             {
                 key: 'klasse', label: 'Klasse', align: 'center', sortable: true, defaultDir: 'asc',
                 cell: function (row) { return row.klasse == null ? '–' : row.klasse; }
-            },
-            {
-                key: 'medalRank', label: 'Medalje', align: 'center', sortable: true, defaultDir: 'asc',
-                cellClass: 'medal-cell', cell: function (row) { return row.medal; }
             },
             {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
@@ -231,6 +301,24 @@ var StandplassMesterskapPage = (function () {
                 }
             }
         ];
+        columns.unshift(medalCol);
+        if (mixed) {
+            columns.unshift({
+                key: 'typeRank', label: 'Mesterskap', align: 'center',
+                sortable: true, defaultDir: 'asc', secondaryKey: 'ovelseRank',
+                hideBelow: 700, raw: true,
+                cell: function (row) {
+                    // Owner ruling 2026-11-24: type colors (blue NM,
+                    // green DM, purple KM) via the modifier class; the
+                    // border follows currentColor, the vars flip per
+                    // theme in themes.css.
+                    var known = TYPE_LABELS[row.type];
+                    return '<span class="mesterskap-type-chip'
+                        + (known ? ' mesterskap-type-chip--' + row.type : '') + '">'
+                        + esc(known || String(row.type || '').toUpperCase()) + '</span>';
+                }
+            });
+        }
         if (rows.some(function (r) { return r.sum != null; })) {
             columns.push({
                 key: 'sum', label: 'Sum', align: 'right', sortable: true, defaultDir: 'desc',
@@ -252,18 +340,43 @@ var StandplassMesterskapPage = (function () {
         }
         if (regionKey) {
             columns.push({
-                key: regionKey, label: scope === 'km' ? 'Krets' : 'Distrikt',
+                key: regionKey, label: regionKey === 'region' ? 'Krets' : 'Distrikt',
                 sortable: true, defaultDir: 'asc', defaultHidden: true,
                 cell: function (row) { return row[regionKey] == null ? '–' : row[regionKey]; }
             });
         }
+        if (mixed) {
+            columns.push({
+                key: 'champRegion', label: 'Region', sortable: true, defaultDir: 'asc',
+                hideBelow: 900,
+                cell: function (row) { return row.champRegion == null ? '–' : row.champRegion; }
+            });
+        }
+        // Ruling 15 (2026-11-24): the Arrangement column (the stevne
+        // name) carries the resultfile link — see arrangementCell.
+        columns.push({
+            key: 'title', label: 'Arrangement', sortable: true, defaultDir: 'asc',
+            raw: true, cell: arrangementCell
+        });
         columns.push({
             key: 'date', label: 'Dato', sortable: true, defaultDir: 'desc', defaultHidden: true,
             cell: function (row) { return row.date == null ? '–' : row.date; }
         });
         columns.push({
-            key: 'organizer', label: 'Arrangør', sortable: true, defaultDir: 'asc', defaultHidden: true,
-            cell: function (row) { return row.organizer == null ? '–' : row.organizer; }
+            // Ruling 14 (2026-11-24): the Arrangør cell links the comp
+            // modal (the full result list — the same beta modal the
+            // felt/bane pages use), titled by the comp; visible by
+            // default now that it carries the affordance.
+            key: 'organizer', label: 'Arrangør', sortable: true, defaultDir: 'asc',
+            raw: true,
+            cell: function (row) {
+                if (row.organizer == null) { return '–'; }
+                if (row.compId == null) { return esc(row.organizer); }
+                return '<button type="button" class="stevner-comp-btn"'
+                    + ' data-comp-id="' + esc(row.compId) + '"'
+                    + ' data-comp-title="' + esc(row.title == null ? '' : row.title) + '">'
+                    + esc(row.organizer) + '</button>';
+            }
         });
         return {
             columns: columns,
@@ -288,6 +401,102 @@ var StandplassMesterskapPage = (function () {
         };
     }
 
+    // Gren=alle merge: a failed branch fetch passes null and vanishes —
+    // the other branch renders (both null → the page's failed-year card).
+    function mergeMestereIndexes(indexes) {
+        var comps = [];
+        (indexes || []).forEach(function (index) {
+            if (index && index.comps) { comps = comps.concat(index.comps); }
+        });
+        return { comps: comps };
+    }
+
+    // Branch-stamps an index's comps (felt/bane) so podium rows can
+    // address the right detaljer directory for the Arrangement
+    // column's resultfile link (ruling 15). Mutates and returns the
+    // index — each comp belongs to exactly one branch's index, so
+    // re-stamping is idempotent.
+    function stampGren(index, gren) {
+        if (index && index.comps) {
+            index.comps.forEach(function (c) { c.gren = gren; });
+        }
+        return index;
+    }
+
+    // Region-filter availability is data-driven: a dropdown renders only
+    // when the loaded rows carry its field (nm rows carry neither).
+    function regionDropdownsFor(rows) {
+        var krets = false;
+        var distrikt = false;
+        (rows || []).forEach(function (r) {
+            if (r.region != null) { krets = true; }
+            if (r.distrikt != null) { distrikt = true; }
+        });
+        return { krets: krets, distrikt: distrikt };
+    }
+
+    // Ruling 12 (2026-11-24): availability is computed per view, on a
+    // basis that excludes the region filters' own selections — a krets
+    // pick must not deactivate its own dropdown, and adding DM/KM back
+    // to the type filter reactivates a greyed-out filter. Pure: the DOM
+    // half (grey out, inert, stale-selection clearing) lives in init's
+    // setRegionFilterActive/applyFilters.
+    function regionFilterAvailability(rows, filters) {
+        var basis = StandplassMestereData.filterPodiumRows(rows, {
+            mesterskap: filters.mesterskap,
+            ovelse: filters.ovelse,
+            klasse: filters.klasse,
+            medal: filters.medal,
+            klubb: filters.klubb,
+            navn: filters.navn,
+            type: filters.type
+        });
+        return regionDropdownsFor(basis);
+    }
+
+    // The person-modal entry activation from a podium row. The modal's
+    // entries come from the NSF API year JSONs while podium rows come
+    // from the parsed result files — two datasets whose øvelse and
+    // klasse vocabularies never match (measured: 0/1856 rows, 2026),
+    // so felt/bane's exact spec cannot be built here. Instead the row's
+    // comp pins the candidates, and activation happens only when
+    // unambiguous: the person's only entry at that stevne, or a unique
+    // score match on the podium sum (the result file's sum and the
+    // API's score are the same total — resolves ~91% of 2026's podium
+    // rows). Anything else stays unactivated rather than risk a wrong
+    // highlight. Returns the chosen entry's own spec — the API's
+    // strings — so findEntryIndex matches exactly.
+    function resolveActivation(entries, compId, sum) {
+        if (compId == null) { return null; }
+        var candidates = (entries || []).filter(function (e) {
+            return e.competitionId === compId;
+        });
+        if (!candidates.length) { return null; }
+        var chosen = null;
+        if (candidates.length === 1) {
+            chosen = candidates[0];
+        } else if (sum != null) {
+            var byScore = candidates.filter(function (e) {
+                return e.score != null && Number(e.score) === Number(sum);
+            });
+            if (byScore.length === 1) { chosen = byScore[0]; }
+        }
+        if (!chosen) { return null; }
+        return {
+            date: chosen.date,
+            competitionId: chosen.competitionId,
+            discipline: chosen.discipline,
+            class: chosen.class
+        };
+    }
+
+    // The mixed view's opening sort: type-first sections (NM, DM, KM),
+    // each in program order via the base's secondary key over the
+    // pre-sorted rows. Single-type views open unsorted (page order).
+    function initialSortFor(rows) {
+        return typesPresent(rows).length > 1 ? { key: 'typeRank', dir: 'asc' } : null;
+    }
+
     // The message-only empty card for a year that failed to load or
     // holds no championships — never a bare string.
     function emptyYearCard(gren, ar, failed) {
@@ -302,7 +511,6 @@ var StandplassMesterskapPage = (function () {
     function init(config) {
         config = config || {};
         var root = config.root || document;
-        var scope = config.scope;
         var urlState = config.urlState;
         var CURRENT_YEAR = new Date().getUTCFullYear();
         var FW = StandplassFilterWidgets;
@@ -315,28 +523,52 @@ var StandplassMesterskapPage = (function () {
         var contentEl = root.getElementById('mesterskap-content');
         var filterbarEl = root.getElementById('mesterskap-filterbar');
         var statsEl = root.getElementById('mesterskap-stats');
+        var alleBtn = root.getElementById('mesterskap-toggle-alle');
         var feltBtn = root.getElementById('mesterskap-toggle-felt');
         var baneBtn = root.getElementById('mesterskap-toggle-bane');
         var yearSelect = root.getElementById('mesterskap-year-select');
 
         var fetcher = StandplassData.createFetcher(window.fetch.bind(window));
 
-        var personModal = StandplassPersonModalController.create({
-            idPrefix: 'mesterskap',
-            root: root,
-            urlState: urlState,
-            fetchEntriesForYear: function (personId, year) {
-                var dataBase = gren === 'felt' ? '/data/felt' : '/data/bane';
+        // The comp modal host (ruling 14): podium rows' Arrangør links
+        // and the Meritter tab's comp links open the full result list
+        // here — branch-agnostic, fetched by compId from the API.
+        var compModalHost = null;
+
+        // The person modal's entry source. Hoisted to a named function:
+        // the table's person-link click path also calls it to resolve
+        // the entry activation before opening — the same cached fetch
+        // the modal itself will use (one load per person-year).
+        function fetchEntriesForYear(personId, year) {
+            function fromBase(dataBase) {
                 return fetcher.fetchYear(dataBase, year).then(function (yearData) {
                     return StandplassStevnerPage.flattenRows(yearData)
                         .filter(function (r) { return r.personId === personId; })
                         .map(function (r) {
                             return { date: r.date, discipline: r.discipline, class: r.class,
+                                competitionId: r.competitionId,
                                 competitionType: r.competitionType, competition: r.competition,
                                 position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
                         });
-                });
+                }).catch(function () { return []; });
+            }
+            // gren=alle: both branches' entries (the controller
+            // already handles mixed-branch entries + the switcher).
+            if (gren === 'alle') {
+                return Promise.all([fromBase('/data/felt'), fromBase('/data/bane')])
+                    .then(function (pair) { return pair[0].concat(pair[1]); });
+            }
+            return fromBase(gren === 'felt' ? '/data/felt' : '/data/bane');
+        }
+
+        var personModal = StandplassPersonModalController.create({
+            idPrefix: 'mesterskap',
+            root: root,
+            urlState: urlState,
+            onOpenComp: function (compId, compTitle) {
+                if (compModalHost) { compModalHost.open(compId, compTitle); }
             },
+            fetchEntriesForYear: fetchEntriesForYear,
             defaultYear: ar,
             firstYear: FIRST_YEAR,
             currentYear: CURRENT_YEAR,
@@ -348,10 +580,53 @@ var StandplassMesterskapPage = (function () {
         contentEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-person-btn');
             if (!btn) { return; }
-            personModal.open(btn, {
-                personId: btn.dataset.personId,
-                personName: btn.dataset.personName,
-                initialDisc: null
+            // The entry-activation spec is an open() argument, so the
+            // person's API entries must load before the modal opens.
+            // This is the modal's own cached fetch: one load on the
+            // first open per person-year, instant after.
+            fetchEntriesForYear(btn.dataset.personId, ar).then(function (entries) {
+                var sum = btn.dataset.sum;
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: null,
+                    entry: resolveActivation(entries, btn.dataset.compId || null,
+                        sum == null || sum === '' ? null : Number(sum))
+                });
+            });
+        });
+        // Comp-modal wiring for the Arrangør links (ruling 14) — the
+        // same delegated pattern; the stevner pages' trigger shape.
+        compModalHost = StandplassCompModal.createDialogHost({ idPrefix: 'mesterskap', root: root });
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-comp-btn');
+            if (!btn) { return; }
+            compModalHost.open(btn.dataset.compId, btn.dataset.compTitle || btn.textContent);
+        });
+        // Resultatfil modal (ruling 15): the Arrangement links open the
+        // parsed result file. Every open carries the row's branch via
+        // comp.detailBase — the host default never matters here;
+        // person buttons inside route through the page's person modal.
+        var resultfileHost = StandplassResultfileModal.ensureDialog({
+            idPrefix: 'mesterskap',
+            root: root,
+            onPerson: function (btn) {
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: btn.dataset.discipline || null
+                });
+            }
+        });
+        contentEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.stevner-resultfile-btn');
+            if (!btn) { return; }
+            resultfileHost.open({
+                id: btn.dataset.compId,
+                year: ar,
+                title: btn.dataset.title || '',
+                resultFileUrl: btn.dataset.resultfile || null,
+                detailBase: '/data/detaljer/' + btn.dataset.gren
             });
         });
         personModal.openFromUrl();
@@ -379,29 +654,30 @@ var StandplassMesterskapPage = (function () {
 
         // ── Filter state ─────────────────────────────────────────────
         // Survives year switches (stale values filter to a visible zero,
-        // never a silent blank); reset on gren switches — the øvelse
-        // universe differs between felt and bane entirely.
+        // never a silent blank); resets on gren switches — the øvelse
+        // universe differs between felt and bane entirely — except
+        // mesterskapstype, which survives (nm/dm/km exist in both
+        // branches, owner ruling 2026-11-24).
         var allRows = [];
         var filters = resolveFilters(urlState.getSearch());
-        // krets is km-only (the championship's own krets); a stale
-        // ?krets= param on dm/nm never round-trips.
-        if (scope !== 'km') { filters.krets = []; }
         var emptyFilters = function () {
-            return { ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
+            return { mesterskap: [], ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
         };
 
-        // Felt/bane toggle, reflecting a ?gren=bane initial state.
+        // Gren toggle (alle/felt/bane), reflecting the ?gren= state.
         function reflectGren() {
-            feltBtn.classList.toggle('program-btn--active', gren === 'felt');
-            feltBtn.setAttribute('aria-pressed', String(gren === 'felt'));
-            baneBtn.classList.toggle('program-btn--active', gren === 'bane');
-            baneBtn.setAttribute('aria-pressed', String(gren === 'bane'));
+            [[alleBtn, 'alle'], [feltBtn, 'felt'], [baneBtn, 'bane']].forEach(function (pair) {
+                pair[0].classList.toggle('program-btn--active', gren === pair[1]);
+                pair[0].setAttribute('aria-pressed', String(gren === pair[1]));
+            });
         }
         function setGren(next) {
             gren = next;
             reflectGren();
             personModal.reset({ initialMetric: gren === 'bane' ? 'score' : 'rankingScore' });
+            var keepMesterskap = filters.mesterskap;
             filters = emptyFilters();
+            filters.mesterskap = keepMesterskap;
             if (barBuilt) {
                 navnInput.value = '';
                 typeSelect.value = '';
@@ -411,6 +687,7 @@ var StandplassMesterskapPage = (function () {
             load();
         }
         reflectGren();
+        alleBtn.addEventListener('click', function () { if (gren !== 'alle') { setGren('alle'); } });
         feltBtn.addEventListener('click', function () { if (gren !== 'felt') { setGren('felt'); } });
         baneBtn.addEventListener('click', function () { if (gren !== 'bane') { setGren('bane'); } });
 
@@ -419,6 +696,9 @@ var StandplassMesterskapPage = (function () {
         var barBuilt = false;
         var navnInput = null;
         var typeSelect = null;
+        var kretsGroupEl = null;      // ruled inert/active per view
+        var distriktGroupEl = null;
+        var regionDropdownEls = {};   // krets/distrikt dropdowns — rebuilt when a view clears their stale selection (ruling 12)
         var dropdowns = [];   // every checkbox dropdown, for Nullstill
         var combos = [];      // the klubb combo
 
@@ -438,7 +718,11 @@ var StandplassMesterskapPage = (function () {
                 selectAllBtn: root.getElementById('mesterskap-' + param + '-select'),
                 labelNone: labelAll,
                 getItems: function () {
-                    return itemsFn().map(function (n) { return { id: n, name: n }; });
+                    return itemsFn().map(function (n) {
+                        // strings pass through as {id, name}; objects
+                        // (the mesterskapstype NM/DM/KM labels) as-is.
+                        return typeof n === 'string' ? { id: n, name: n } : n;
+                    });
                 },
                 getSelected: function () { return filters[selKey]; },
                 onToggle: function (id, name, checked) {
@@ -455,7 +739,7 @@ var StandplassMesterskapPage = (function () {
                     applyFilters();
                 },
                 onSelectAll: function () {
-                    filters[selKey] = itemsFn().slice();
+                    filters[selKey] = toItemIds(itemsFn());
                     dropdown.rebuild();
                     applyFilters();
                 }
@@ -469,19 +753,24 @@ var StandplassMesterskapPage = (function () {
         function ensureFilterBar() {
             if (barBuilt) { return; }
             barBuilt = true;
-            filterbarEl.innerHTML = filterBarMarkup(scope);
+            filterbarEl.innerHTML = filterBarMarkup();
+            kretsGroupEl = root.getElementById('mesterskap-krets-btn').closest('.filter-group');
+            distriktGroupEl = root.getElementById('mesterskap-distrikt-btn').closest('.filter-group');
 
+            // Mesterskapstype: fixed typeRank order, NM/DM/KM labels —
+            // the canonical types, never derived from the data.
+            wireDropdown('mesterskap', 'Alle mesterskap', function () {
+                return ['nm', 'dm', 'km'].map(function (t) {
+                    return { id: t, name: TYPE_LABELS[t] };
+                });
+            }, 'mesterskap');
             wireDropdown('ovelse', 'Alle øvelser', function () { return distinctSorted('ovelse'); }, 'ovelse');
             wireDropdown('klasse', 'Alle klasser', function () { return distinctSorted('klasse'); }, 'klasse');
             // Fixed medal order — Gull first is the meaningful order,
             // not collation (which would put Bronse first).
             wireDropdown('medal', 'Alle medaljer', function () { return ['Gull', 'Sølv', 'Bronse']; }, 'medal');
-            if (scope === 'km') {
-                wireDropdown('krets', 'Alle kretser', function () { return distinctSorted('region'); }, 'krets');
-            }
-            if (scope !== 'nm') {
-                wireDropdown('distrikt', 'Alle distrikter', function () { return distinctSorted('distrikt'); }, 'distrikt');
-            }
+            regionDropdownEls.krets = wireDropdown('krets', 'Alle kretser', function () { return distinctSorted('region'); }, 'krets');
+            regionDropdownEls.distrikt = wireDropdown('distrikt', 'Alle distrikter', function () { return distinctSorted('distrikt'); }, 'distrikt');
 
             klubbCombo = FW.makeTagComboHandlers({
                 input: root.getElementById('mesterskap-klubb-input'),
@@ -542,6 +831,7 @@ var StandplassMesterskapPage = (function () {
             });
 
             FW.wireClearAllFilters(root.getElementById('mesterskap-clear-filters'), [
+                function () { filters.mesterskap = []; },
                 function () { filters.ovelse = []; },
                 function () { filters.klasse = []; },
                 function () { filters.medal = []; },
@@ -563,32 +853,55 @@ var StandplassMesterskapPage = (function () {
             var qs = new URLSearchParams(urlState.getSearch());
             qs.set('gren', gren);
             qs.set('ar', String(ar));
-            ['ovelse', 'class', 'medal', 'krets', 'distrikt', 'klubb', 'name', 'type'].forEach(function (k) {
+            ['mesterskap', 'ovelse', 'class', 'medal', 'krets', 'distrikt', 'klubb', 'name', 'type'].forEach(function (k) {
                 qs.delete(k);
             });
             filterParams(filters).forEach(function (p) { qs.set(p[0], p[1]); });
             urlState.setSearch(qs.toString());
         }
 
-        // The region filters read the rows' stamped championship
-        // fields directly: krets scopes to the km championship's own
-        // krets (km-only), distrikt to the distrikt on km and dm.
-        function activeRegionFilters() {
-            return {
-                region: scope === 'km' ? filters.krets : [],
-                distrikt: scope !== 'nm' ? filters.distrikt : []
-            };
+        // Region filters read the rows' stamped championship fields
+        // directly, exact-match (the krets rule): krets matches the
+        // km championship's own krets AND the dm comp's host krets;
+        // distrikt matches both km and dm rows. Rows without the field
+        // (nm rows) never match — availability gating below keeps the
+        // dropdowns honest about when the filters can bite.
+        // Ruling 12 (2026-11-24): region filters with nothing to filter
+        // grey out and go inert, never disappear — they reactivate when
+        // the view again carries their field (adding DM/KM back to the
+        // type filter). A deactivated dropdown clears its stale
+        // selection so no invisible filter zeroes the table.
+        function setRegionFilterActive(groupEl, active) {
+            if (!groupEl) { return; }
+            groupEl.classList.toggle('filter-group--inactive', !active);
+            if (active) { groupEl.removeAttribute('inert'); }
+            else { groupEl.setAttribute('inert', ''); }
         }
 
         function applyFilters() {
+            var avail = regionFilterAvailability(allRows, filters);
+            // A deactivated dropdown drops its stale selection (no
+            // invisible filter zeroing the table) and rebuilds so the
+            // closed button's label resets — the widget's state IS the
+            // filters object (getSelected), rebuild is the sync.
+            if (!avail.krets && filters.krets.length) {
+                filters.krets = [];
+                if (regionDropdownEls.krets) { regionDropdownEls.krets.rebuild(); }
+            }
+            if (!avail.distrikt && filters.distrikt.length) {
+                filters.distrikt = [];
+                if (regionDropdownEls.distrikt) { regionDropdownEls.distrikt.rebuild(); }
+            }
             syncUrl();
-            var rf = activeRegionFilters();
+            setRegionFilterActive(kretsGroupEl, avail.krets);
+            setRegionFilterActive(distriktGroupEl, avail.distrikt);
             var filtered = StandplassMestereData.filterPodiumRows(allRows, {
+                mesterskap: filters.mesterskap,
                 ovelse: filters.ovelse,
                 klasse: filters.klasse,
                 medal: filters.medal,
-                region: rf.region,
-                distrikt: rf.distrikt,
+                region: filters.krets,
+                distrikt: filters.distrikt,
                 klubb: filters.klubb,
                 navn: filters.navn,
                 type: filters.type
@@ -602,13 +915,21 @@ var StandplassMesterskapPage = (function () {
         }
 
         function renderStats(rows) {
-            var s = StandplassMestereData.statsFor(rows, scope);
+            var s = StandplassMestereData.statsFor(rows);
             var parts = [
                 plural(s.medaljer, 'medalje', 'medaljer'),
                 plural(s.ovselser, 'øvelse', 'øvelser')
             ];
-            if (scope === 'km') { parts.push(plural(s.regioner, 'krets', 'kretser')); }
-            if (scope === 'dm') { parts.push(plural(s.regioner, 'distrikt', 'distrikter')); }
+            if (s.regioner > 0) {
+                var types = typesPresent(rows);
+                if (types.length === 1 && types[0] === 'km') {
+                    parts.push(plural(s.regioner, 'krets', 'kretser'));
+                } else if (types.length === 1 && types[0] === 'dm') {
+                    parts.push(plural(s.regioner, 'distrikt', 'distrikter'));
+                } else {
+                    parts.push(plural(s.regioner, 'region', 'regioner'));
+                }
+            }
             parts.push(plural(s.klubber, 'klubb', 'klubber'));
             statsEl.textContent = parts.join(' · ');
         }
@@ -647,7 +968,7 @@ var StandplassMesterskapPage = (function () {
                 contentEl.innerHTML = '<p class="ranking-empty">Ingen rader matcher de valgte filtrene.</p>';
                 return;
             }
-            spec = tableSpecFor(rows, scope);
+            spec = tableSpecFor(rows);
             contentEl.innerHTML = StandplassDataTable.renderTable(
                 TABLE_ID, spec, tableState());
             wire(true);
@@ -706,13 +1027,38 @@ var StandplassMesterskapPage = (function () {
             else if (typeof mql.addListener === 'function') { mql.addListener(listener); }
         });
 
+        // Gren=alle fetches both branches; a failed branch (null)
+        // vanishes into the merge so the other renders. Both null →
+        // null, the page's failed-year signal.
+        function fetchMestereIndex() {
+            function from(grenName) {
+                return fetcher.fetchMestere('/data/' + grenName + '/mestere', ar)
+                    .then(function (index) { return stampGren(index, grenName); })
+                    .catch(function () { return null; });
+            }
+            if (gren === 'alle') {
+                return Promise.all([from('felt'), from('bane')])
+                    .then(function (pair) {
+                        if (pair[0] == null && pair[1] == null) { return null; }
+                        return mergeMestereIndexes(pair);
+                    });
+            }
+            return from(gren);
+        }
+
         function load() {
             statusEl.textContent = 'Laster mesterskapsdata…';
             contentEl.innerHTML = '';
-            fetcher.fetchMestere('/data/' + gren + '/mestere', ar)
+            fetchMestereIndex()
                 .then(function (index) {
+                    if (index == null) { throw new Error('mestere fetch failed'); }
                     statusEl.textContent = '';
-                    allRows = StandplassMestereData.podiumRows(index || {}, scope);
+                    allRows = StandplassMestereData.podiumRows(index);
+                    // Seeded sort: while no user sort exists, mixed views
+                    // open type-first (NM → DM → KM sections); a user's
+                    // sort persists across loads and filter changes
+                    // (the house session-state policy).
+                    tableSort = tableSort || initialSortFor(allRows);
                     if (!allRows.length) {
                         filterbarEl.hidden = true;
                         statsEl.hidden = true;
@@ -745,8 +1091,15 @@ var StandplassMesterskapPage = (function () {
         resolveFilters: resolveFilters,
         filterParams: filterParams,
         filterBarMarkup: filterBarMarkup,
+        toItemIds: toItemIds,
         tableSpecFor: tableSpecFor,
         bareSpec: bareSpec,
+        mergeMestereIndexes: mergeMestereIndexes,
+        stampGren: stampGren,
+        regionDropdownsFor: regionDropdownsFor,
+        regionFilterAvailability: regionFilterAvailability,
+        resolveActivation: resolveActivation,
+        initialSortFor: initialSortFor,
         emptyYearCard: emptyYearCard,
         init: init
     };

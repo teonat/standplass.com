@@ -61,6 +61,12 @@ assert.strictEqual(RB.cellHtml(84.99, 'C'),
     '<span class="rank-value" style="color:var(--chart-blue-text)" title="I klassen">84.99</span>');
 assert.strictEqual(RB.cellHtml(90, 'Åpen'), '90.00', 'off-ladder: plain value, no color');
 assert.strictEqual(RB.cellHtml(null, 'A'), '–', 'no ranking renders –');
+// Score-scale garbage in the ranking field (the Hurtig u*-class
+// listings put the raw score there — 500+): not a ranking, renders –.
+assert.strictEqual(RB.cellHtml(560, 'A'), '–',
+    'a value above the 100-point ladder is not a ranking');
+assert.ok(RB.cellHtml(100, 'A').indexOf('100.00') !== -1,
+    'the ladder ceiling itself stays a ranking');
 assert.strictEqual(RB.cellHtml(0, 'A'), '0.00', '0 is no ranking: plain 0.00, no color');
 
 // ── positionCellHtml: absolute medals (never relative to the visible set) ──

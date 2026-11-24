@@ -244,6 +244,18 @@ assert.strictEqual(CM.sanitizeDescription('<a href="javascript:alert(1)">x</a>')
 assert.strictEqual(CM.sanitizeDescription('<a href="https://x.example/?a=1&b=2">x</a>'),
     '<a href="https://x.example/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">x</a>',
     'the href stays attribute-escaped (& -> &amp;) so it cannot break out');
+
+// skyting.no descriptions carry &nbsp; entities for spacing (e.g.
+// Lygnafelten 2026: "OBS! &nbsp;Selv om..."). Un-escaped back to the
+// entity the browser renders as a non-breaking space — the same
+// fixed-literal whitelist class as the allowed tags; without it the
+// modal shows literal "&nbsp;" text.
+assert.strictEqual(CM.sanitizeDescription('OBS! &nbsp;Selv om det &nbsp;'),
+    'OBS! &nbsp;Selv om det &nbsp;',
+    'the nbsp entity survives as an entity, not escaped text');
+assert.strictEqual(CM.sanitizeDescription('A &amp;nbsp; B'),
+    'A &amp;amp;nbsp; B',
+    'a double-encoded nbsp stays escaped text');
 assert.strictEqual(CM.sanitizeDescription('<a class="btn" href="https://x.example/">x</a>'),
     '&lt;a class=&quot;btn&quot; href=&quot;https://x.example/&quot;&gt;x</a>',
     'anchors carrying other attributes stay literal');

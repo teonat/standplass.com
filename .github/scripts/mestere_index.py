@@ -10,7 +10,7 @@ Rules (spec: 2026-11-22-result-details-frontend-design.md):
 1. comp competitionTypeName == 'Norgesmesterskap' → every øvelse is
    an NM section ('Lag: X' øvelser → nmLag).
 2. inrX-extracted detail['km']/['dm'] sections and lag flow as-is.
-3. Øvelse-navn patterns: 'KM|DM Mix-lag: X' → scopeLag klasse 'Mix';
+3. Øvelse-navn patterns: 'KM|DM Mix-lag: X' → scopeLag klasse 'Mix <class>'
    'KM: X'/'DM: X' → scope sections; datotid's fused
    '<ovelse> Dato/tid: … Mesterskap: <KM|DM> <region> Deltakere' →
    scope section; '(<KM|DM> - <region>)' re-listings → scope section;
@@ -190,18 +190,36 @@ def _lag_sections_from_classes(ovelse_name, classes, club_map):
     return sections
 
 
-def _mix_lag_section(ovelse_name, classes, club_map):
-    """Mix-lag øvelser pool their teams across classes under the
-    'Mix' klasse — mixed classes shoot one shared podium."""
-    if any('teams' in c for c in classes):
-        teams = [t for c in classes for t in c.get('teams', [])]
-        podium = _team_champions(teams, club_map)
-    else:
-        rows = [r for c in classes for r in c.get('rows', [])]
-        podium = _team_podium(rows)
-    if not podium:
-        return None
-    return {'ovelse': ovelse_name, 'klasse': 'Mix', 'podium': podium}
+def _mix_lag_sections(ovelse_name, classes, club_map):
+    """Mix-lag øvelser carry one podium per mix class — the class
+    (U, Jr, Å…) is the team's registered mix class, each with its own
+    Gull/Sølv/Bronse. Pooled under the bare 'Mix' klasse until now,
+    which hid which class a team shot in (NM 2026's two gold mix
+    teams were a junior and an ungdom team, indistinguishable). A
+    classless entry keeps the pooled 'Mix' klasse (older parses
+    without class granularity). v15 transition: team-shaped classes
+    carry teams, row-shaped fall back to the fused-row team
+    podium."""
+    sections = []
+    unclassed = []
+    for c in classes:
+        if 'teams' in c:
+            podium = _team_champions(c['teams'], club_map)
+        else:
+            podium = _team_podium(c.get('rows', []))
+        if not podium:
+            continue
+        klasse = c.get('klasse')
+        if klasse:
+            sections.append({'ovelse': ovelse_name,
+                             'klasse': 'Mix ' + klasse,
+                             'podium': podium})
+        else:
+            unclassed.extend(podium)
+    if unclassed:
+        sections.append({'ovelse': ovelse_name, 'klasse': 'Mix',
+                         'podium': unclassed})
+    return sections
 
 
 def _comp_discipline(comp):
@@ -259,10 +277,8 @@ def _classify(detail, comp):
                 out['nmLag'].extend(_lag_sections_from_classes(
                     navn[len('Lag: '):], classes, club_map))
             elif navn.startswith('Mix-lag: '):
-                section = _mix_lag_section(navn[len('Mix-lag: '):],
-                                           classes, club_map)
-                if section:
-                    out['nmLag'].append(section)
+                out['nmLag'].extend(_mix_lag_sections(
+                    navn[len('Mix-lag: '):], classes, club_map))
             else:
                 out['nm'].extend(_sections_from_classes(
                     navn, classes, person_podium))
@@ -273,9 +289,8 @@ def _classify(detail, comp):
             scope = m.group(1).lower()
             name = m.group(2)
             if 'Mix-lag' in navn:
-                section = _mix_lag_section(name, classes, club_map)
-                if section:
-                    out[scope + 'Lag'].append(section)
+                out[scope + 'Lag'].extend(_mix_lag_sections(
+                    name, classes, club_map))
             else:
                 out[scope].extend(_sections_from_classes(
                     name, classes, person_podium))

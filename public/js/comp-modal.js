@@ -30,6 +30,13 @@ var StandplassCompModal = (function () {
     // legitimate typography ("...</a>. Av..."), so a space is only
     // inserted before a following letter or digit.
     var CROWDED_LINK_END = /<\/a>(?=[A-Za-z0-9À-ÿ])/g;
+    // Source-data quirk (e.g. Lygnafelten 2026): descriptions carry
+    // &nbsp; entities for spacing. esc() escapes the ampersand like
+    // every other token, which would render as literal "&nbsp;" text
+    // — the exact fixed string is un-escaped back to the entity, the
+    // same whitelist class as ALLOWED_TAGS (no attribute, no capture,
+    // only the literal can ever appear in the output).
+    var NBSP_ENTITY = /&amp;nbsp;/g;
     function sanitizeDescription(html) {
         return esc(html)
             .replace(ALLOWED_LINK, function (m, href) {
@@ -40,7 +47,8 @@ var StandplassCompModal = (function () {
             .replace(ALLOWED_TAGS, function (m, closing, tag) {
                 return '<' + closing + tag.toLowerCase() + '>';
             })
-            .replace(CROWDED_LINK_END, '</a> ');
+            .replace(CROWDED_LINK_END, '</a> ')
+            .replace(NBSP_ENTITY, '&nbsp;');
     }
 
     var STATUS_LABEL = { 0: 'Søknad', 1: 'Godkjent', 2: 'Avvist', 3: 'Avlyst' };

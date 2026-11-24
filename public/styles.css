@@ -2134,8 +2134,7 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 
 /* Team rows: the lag tag marks them next to the team name — without
    it they read as club-less persons (owner QA). */
-.mesterskap-lag-tag {
-  display: inline-block;
+.mesterskap-lag-tag {  display: inline-block;
   margin-left: 0.375rem;
   padding: 0 0.375rem;
   font-size: 0.6875rem;
@@ -2146,6 +2145,39 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   border: 1px solid currentColor;
   border-radius: 3px;
   vertical-align: 1px;
+}
+
+/* The mixed view's Mesterskap column: NM/DM/KM chips, the lag tag's
+   visual language minus the inline-suffix margin (the whole cell is
+   the chip). */
+.mesterskap-type-chip {
+  display: inline-block;
+  padding: 0 0.375rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+/* Owner ruling 2026-11-24: the Mesterskap chips carry type colors —
+   blue NM, green DM, purple KM — from the chart palette's text
+   variants (they flip per theme in themes.css; the border follows
+   currentColor, the background is a faint tint of the same hue).
+   Gold/silver/bronze stay reserved for the Medalje chips. */
+.mesterskap-type-chip--nm {
+  color: var(--chart-blue-text);
+  background: rgba(74, 144, 217, 0.10);
+}
+.mesterskap-type-chip--dm {
+  color: var(--chart-green-text);
+  background: rgba(34, 197, 94, 0.10);
+}
+.mesterskap-type-chip--km {
+  color: var(--chart-purple-text);
+  background: rgba(168, 85, 247, 0.10);
 }
 
 /* Lag member rows: the lag name rides as a muted sub-line under the
@@ -2160,3 +2192,49 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 /* The medal column reads as the row's anchor — heavier, no color games
    (gull/sølv/bronse tints are a styling rabbit hole in dark mode). */
 .medal-cell { font-weight: 600; }
+
+/* The hidden attribute vs .filter-group's display:flex: author
+   styles beat the UA stylesheet, so a hidden filter-group would keep
+   rendering — the same trap #mesterskap-filterbar[hidden] guards.
+   Consumers: the person modal's initially-hidden filter groups. */
+.filter-group[hidden] { display: none; }
+
+/* Ruling 2026-11-24 (unified mesterskap): a region filter with
+   nothing to filter greys out and goes inert — the inert attribute
+   removes the whole group from pointer, keyboard and
+   accessibility-tree interaction, so no per-control disabled state
+   is needed; it reactivates when the view again carries its field.
+   The site's disabled visual idiom is opacity 0.5. */
+.filter-group--inactive { opacity: 0.5; }
+.filter-group--inactive .checkbox-dropdown-btn { cursor: default; }
+
+/* Owner QA 2026-11-24: the table's row-level links — Arrangement
+   (resultfile) and Arrangør (comp modal) — adopt the person-link
+   convention (theme-adaptive text color, underline, accent hover —
+   the same declarations as .stevner-person-btn.link-btn), not the
+   stevner card-title treatment: --brand-primary is the site's ink
+   (near-black #1b1d22) and unreadable in dark mode. */
+#mesterskap-root .stevner-resultfile-btn,
+#mesterskap-root .stevner-comp-btn {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+#mesterskap-root .stevner-resultfile-btn:hover,
+#mesterskap-root .stevner-comp-btn:hover {
+    color: var(--brand-accent);
+    text-decoration-color: var(--brand-accent);
+}
+#mesterskap-root .stevner-resultfile-btn:focus-visible,
+#mesterskap-root .stevner-comp-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+}

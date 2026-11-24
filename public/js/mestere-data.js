@@ -11,6 +11,7 @@ var StandplassMestereData = (function () {
 
     var MEDALS = ['Gull', 'Sølv', 'Bronse'];
     var INDIVIDUAL_SCOPES = ['nm', 'dm', 'km'];
+    var TYPE_RANKS = { nm: 1, dm: 2, km: 3 };
 
     // Region names normalize for grouping only (casefold, collapse
     // dashes/slashes to spaces): 'Østlandet-Nord' and 'østlandet nord'
@@ -267,10 +268,15 @@ var StandplassMestereData = (function () {
     }
 
     // The one lag-class form every consumer renders (owner rulings
-    // 2026-11-23): 'Mix-lag' for mix teams — the natural noun, never
-    // 'Lag Mix' — else lagKlasse's 'Lag Å'/'Lag Menn'.
+    // 2026-11-23; 2026-11-24): 'Mix-lag U' for mix teams — the class
+    // is the team's registered mix class ('Mix U', 'Mix Jr'…);
+    // a bare 'Mix' (older parses without class granularity) renders
+    // 'Mix-lag'; else lagKlasse's 'Lag Å'/'Lag Menn'.
     function lagRowKlasse(klasse) {
         if (klasse === 'Mix') { return 'Mix-lag'; }
+        if (typeof klasse === 'string' && klasse.indexOf('Mix ') === 0) {
+            return 'Mix-lag' + klasse.slice(3);
+        }
         return lagKlasse(klasse);
     }
 
@@ -288,12 +294,25 @@ var StandplassMestereData = (function () {
     // the row for the sub-lines under Navn and Sum. Teammates share a
     // podiumKey so stats count the team's medal once. Memberless
     // teams fall back to the team row (never lose a medal).
-    function podiumRows(index, scope) {
+    function podiumRows(index, scopes) {
+        // scopes: a 'nm'|'dm'|'km' string (the historical single-scope
+        // form), a list of them, or null/undefined for all three. A dual
+        // comp (km+dm sections in one) contributes to both scopes — one
+        // entry per scope's podium, never merged (owner ruling
+        // 2026-11-24).
+        if (scopes == null) { scopes = ['nm', 'dm', 'km']; }
+        if (typeof scopes === 'string') { scopes = [scopes]; }
         var rows = [];
-        var sectionKeys = [scope, scope + 'Lag'];
+        var sectionKeys = [];
+        scopes.forEach(function (scope) {
+            sectionKeys.push({ key: scope, scope: scope, isLagKey: false });
+            sectionKeys.push({ key: scope + 'Lag', scope: scope, isLagKey: true });
+        });
         ((index || {}).comps || []).forEach(function (comp) {
-            sectionKeys.forEach(function (key) {
-                var isLagKey = key !== scope;
+            sectionKeys.forEach(function (sk) {
+                var key = sk.key;
+                var isLagKey = sk.isLagKey;
+                var scope = sk.scope;
                 (comp[key] || []).forEach(function (section) {
                     var ovelse = section.ovelse;
                     var rank = programRank(section.ovelse);
@@ -302,7 +321,13 @@ var StandplassMestereData = (function () {
                         distrikt: comp.distrikt || null,
                         date: comp.date || null,
                         organizer: comp.organizer || null,
-                        compId: comp.compId
+                        title: comp.title || null,
+                        gren: comp.gren || null,
+                        compId: comp.compId,
+                        type: scope,
+                        typeRank: TYPE_RANKS[scope],
+                        champRegion: scope === 'km' ? (comp.region || null)
+                            : scope === 'dm' ? (comp.distrikt || null) : null
                     };
                     (section.podium || []).forEach(function (row) {
                         var isTeam = row.team != null;
@@ -331,7 +356,12 @@ var StandplassMestereData = (function () {
                                     distrikt: context.distrikt,
                                     date: context.date,
                                     organizer: context.organizer,
-                                    compId: context.compId
+                                    title: context.title,
+                                    gren: context.gren,
+                                    compId: context.compId,
+                                    type: context.type,
+                                    typeRank: context.typeRank,
+                                    champRegion: context.champRegion
                                 });
                             });
                             return;
@@ -355,7 +385,12 @@ var StandplassMestereData = (function () {
                             distrikt: context.distrikt,
                             date: context.date,
                             organizer: context.organizer,
-                            compId: context.compId
+                            title: context.title,
+                            gren: context.gren,
+                            compId: context.compId,
+                            type: context.type,
+                            typeRank: context.typeRank,
+                            champRegion: context.champRegion
                         });
                     });
                 });
@@ -363,6 +398,13 @@ var StandplassMestereData = (function () {
         });
         rows.sort(function (a, b) {
             if (a.ovelseRank !== b.ovelseRank) { return a.ovelseRank - b.ovelseRank; }
+            // Owner ruling 2026-11-24: within the øvelse, lag rows come
+            // after every individual row — their 'Lag M'-style klasse
+            // otherwise sorts alphabetically before the 'M'/'V' klasses
+            // (before men and veterans). Within each klasse the podium
+            // rank orders the rows (Gull → Sølv → Bronse), also across
+            // comps.
+            if (a.isTeam !== b.isTeam) { return a.isTeam ? 1 : -1; }
             if (a.klasse == null && b.klasse == null) { /* fall through */ }
             else if (a.klasse == null) { return 1; }
             else if (b.klasse == null) { return -1; }
@@ -378,21 +420,24 @@ var StandplassMestereData = (function () {
         return rows;
     }
 
-    // filters: {ovelse: [], klasse: [], medal: [], region: [],
-    // distrikt: [], klubb: '', navn: '', type: ''} — empty array/string
-    // is a no-op. The page maps the URL's krets param to region (km)
-    // before calling; null row values never match a non-empty filter.
+    // filters: {ovelse: [], klasse: [], medal: [], mesterskap: [],
+    // region: [], distrikt: [], klubb: '', navn: '', type: ''} — empty
+    // array/string is a no-op. mesterskap filters by row type (the
+    // unified page's mesterskapstype filter); null row values never
+    // match a non-empty filter.
     function filterPodiumRows(rows, filters) {
         var f = filters || {};
         var ovelse = f.ovelse || [];
         var klasse = f.klasse || [];
         var medal = f.medal || [];
+        var mesterskap = f.mesterskap || [];
         var region = f.region || [];
         var distrikt = f.distrikt || [];
         var klubb = f.klubb || '';
         var navn = String(f.navn || '').toLowerCase();
         var type = f.type || '';
         return (rows || []).filter(function (r) {
+            if (mesterskap.length && mesterskap.indexOf(r.type) === -1) { return false; }
             if (ovelse.length && ovelse.indexOf(r.ovelse) === -1) { return false; }
             if (klasse.length && klasse.indexOf(r.klasse) === -1) { return false; }
             if (medal.length && medal.indexOf(r.medal) === -1) { return false; }
@@ -407,10 +452,12 @@ var StandplassMestereData = (function () {
     }
 
     // Counts for the stats line over the filtered rows: medals, distinct
-    // øvelser, distinct regions (krets for km, distrikt for dm, none for
-    // nm) and distinct clubs. A team's medal counts once — its member
-    // rows share a podiumKey (owner ruling 2026-11-23).
-    function statsFor(rows, scope) {
+    // øvelser, distinct championship regions (champRegion — krets for km
+    // rows, distrikt for dm rows, nothing for nm) and distinct clubs. A
+    // team's medal counts once — its member rows share a podiumKey
+    // (owner ruling 2026-11-23). The legacy scope arg (the pre-unified
+    // pages pass one) is ignored: the count is scope-independent.
+    function statsFor(rows) {
         var ovelser = {};
         var regions = {};
         var clubs = {};
@@ -419,8 +466,7 @@ var StandplassMestereData = (function () {
         (rows || []).forEach(function (r) {
             ovelser[r.ovelse] = true;
             if (r.club != null) { clubs[r.club] = true; }
-            if (scope === 'km' && r.region != null) { regions[r.region] = true; }
-            if (scope === 'dm' && r.distrikt != null) { regions[r.distrikt] = true; }
+            if (r.champRegion != null) { regions[r.champRegion] = true; }
             if (r.isTeam && r.podiumKey != null) {
                 teamMedals[r.podiumKey] = true;
             } else {
@@ -430,7 +476,7 @@ var StandplassMestereData = (function () {
         return {
             medaljer: medals + Object.keys(teamMedals).length,
             ovselser: Object.keys(ovelser).length,
-            regioner: scope === 'nm' ? null : Object.keys(regions).length,
+            regioner: Object.keys(regions).length,
             klubber: Object.keys(clubs).length
         };
     }

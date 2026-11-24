@@ -33,7 +33,7 @@ var pages = hostPages('public').concat(hostPages('public/mesterskap'));
 var hosts = pages.filter(function (p) {
     return fs.readFileSync(p, 'utf8').indexOf('/js/person-modal-controller.js') !== -1;
 });
-assert.ok(hosts.length >= 6,
+assert.ok(hosts.length >= 4,
     'found the person-modal host pages (' + hosts.length + ') — update this test when a page stops hosting the modal');
 
 hosts.forEach(function (p) {

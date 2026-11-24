@@ -55,6 +55,20 @@ mestWrite.setSearch('?gren=felt&ar=2025');
 assert.strictEqual(get(window.location.search, 'gren'), 'felt', 'gren is written to the URL by setSearch');
 assert.strictEqual(get(window.location.search, 'ar'), '2025', 'ar is written to the URL by setSearch');
 
+// The mesterskap page's mesterskapstype param must round-trip like
+// gren/ar: the filter bar writes it (setSearch), a pasted link is
+// read back on load (getSearch) — untracked, it would silently drop
+// and a shared link would open unfiltered.
+window.location.search = '?mesterskap=km%2Cdm';
+var mestRead2 = StandplassUrlState.createController({ namespace: null });
+assert.strictEqual(get(mestRead2.getSearch(), 'mesterskap'), 'km,dm',
+    'mesterskap is tracked and readable on load');
+window.location.search = '';
+var mestWrite2 = StandplassUrlState.createController({ namespace: null });
+mestWrite2.setSearch('?mesterskap=nm');
+assert.strictEqual(get(window.location.search, 'mesterskap'), 'nm',
+    'mesterskap is written to the URL by setSearch');
+
 // Embed, sync-url off: state lives in memory only, the real URL never touched.
 window.location.search = '';
 var embedOff = StandplassUrlState.createController({ namespace: 'felt', syncUrl: false });

@@ -22,7 +22,7 @@ var feltIndex = {
     year: 2025,
     comps: [
         comp('c1', {
-            region: 'Buskerud', distrikt: 'Østlandet Sør',
+            region: 'Buskerud', distrikt: 'Østlandet Sør', gren: 'felt',
             km: [sec('Felt Fin', 'U', [
                 { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Kongsvinger Sportsskyttere', sum: 88 },
                 { medal: 'Sølv', personId: 'p2', name: 'Berit', club: 'Brumunddal Pistolklubb', sum: 68 },
@@ -319,8 +319,10 @@ assert.strictEqual(kmRows.length, 6,
     'c1 km (3) + c2 km (1) + c3 kmLag (1) + c4 km (1)');
 var fin = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin'; });
 assert.strictEqual(fin.length, 4);
-assert.ok(fin[0].klasse === 'Lag Menn' && fin[0].isTeam,
-    'klasse Lag Menn sorts before U, so the lag row leads Felt Fin');
+assert.ok(!fin[0].isTeam && fin[0].klasse === 'U',
+    'the øvelse leads with its individual klasses');
+assert.ok(fin[3].klasse === 'Lag Menn' && fin[3].isTeam,
+    'lag rows come last within the øvelse (ruling 2026-11-24)');
 var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
 assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
 assert.strictEqual(teamRow.personId, null);
@@ -332,7 +334,7 @@ assert.ok(kmRows.slice(0, 4).every(function (r) { return r.ovelseRank === 1; }),
 assert.ok(kmRows.slice(4).every(function (r) { return r.ovelse === 'Felt Grov'; }));
 assert.strictEqual(kmRows[0].region, 'Buskerud');
 assert.strictEqual(kmRows[0].date, '2025-06-11');
-assert.strictEqual(kmRows[0].organizer, 'Arrangør c3', 'kmRows[0] is c3\u2019s lag row');
+assert.strictEqual(kmRows[0].organizer, 'Arrangør c1', 'kmRows[0] is c1\u2019s leading individual row');
 var uRows = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin' && !r.isTeam; });
 assert.deepStrictEqual(uRows.map(function (r) { return r.medal; }),
     ['Gull', 'Sølv', 'Bronse'], 'medalRank tiebreak within øvelse+klasse');
@@ -381,9 +383,11 @@ assert.deepStrictEqual(MD.statsFor(kmRows, 'km'),
     'øvelser count Felt Fin + Felt Grov (lag variants merge into their øvelse); klubber include the lag club (KSS+Brumunddal+Bodø+Hurum)');
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: 'Hurum SKL', navn: '', type: '' }).length, 1,
     'the klubb filter matches lag rows via their resolved club');
-assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, null, 'nm has no region stat');
+assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, 2,
+    'legacy scope arg ignored — regioner counts champRegion regardless');
 assert.deepStrictEqual(MD.statsFor(nmRows, 'nm'),
-    { medaljer: 2, ovselser: 2, regioner: null, klubber: 1 });
+    { medaljer: 2, ovselser: 2, regioner: 0, klubber: 1 },
+    'nm rows carry no champRegion — regioner counts 0, never null');
 
 // ── podiumRows: lag member expansion (v15 team members) ───────────────
 // Owner rulings 2026-11-23 (v2): one row per member; Øvelse keeps its
@@ -412,7 +416,7 @@ var memberIndex = { year: 2024, comps: [comp('m1', {
             ] },
             { medal: 'Sølv', team: 'Bærum PK', sum: 310, members: [] }
         ]),
-        sec('Felt Fin', 'Mix', [
+        sec('Felt Fin', 'Mix U', [
             { medal: 'Gull', team: 'Farris SS1', sum: 198, members: [
                 { name: 'Kjetil Skogshagen', klasse: 'V55', personId: 'p2', club: 'Farris SS', sum: 101 },
                 { name: 'Mona Gjelstad', klasse: 'K', personId: 'p3', club: 'Larvik SK', sum: 97 }
@@ -451,22 +455,22 @@ assert.strictEqual(barum.lagSum, null,
     'the fallback team row\u2019s sum IS the team sum — no sub-line');
 var kjetil = mRows.filter(function (r) { return r.name === 'Kjetil Skogshagen'; })[0];
 assert.strictEqual(kjetil.ovelse, 'Felt Fin', 'mix sections carry the bare øvelse name too');
-assert.strictEqual(kjetil.klasse, 'Mix-lag',
-    'a mix team\u2019s class is the team type — the participants\u2019 own classes do not show');
+assert.strictEqual(kjetil.klasse, 'Mix-lag U',
+    'mix teams render their registered mix class (Mix U -> Mix-lag U)');
 var mona = mRows.filter(function (r) { return r.name === 'Mona Gjelstad'; })[0];
-assert.strictEqual(mona.klasse, 'Mix-lag');
+assert.strictEqual(mona.klasse, 'Mix-lag U');
 assert.strictEqual(mona.club, 'Larvik SK', 'each member carries their own club — mix halves can differ');
 assert.strictEqual(mona.lagSum, 198, 'mix member rows carry the team sum too');
 assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
-    ['Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad', 'Solo'],
-    'member rows sort by klasse/medal/name like any other row (Lag Å < Mix-lag < Å)');
+    ['Solo', 'Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad'],
+    'individual rows first, then the øvelse\'s lag rows by klasse/medal/name (ruling 2026-11-24)');
 
 assert.deepStrictEqual(MD.statsFor(mRows, 'nm'),
-    { medaljer: 4, ovselser: 1, regioner: null, klubber: 4 },
+    { medaljer: 4, ovselser: 1, regioner: 0, klubber: 4 },
     'the team medal counts once (1 individual + 3 teams); the lag variants merge into their øvelse');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ ovelse: ['Felt Fin'], type: 'lag' })).length, 5,
     'the øvelse filter keeps individual and lag rows of the same øvelse; the type filter narrows');
-assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix-lag'] })).length, 2);
+assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ klasse: ['Mix-lag U'] })).length, 2);
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ navn: 'tore' })).length, 1,
     'navn search finds team members');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ type: 'individuelt' })).length, 1);
@@ -506,5 +510,152 @@ assert.strictEqual(mosjoenRows.length, 4,
     'a two-team club keeps all its member rows under one club filter');
 assert.strictEqual(MD.statsFor(mosjoenRows, 'nm').medaljer, 2,
     'each team of a two-team club counts its own medal');
+
+// ── podiumRows: multi-scope stamping (unified view) ────────────────────
+// Spec: 2026-11-24-mesterskap-unified-view-design.md — podiumRows takes a
+// scopes list (string | array | absent = all three) and stamps every row
+// with its championship type (type/typeRank) and the championship's own
+// region (champRegion: krets for km, distrikt for dm, null for nm).
+// Ruling 11: dual km+dm comps emit one entry per scope — a person on
+// both podiums gets two rows, never a merged or deduped one.
+
+var mixedIndex = {
+    year: 2026,
+    comps: [
+        comp('m1', {
+            region: 'Buskerud', distrikt: 'Østlandet Sør', gren: 'felt',
+            km: [sec('Felt Fin', 'U', [
+                { medal: 'Gull', personId: 'p2', name: 'Berit', club: 'Hurum SKL', sum: 88 }
+            ])]
+        }),
+        comp('m2', {
+            region: 'Hedmark', distrikt: 'Østlandet Nord',
+            dm: [sec('Felt Grov', null, [
+                { medal: 'Gull', personId: 'p3', name: 'Carl', club: 'Brumunddal Pistolklubb', sum: 90 }
+            ])]
+        }),
+        comp('m3', {
+            // nm comps carry neither region nor distrikt
+            nm: [sec('Felt Magnum-2', 'Å', [
+                { medal: 'Gull', personId: 'p4', name: 'Dag', club: 'Bodø PK', sum: 150 }
+            ])]
+        }),
+        comp('m4', {
+            // dual km+dm: one championship counted at both levels — Anne
+            // tops both podiums (ruling 11: two entries, one km one dm)
+            region: 'Vestfold', distrikt: 'Østlandet Sør', gren: 'felt',
+            km: [sec('Felt Magnum-1', 'Å', [
+                { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Larvik PK', sum: 80 }
+            ])],
+            dm: [sec('Felt Magnum-1', 'Å', [
+                { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Larvik PK', sum: 80 }
+            ])]
+        })
+    ]
+};
+
+// Multi-scope default: no scopes arg returns rows from all three types.
+var allRows = MD.podiumRows(mixedIndex);
+var mixedTypes = {};
+allRows.forEach(function (r) { mixedTypes[r.type] = true; });
+assert.deepStrictEqual(Object.keys(mixedTypes).sort(), ['dm', 'km', 'nm'],
+    'no scopes arg = all three types');
+
+// A string arg stays a one-element list (old callers keep working).
+var kmOnlyMixed = MD.podiumRows(mixedIndex, 'km');
+assert.ok(kmOnlyMixed.every(function (r) { return r.type === 'km'; }),
+    'string scope arg keeps the old single-scope behavior');
+assert.ok(kmOnlyMixed.length > 0 && MD.podiumRows(mixedIndex, ['dm']).length > 0);
+
+// Type stamps and ranks.
+var byType = {};
+allRows.forEach(function (r) { byType[r.type] = r; });
+assert.strictEqual(byType.km.typeRank, 3);
+assert.strictEqual(byType.dm.typeRank, 2);
+assert.strictEqual(byType.nm.typeRank, 1);
+
+// champRegion: krets for km, distrikt for dm, null for nm.
+assert.strictEqual(byType.km.champRegion, byType.km.region);
+assert.strictEqual(byType.dm.champRegion, byType.dm.distrikt);
+assert.strictEqual(byType.nm.champRegion, null);
+
+// The comp title rides on every row — the Arrangør column's comp-modal
+// link passes it as the modal header (ruling 14).
+assert.strictEqual(byType.km.title, 'Teststevne ' + byType.km.compId,
+    'rows carry their comp title');
+
+// The branch (felt/bane) rides on rows too — the Arrangement column's
+// resultfile link needs it to address the right detaljer directory
+// (ruling 15).
+assert.strictEqual(byType.km.gren, 'felt', 'rows carry their comp branch');
+assert.strictEqual(byType.nm.gren, null, 'comps without a branch stamp carry null');
+
+// Ruling 11: a dual km+dm comp emits one entry per scope — Anne on
+// both podiums gets two rows (KM-gull and DM-gull), never a merged
+// or deduped one.
+var anneDual = allRows.filter(function (r) {
+    return r.personId === 'p1' && r.ovelse === 'Felt Magnum-1';
+});
+assert.strictEqual(anneDual.length, 2, 'one entry per scope, never merged');
+assert.deepStrictEqual(anneDual.map(function (r) { return r.type; }).sort(), ['dm', 'km']);
+
+// Ruling 20 (2026-11-24): within an øvelse, lag rows come after ALL
+// individual rows — their 'Lag M'-style klasse otherwise sorts
+// alphabetically before the 'M'/'V' klasses (before men and
+// veterans), which reads as the klasse sort not being applied.
+// Within each klasse the podium rank orders the rows (Gull → Sølv →
+// Bronse), also across comps.
+var lagOrderIndex = {
+    year: 2026,
+    comps: [
+        comp('lo1', {
+            km: [
+                sec('Felt Fin', 'V55', [{ medal: 'Gull', name: 'Veteran', club: 'A SK' }]),
+                sec('Felt Fin', 'M', [{ medal: 'Gull', name: 'Mann', club: 'A SK' }])
+            ],
+            kmLag: [sec('Felt Fin', 'M', [{ medal: 'Sølv', team: 'Laget', sum: 300, club: 'A SK' }])]
+        }),
+        comp('lo2', {
+            km: [sec('Felt Fin', 'M', [
+                { medal: 'Sølv', name: 'Annemann', club: 'B SK' },
+                { medal: 'Bronse', name: 'Carlmann', club: 'B SK' }
+            ])]
+        })
+    ]
+};
+var lagOrderRows = MD.podiumRows(lagOrderIndex);
+assert.deepStrictEqual(
+    lagOrderRows.map(function (r) { return (r.isTeam ? 'lag:' : 'person:') + r.name; }),
+    ['person:Mann', 'person:Annemann', 'person:Carlmann', 'person:Veteran', 'lag:Laget'],
+    'individual klasses first (Norwegian collation), podium rank within each klasse, then the øvelse\'s lag rows last');
+
+// ── filterPodiumRows: mesterskapstype + statsFor: champRegion ─────────
+// Spec rulings 3 and 10: mesterskap filters by row type (empty = all);
+// under a region filter, rows that carry no region (nm rows) drop out —
+// the filter means "championships of this region". statsFor counts
+// distinct non-null champRegion values, scope-independent.
+
+// Mesterskapstype filter: empty = all; list = membership.
+var fAll = MD.filterPodiumRows(allRows, {});
+assert.strictEqual(fAll.length, allRows.length, 'no mesterskap filter = all types');
+var fKm = MD.filterPodiumRows(allRows, { mesterskap: ['km'] });
+assert.ok(fKm.every(function (r) { return r.type === 'km'; }),
+    'mesterskap filters by row type');
+assert.strictEqual(MD.filterPodiumRows(allRows, { mesterskap: ['nm', 'dm'] }).length,
+    allRows.length - fKm.length, 'multi-type membership (nm+dm = the complement of km)');
+
+// Ruling 10: NM rows carry no region/distrikt and DROP OUT under a
+// region filter — but dm rows match their host krets (the krets rule).
+var fKrets = MD.filterPodiumRows(allRows, { region: [byType.km.region] });
+assert.ok(fKrets.every(function (r) { return r.region === byType.km.region; }));
+assert.ok(fKrets.every(function (r) { return r.type !== 'nm'; }),
+    'nm rows never match a region filter');
+
+// statsFor: distinct non-null champRegion, nulls ignored.
+var sAll = MD.statsFor(allRows);
+var expectedRegions = {};
+allRows.forEach(function (r) { if (r.champRegion != null) { expectedRegions[r.champRegion] = true; } });
+assert.strictEqual(sAll.regioner, Object.keys(expectedRegions).length,
+    'regioner counts distinct non-null champRegion');
 
 console.log('mestere-data.test.js: all assertions passed');

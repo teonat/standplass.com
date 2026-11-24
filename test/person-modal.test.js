@@ -150,10 +150,11 @@ assert.strictEqual(
 var entries = [
     { date: '2024-01-01', rankingScore: 0, position: 5 },
     { date: '2024-02-01', rankingScore: 42, position: 3 },
-    { date: null, rankingScore: 50, position: 1 }
+    { date: null, rankingScore: 50, position: 1 },
+    { date: '2024-04-01', rankingScore: 560, position: 1 }
 ];
 var filtered = StandplassPersonModal.chartPoints(entries, 'rankingScore');
-assert.strictEqual(filtered.length, 1, 'drops zero-rankingScore and missing-date entries');
+assert.strictEqual(filtered.length, 1, 'drops zero-rankingScore, missing-date and score-scale-garbage entries');
 assert.strictEqual(filtered[0].rankingScore, 42);
 
 // renderChart: no DOM in this test environment, so verify against a minimal
@@ -563,6 +564,16 @@ assert.strictEqual(StandplassPersonModal.activationMetric(
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: 88, score: 94 }, 'rankingScore'), 'rankingScore',
     'a real ranking keeps the ranking graph');
+// The Hurtig u*-class bane listings put the raw score in the
+// rankingScore field (score-scale 500+ values). A ranking score lives
+// on the 0–100 ladder; anything above it is not a ranking — the same
+// source-encoding garbage class as the zero rule above.
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 560, score: 560 }, 'rankingScore'), 'score',
+    'a score-scale value in the ranking field activates on the poeng graph instead');
+assert.strictEqual(StandplassPersonModal.activationMetric(
+    { rankingScore: 560, score: 560 }, 'rankingScore'), 'score',
+    'score-scale garbage falls back like a rankless entry');
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: null }, 'score'), 'score',
     'the poeng graph is never switched away from');
@@ -577,6 +588,12 @@ assert.strictEqual(StandplassPersonModal.hasMetricValue(
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { rankingScore: 0, score: 94 }, 'rankingScore'), false,
     'a zero ranking has no dot on the ranking chart');
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 560, score: 560 }, 'rankingScore'), false,
+    'score-scale garbage in the ranking field has no dot on the ranking chart');
+assert.strictEqual(StandplassPersonModal.hasMetricValue(
+    { rankingScore: 100, score: 560 }, 'rankingScore'), true,
+    '100 is the ladder ceiling and stays a ranking value');
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
     { score: 88 }, 'score'), true);
 assert.strictEqual(StandplassPersonModal.hasMetricValue(
