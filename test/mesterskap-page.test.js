@@ -42,6 +42,12 @@ var pageIndex = {
                 { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Kongsvinger Sportsskyttere', sum: 92 }
             ])]
         }),
+        comp('c8', {
+            region: 'Hedmark', distrikt: 'Østlandet Nord',
+            dm: [sec('Felt Grov', null, [
+                { medal: 'Gull', personId: 'p9', name: 'Dag', club: 'Brumunddal Pistolklubb', sum: 90 }
+            ])]
+        }),
         comp('c7', {
             nm: [sec('Felt Grov', null, [
                 { medal: 'Gull', personId: 'p1', name: 'Anne', club: 'Kongsvinger Sportsskyttere', sum: 150 }
@@ -139,7 +145,7 @@ assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/
 var rows = global.StandplassMestereData.podiumRows(pageIndex, 'km');
 assert.strictEqual(rows.length, 5);
 
-var spec = MP.tableSpecFor(rows, 'km');
+var spec = MP.tableSpecFor(rows);
 function col(key) {
     return spec.columns.filter(function (c) { return c.key === key; })[0];
 }
@@ -187,18 +193,70 @@ assert.strictEqual(groups[0].rows.length, 4);
 assert.strictEqual(groups[1].label, 'Ukjent region', 'null region sinks to a final group');
 assert.strictEqual(groups[1].rows.length, 1);
 
-var nmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm'), 'nm');
+var nmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm'));
 assert.strictEqual(nmSpec.groupRows, null, 'nm is flat');
 assert.ok(nmSpec.columns.every(function (c) { return c.key !== 'region'; }),
     'nm carries no region column');
-var dmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'dm'), 'dm');
+var dmSpec = MP.tableSpecFor(global.StandplassMestereData.podiumRows(pageIndex, 'dm'));
 var dmKeys = dmSpec.columns.map(function (c) { return c.key; });
 assert.ok(dmKeys.indexOf('distrikt') !== -1 && dmKeys.indexOf('region') === -1,
     'dm carries the distrikt column, not krets (and no sum column when no row has one)');
 
-var noSum = MP.tableSpecFor([{ medal: 'Gull', name: 'A', isTeam: false }], 'nm');
+var noSum = MP.tableSpecFor([{ medal: 'Gull', name: 'A', isTeam: false }]);
 assert.ok(noSum.columns.every(function (c) { return c.key !== 'sum'; }),
     'no Sum column when no row has one');
+
+// ── tableSpecFor: the mixed view (spec ruling 6 — type as a column) ───
+// Mixed-type rows go flat with a Mesterskap column (chip, sorted by
+// typeRank: NM→DM→KM) and a unified Region column (the row's own
+// championship region, '–' for nm rows); single-type views keep today's
+// per-type shape above (blocks included — regression guard).
+
+var mixedRows = global.StandplassMestereData.podiumRows(pageIndex);
+assert.ok(mixedRows.length >= 7, 'km + dm + nm rows together');
+var mixedSpec = MP.tableSpecFor(mixedRows);
+assert.strictEqual(mixedSpec.groupRows, null, 'mixed views are flat');
+var mixedKeys = mixedSpec.columns.map(function (c) { return c.key; });
+assert.ok(mixedKeys.indexOf('region') === -1 && mixedKeys.indexOf('distrikt') === -1,
+    'no per-type region columns in the mixed view');
+function mcol2(key) {
+    return mixedSpec.columns.filter(function (c) { return c.key === key; })[0];
+}
+var typeCol = mcol2('typeRank');
+assert.ok(typeCol, 'the Mesterskap (type) column exists');
+assert.strictEqual(typeCol.label, 'Mesterskap');
+assert.strictEqual(typeCol.secondaryKey, 'ovelseRank',
+    'within a type, øvelse program order tie-breaks');
+assert.ok(typeCol.cell({ type: 'km' }).indexOf('KM') !== -1
+    && typeCol.cell({ type: 'nm' }).indexOf('NM') !== -1,
+    'the type cell renders the NM/DM/KM chip');
+assert.ok(typeCol.cell({ type: 'dm' }).indexOf('mesterskap-type-chip') !== -1,
+    'chips carry the shared styling hook');
+var regionCol = mcol2('champRegion');
+assert.ok(regionCol, 'the unified Region column exists');
+assert.strictEqual(regionCol.label, 'Region');
+assert.strictEqual(regionCol.cell({ champRegion: null }), '–',
+    'nm rows and region-less comps show –');
+assert.ok(!regionCol.defaultHidden, 'Region is visible by default in mixed views');
+assert.strictEqual(mixedKeys.indexOf('typeRank') < mixedKeys.indexOf('champRegion'), true,
+    'Mesterskap leads Region');
+
+// ── mergeMestereIndexes / regionDropdownsFor / initialSortFor ─────────
+
+assert.deepStrictEqual(MP.mergeMestereIndexes([null, { comps: [{ compId: 'a' }] }]).comps,
+    [{ compId: 'a' }], 'a failed branch fetch (null) vanishes; the other renders');
+assert.strictEqual(MP.mergeMestereIndexes([null, null]).comps.length, 0);
+assert.strictEqual(MP.mergeMestereIndexes().comps.length, 0);
+
+assert.deepStrictEqual(MP.regionDropdownsFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm')),
+    { krets: false, distrikt: false }, 'nm rows carry neither region field');
+assert.deepStrictEqual(MP.regionDropdownsFor(mixedRows),
+    { krets: true, distrikt: true }, 'km/dm rows carry both fields');
+
+assert.deepStrictEqual(MP.initialSortFor(mixedRows), { key: 'typeRank', dir: 'asc' },
+    'mixed views seed the type-first sort (NM → DM → KM)');
+assert.strictEqual(MP.initialSortFor(rows), null,
+    'single-type views open unsorted (page order)');
 
 // bareSpec: the surgical re-render shape — no wrapClass (re-wrapping
 // nests scroll regions), no picker (the surviving toolbar button keeps
@@ -236,7 +294,7 @@ var memberRows = global.StandplassMestereData.podiumRows({ year: 2025, comps: [c
     ])]
 })] }, 'km');
 assert.strictEqual(memberRows.length, 2);
-var mSpec = MP.tableSpecFor(memberRows, 'km');
+var mSpec = MP.tableSpecFor(memberRows);
 function mcol(key) {
     return mSpec.columns.filter(function (c) { return c.key === key; })[0];
 }

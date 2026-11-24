@@ -197,6 +197,16 @@ var StandplassMesterskapPage = (function () {
         return groups;
     }
 
+    var TYPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };
+
+    // The distinct championship types present in a row set — rows are
+    // stamped by podiumRows; test-shaped bare rows carry none.
+    function typesPresent(rows) {
+        var seen = {};
+        (rows || []).forEach(function (r) { if (r.type) { seen[r.type] = true; } });
+        return Object.keys(seen);
+    }
+
     // The dense podium table: one row per medal, everything else a
     // column or a filter. Navn leads (owner ruling — the person is the
     // row's identity). Øvelse and Medalje display names but sort by
@@ -205,13 +215,21 @@ var StandplassMesterskapPage = (function () {
     // resolved club, and one with nothing resolved shows '–' (owner
     // ruling — never a club derived from the lag name); only the
     // memberless team-row fallback derives a display club from the
-    // lag name. The
-    // region column (krets on km, distrikt on dm) is defaultHidden
-    // behind its group row; nm carries neither column nor grouping.
+    // lag name.
+    // Single type in view: exactly the per-type page shape — km
+    // carries the krets column behind its group row, dm the distrikt
+    // column, nm neither. Mixed types (spec ruling 6): flat, no
+    // groupRows, with the Mesterskap column (NM/DM/KM chips, sorted
+    // by typeRank so NM → DM → KM, øvelse program order tie-breaking)
+    // and the unified Region column (the row's own championship
+    // region, visible by default, '–' for nm rows).
     // hideBelow tiers follow the norgesfelt search table (700/900).
-    function tableSpecFor(rows, scope) {
+    function tableSpecFor(rows) {
         rows = rows || [];
-        var regionKey = scope === 'km' ? 'region' : scope === 'dm' ? 'distrikt' : null;
+        var types = typesPresent(rows);
+        var mixed = types.length > 1;
+        var regionKey = !mixed && types[0] === 'km' ? 'region'
+            : !mixed && types[0] === 'dm' ? 'distrikt' : null;
         var columns = [
             { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true, cell: personCell },
             {
@@ -258,9 +276,26 @@ var StandplassMesterskapPage = (function () {
         }
         if (regionKey) {
             columns.push({
-                key: regionKey, label: scope === 'km' ? 'Krets' : 'Distrikt',
+                key: regionKey, label: regionKey === 'region' ? 'Krets' : 'Distrikt',
                 sortable: true, defaultDir: 'asc', defaultHidden: true,
                 cell: function (row) { return row[regionKey] == null ? '–' : row[regionKey]; }
+            });
+        }
+        if (mixed) {
+            columns.push({
+                key: 'typeRank', label: 'Mesterskap', align: 'center',
+                sortable: true, defaultDir: 'asc', secondaryKey: 'ovelseRank',
+                hideBelow: 700, raw: true,
+                cell: function (row) {
+                    return '<span class="mesterskap-type-chip">'
+                        + esc(TYPE_LABELS[row.type] || String(row.type || '').toUpperCase())
+                        + '</span>';
+                }
+            });
+            columns.push({
+                key: 'champRegion', label: 'Region', sortable: true, defaultDir: 'asc',
+                hideBelow: 900,
+                cell: function (row) { return row.champRegion == null ? '–' : row.champRegion; }
             });
         }
         columns.push({
@@ -292,6 +327,35 @@ var StandplassMesterskapPage = (function () {
             groupRows: spec.groupRows,
             ariaLabel: spec.ariaLabel
         };
+    }
+
+    // Gren=alle merge: a failed branch fetch passes null and vanishes —
+    // the other branch renders (both null → the page's failed-year card).
+    function mergeMestereIndexes(indexes) {
+        var comps = [];
+        (indexes || []).forEach(function (index) {
+            if (index && index.comps) { comps = comps.concat(index.comps); }
+        });
+        return { comps: comps };
+    }
+
+    // Region-filter availability is data-driven: a dropdown renders only
+    // when the loaded rows carry its field (nm rows carry neither).
+    function regionDropdownsFor(rows) {
+        var krets = false;
+        var distrikt = false;
+        (rows || []).forEach(function (r) {
+            if (r.region != null) { krets = true; }
+            if (r.distrikt != null) { distrikt = true; }
+        });
+        return { krets: krets, distrikt: distrikt };
+    }
+
+    // The mixed view's opening sort: type-first sections (NM, DM, KM),
+    // each in program order via the base's secondary key over the
+    // pre-sorted rows. Single-type views open unsorted (page order).
+    function initialSortFor(rows) {
+        return typesPresent(rows).length > 1 ? { key: 'typeRank', dir: 'asc' } : null;
     }
 
     // The message-only empty card for a year that failed to load or
@@ -753,6 +817,9 @@ var StandplassMesterskapPage = (function () {
         filterBarMarkup: filterBarMarkup,
         tableSpecFor: tableSpecFor,
         bareSpec: bareSpec,
+        mergeMestereIndexes: mergeMestereIndexes,
+        regionDropdownsFor: regionDropdownsFor,
+        initialSortFor: initialSortFor,
         emptyYearCard: emptyYearCard,
         init: init
     };
