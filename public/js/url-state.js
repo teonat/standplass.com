@@ -20,7 +20,7 @@ var StandplassUrlState = (function () {
         'program', 'num', 'metric', 'class', 'krets', 'org', 'periode', 'fra', 'til', 'type', 'q', 'clubs', 'subtype',
         't_name', 't_fra', 't_til', 't_gren', 't_org', 't_krets', 't_type', 't_group',
         'p_year', 'p_type', 'p_disc', 'p_class', 'p_metric', 'p_tab', 'p_branch', 'p_entry',
-        'gren', 'ar', 'ovelse', 'distrikt', 'medal'];
+        'gren', 'ar', 'ovelse', 'distrikt', 'medal', 'mesterskap'];
 
     function createController(config) {
         config = config || {};
