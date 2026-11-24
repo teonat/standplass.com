@@ -2190,25 +2190,32 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 .filter-group--inactive { opacity: 0.5; }
 .filter-group--inactive .checkbox-dropdown-btn { cursor: default; }
 
-/* Ruling 2026-11-24 (unified mesterskap): the Arrangement column's
-   resultfile link wears the felt/bane card button's class, but in the
-   table it takes the comp-btn link look (the Arrangør column's
-   convention) — the cards' .stevner-comp-links scope keeps their
-   bordered-chip styling their own. The nested .nav-beta-tag reuses
-   the Mesterskap nav tag's look. */
-#mesterskap-root .stevner-resultfile-btn {
+/* Owner QA 2026-11-24: the table's row-level links — Arrangement
+   (resultfile) and Arrangør (comp modal) — adopt the person-link
+   convention (theme-adaptive text color, underline, accent hover —
+   the same declarations as .stevner-person-btn.link-btn), not the
+   stevner card-title treatment: --brand-primary is the site's ink
+   (near-black #1b1d22) and unreadable in dark mode. */
+#mesterskap-root .stevner-resultfile-btn,
+#mesterskap-root .stevner-comp-btn {
     display: block;
     background: none;
     border: none;
     padding: 0;
-    font-size: 0.9375rem;
-    font-weight: 700;
-    color: var(--brand-primary);
+    font: inherit;
+    color: var(--text);
     cursor: pointer;
     text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
-#mesterskap-root .stevner-resultfile-btn:hover { color: var(--brand-accent); }
-#mesterskap-root .stevner-resultfile-btn:focus-visible {
+#mesterskap-root .stevner-resultfile-btn:hover,
+#mesterskap-root .stevner-comp-btn:hover {
+    color: var(--brand-accent);
+    text-decoration-color: var(--brand-accent);
+}
+#mesterskap-root .stevner-resultfile-btn:focus-visible,
+#mesterskap-root .stevner-comp-btn:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 2px;
     border-radius: 2px;

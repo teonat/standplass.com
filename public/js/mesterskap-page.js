@@ -232,8 +232,7 @@ var StandplassMesterskapPage = (function () {
             + ' data-comp-id="' + esc(row.compId) + '"'
             + ' data-gren="' + esc(row.gren) + '"'
             + ' data-title="' + esc(row.title) + '">'
-            + esc(row.title)
-            + ' <span class="nav-beta-tag" aria-hidden="true">beta</span></button>';
+            + esc(row.title) + '</button>';
     }
 
     var TYPE_LABELS = { nm: 'NM', dm: 'DM', km: 'KM' };

@@ -173,9 +173,10 @@ var rfLink = col('title').cell({ title: 'Aron SK Feltpistol', compId: 'c9', gren
 assert.ok(rfLink.indexOf('stevner-resultfile-btn') !== -1
     && rfLink.indexOf('data-comp-id="c9"') !== -1
     && rfLink.indexOf('data-gren="felt"') !== -1
-    && rfLink.indexOf('data-title="Aron SK Feltpistol"') !== -1
-    && rfLink.indexOf('nav-beta-tag') !== -1,
-    'the arrangement cell links the parsed result file, beta-tagged');
+    && rfLink.indexOf('data-title="Aron SK Feltpistol"') !== -1,
+    'the arrangement cell links the parsed result file');
+assert.ok(rfLink.indexOf('beta') === -1,
+    'no per-row beta tag — the page itself is marked beta (owner ruling 2026-11-24)');
 assert.strictEqual(col('title').cell({ title: 'Bare stevne' }), 'Bare stevne',
     'no compId renders plain text, no button');
 assert.strictEqual(col('title').cell({ compId: 'c9', gren: 'felt' }), '–',
@@ -419,6 +420,13 @@ assert.ok(styles.indexOf('.filter-group--inactive') !== -1,
     'styles.css carries the .filter-group--inactive greying rule');
 assert.ok(styles.indexOf('.filter-group[hidden]') !== -1,
     'styles.css carries the .filter-group[hidden] display:none companion rule');
+
+// The table's row-level links (Arrangement, Arrangør) must carry the
+// theme-adaptive link convention — the card-title treatment uses the
+// site's near-black ink and is unreadable in dark mode (owner QA).
+assert.ok(styles.indexOf('#mesterskap-root .stevner-comp-btn') !== -1
+    && styles.indexOf('#mesterskap-root .stevner-resultfile-btn') !== -1,
+    'the table row links carry the theme-adaptive link convention');
 
 // The resultfile modal (ruling 15) must be loaded by the page — the
 // Arrangement links die without it.
