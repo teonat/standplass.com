@@ -22,29 +22,37 @@ var StandplassMesterskapPage = (function () {
     }
 
     function grenDisplayName(gren) {
-        return gren === 'bane' ? 'baneskyting' : 'feltskyting';
+        if (gren === 'bane') { return 'baneskyting'; }
+        if (gren === 'alle') { return 'feltskyting og baneskyting'; }
+        return 'feltskyting';
     }
 
-    // '?gren=bane&ar=2024' → {gren, ar} with felt/current-year defaults;
+    // '?gren=bane&ar=2024' → {gren, ar} with alle/current-year defaults
+    // (the unified page opens fully merged — owner ruling 2026-11-24);
     // invalid or out-of-range values fall back to the defaults.
     function resolveInitial(search, currentYear) {
         var params = new URLSearchParams(search || '');
-        var gren = params.get('gren') === 'bane' ? 'bane' : 'felt';
+        var gren = params.get('gren');
+        if (gren !== 'felt' && gren !== 'bane' && gren !== 'alle') { gren = 'alle'; }
         var ar = parseInt(params.get('ar'), 10);
         if (isNaN(ar) || ar < FIRST_YEAR || ar > currentYear) { ar = currentYear; }
         return { gren: gren, ar: ar };
     }
 
-    // The filter URL codec. Params: ovelse, class, krets, distrikt are
-    // comma-joined, per-element-encoded lists (the felt/bane disc
-    // convention); klubb, name, type are single values. resolveFilters
-    // parses, filterParams inverts — the page writes pairs via
-    // URLSearchParams.set so the browser round-trip is exact.
+    // The filter URL codec. Params: mesterskap, ovelse, class, krets,
+    // distrikt are comma-joined, per-element-encoded lists (the
+    // felt/bane disc convention); klubb, name, type are single values.
+    // mesterskap validates its values (nm/dm/km — junk drops out).
+    // resolveFilters parses, filterParams inverts — the page writes
+    // pairs via URLSearchParams.set so the browser round-trip is exact.
     function resolveFilters(search) {
         var params = new URLSearchParams(search || '');
         var type = params.get('type');
         if (type !== 'individuelt' && type !== 'lag') { type = ''; }
         return {
+            mesterskap: StandplassFormat.decodeIdList(params.get('mesterskap')).filter(function (v) {
+                return v === 'nm' || v === 'dm' || v === 'km';
+            }),
             ovelse: StandplassFormat.decodeIdList(params.get('ovelse')),
             klasse: StandplassFormat.decodeIdList(params.get('class')),
             medal: StandplassFormat.decodeIdList(params.get('medal')),
@@ -59,6 +67,7 @@ var StandplassMesterskapPage = (function () {
     function filterParams(filters) {
         var f = filters || {};
         var out = [];
+        if (f.mesterskap && f.mesterskap.length) { out.push(['mesterskap', StandplassFormat.encodeIdList(f.mesterskap)]); }
         if (f.ovelse && f.ovelse.length) { out.push(['ovelse', StandplassFormat.encodeIdList(f.ovelse)]); }
         if (f.klasse && f.klasse.length) { out.push(['class', StandplassFormat.encodeIdList(f.klasse)]); }
         if (f.medal && f.medal.length) { out.push(['medal', StandplassFormat.encodeIdList(f.medal)]); }
@@ -71,9 +80,9 @@ var StandplassMesterskapPage = (function () {
     }
 
     // The filter row, JS-built (the felt/bane embed pattern — one
-    // implementation behind all three pages, scope differences included:
-    // nm has no krets filter, dm's krets filter doubles as the
-    // krets→distrikt finder). Static markup only — widget items are
+    // implementation for the unified page: every dropdown always in
+    // the markup, availability data-driven at runtime by what the
+    // loaded rows carry). Static markup only — widget items are
     // injected at runtime through textContent, no escaping surface.
     function dropdownGroup(param, label, listLabel) {
         return '<div class="filter-group">'
@@ -92,17 +101,14 @@ var StandplassMesterskapPage = (function () {
             + '</div>';
     }
 
-    function filterBarMarkup(scope) {
+    function filterBarMarkup() {
         var out = [];
+        out.push(dropdownGroup('mesterskap', 'Mesterskapstype', 'Alle mesterskap'));
         out.push(dropdownGroup('ovelse', 'Øvelse', 'Alle øvelser'));
         out.push(dropdownGroup('klasse', 'Klasse', 'Alle klasser'));
         out.push(dropdownGroup('medal', 'Medalje', 'Alle medaljer'));
-        if (scope === 'km') {
-            out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
-        }
-        if (scope !== 'nm') {
-            out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
-        }
+        out.push(dropdownGroup('krets', 'Krets', 'Alle kretser'));
+        out.push(dropdownGroup('distrikt', 'Distrikt', 'Alle distrikter'));
         out.push('<div class="filter-group">'
             + '<label>Klubb</label>'
             + '<ul class="tag-list" id="mesterskap-klubb-tags" aria-label="Valgte klubber" aria-live="polite"></ul>'

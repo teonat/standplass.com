@@ -52,38 +52,48 @@ var pageIndex = {
 
 // ── resolveInitial: URL param defaults ─────────────────────────────────
 
-assert.deepStrictEqual(MP.resolveInitial('', 2026), { gren: 'felt', ar: 2026 },
-    'defaults: felt + current year');
+assert.deepStrictEqual(MP.resolveInitial('', 2026), { gren: 'alle', ar: 2026 },
+    'defaults: alle + current year (the unified page opens fully merged)');
 assert.deepStrictEqual(MP.resolveInitial('?gren=bane', 2026), { gren: 'bane', ar: 2026 });
 assert.deepStrictEqual(MP.resolveInitial('?gren=bane&ar=2024', 2026),
     { gren: 'bane', ar: 2024 });
+assert.strictEqual(MP.resolveInitial('?gren=felt', 2026).gren, 'felt');
+assert.strictEqual(MP.resolveInitial('?gren=alle', 2026).gren, 'alle');
 assert.deepStrictEqual(MP.resolveInitial('?gren=xyz&ar=abc', 2026),
-    { gren: 'felt', ar: 2026 }, 'invalid values fall back to the defaults');
-assert.deepStrictEqual(MP.resolveInitial('?ar=2019', 2026), { gren: 'felt', ar: 2026 },
+    { gren: 'alle', ar: 2026 }, 'invalid values fall back to the defaults');
+assert.deepStrictEqual(MP.resolveInitial('?ar=2019', 2026), { gren: 'alle', ar: 2026 },
     'years before 2021 fall back to the current year');
-assert.deepStrictEqual(MP.resolveInitial('?ar=2030', 2026), { gren: 'felt', ar: 2026 },
+assert.deepStrictEqual(MP.resolveInitial('?ar=2030', 2026), { gren: 'alle', ar: 2026 },
     'future years clamp to the current year');
 
 assert.strictEqual(MP.grenDisplayName('felt'), 'feltskyting');
 assert.strictEqual(MP.grenDisplayName('bane'), 'baneskyting');
+assert.strictEqual(MP.grenDisplayName('alle'), 'feltskyting og baneskyting');
 
 // ── resolveFilters / filterParams: the URL filter codec ────────────────
 
-var EMPTY_FILTERS = { ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
+var EMPTY_FILTERS = { mesterskap: [], ovelse: [], klasse: [], medal: [], krets: [], distrikt: [], klubb: '', navn: '', type: '' };
 assert.deepStrictEqual(MP.resolveFilters(''), EMPTY_FILTERS);
 assert.deepStrictEqual(MP.resolveFilters('?ovelse=Felt%20Fin,Felt%20Grov'), {
-    ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], medal: [], krets: [], distrikt: [],
+    mesterskap: [], ovelse: ['Felt Fin', 'Felt Grov'], klasse: [], medal: [], krets: [], distrikt: [],
     klubb: '', navn: '', type: ''
 }, 'øvelse is a comma-joined, per-element-encoded list');
 assert.deepStrictEqual(MP.resolveFilters('?medal=Gull,S%C3%B8lv'), {
-    ovelse: [], klasse: [], medal: ['Gull', 'Sølv'], krets: [], distrikt: [],
+    mesterskap: [], ovelse: [], klasse: [], medal: ['Gull', 'Sølv'], krets: [], distrikt: [],
     klubb: '', navn: '', type: ''
 }, 'medal is a comma-joined list (æ/ø round-trips)');
 assert.strictEqual(MP.resolveFilters('?type=lag').type, 'lag');
 assert.strictEqual(MP.resolveFilters('?type=ugyldig').type, '',
     'invalid type falls back to alle');
+assert.deepStrictEqual(MP.resolveFilters('?mesterskap=km,nm').mesterskap,
+    ['km', 'nm'], 'mesterskap is a comma-joined list');
+assert.deepStrictEqual(MP.resolveFilters('?mesterskap=xx').mesterskap, [],
+    'invalid mesterskap values are dropped');
+assert.deepStrictEqual(MP.resolveFilters('?mesterskap=dm,xx,km').mesterskap,
+    ['dm', 'km'], 'valid values survive an invalid neighbor');
 
 var full = {
+    mesterskap: ['km', 'nm'],
     ovelse: ['Felt Fin', 'Felt Militær Rødpunkt'], klasse: ['U'],
     medal: ['Gull'], krets: ['Buskerud'], distrikt: ['Nord-Norge'],
     klubb: 'Bodø PK', navn: 'anne', type: 'individuelt'
@@ -97,11 +107,15 @@ assert.deepStrictEqual(MP.filterParams(EMPTY_FILTERS), [],
 assert.deepStrictEqual(MP.filterParams({ ovelse: ['Felt Fin'], klasse: [], krets: [], distrikt: ['Vest-Norge'], klubb: '', navn: '', type: 'lag' }),
     [['ovelse', 'Felt%20Fin'], ['distrikt', 'Vest-Norge'], ['type', 'lag']],
     'only non-empty values are written; klasse writes the class param');
+assert.deepStrictEqual(MP.filterParams({ mesterskap: ['km', 'nm'] }),
+    [['mesterskap', 'km,nm']],
+    'mesterskap writes a comma-joined list param');
 
-// ── filterBarMarkup: the scope-aware filter row ─────────────────────────
+// ── filterBarMarkup: the unified filter row ─────────────────────────────
 
-var kmBar = MP.filterBarMarkup('km');
-['mesterskap-ovelse-btn', 'mesterskap-ovelse-panel', 'mesterskap-ovelse-list',
+var bar = MP.filterBarMarkup();
+['mesterskap-mesterskap-btn', 'mesterskap-mesterskap-panel', 'mesterskap-mesterskap-list',
+ 'mesterskap-ovelse-btn', 'mesterskap-ovelse-panel', 'mesterskap-ovelse-list',
  'mesterskap-klasse-btn', 'mesterskap-klasse-list',
  'mesterskap-medal-btn', 'mesterskap-medal-list',
  'mesterskap-krets-btn', 'mesterskap-krets-list',
@@ -109,22 +123,15 @@ var kmBar = MP.filterBarMarkup('km');
  'mesterskap-klubb-input', 'mesterskap-klubb-tags', 'mesterskap-klubb-clear',
  'mesterskap-navn', 'mesterskap-type', 'mesterskap-rows',
  'mesterskap-clear-filters'
-].forEach(function (id) { assert.ok(kmBar.indexOf('id="' + id + '"') !== -1, 'km bar has ' + id); });
-assert.ok(kmBar.indexOf('checkbox-dropdown') !== -1, 'øvelse/klasse/krets/distrikt use checkbox dropdowns');
-assert.ok(kmBar.indexOf('autocomplete-list') !== -1, 'klubb uses the tag-combo pattern');
-var nmBar = MP.filterBarMarkup('nm');
-assert.ok(nmBar.indexOf('mesterskap-krets') === -1,
-    'nm has no krets filter');
-assert.ok(nmBar.indexOf('mesterskap-distrikt') === -1,
-    'nm has no distrikt filter (national)');
-var dmBar = MP.filterBarMarkup('dm');
-assert.ok(dmBar.indexOf('mesterskap-distrikt-btn') !== -1,
-    'dm has the direct distrikt filter');
-assert.ok(dmBar.indexOf('mesterskap-krets') === -1,
-    'dm has no krets filter — the finder showed the whole distrikt under a krets label (owner ruling 2026-11-22)');
-assert.ok(/id="mesterskap-type"[^>]*>[\s\S]*?<option value="">Alle<\/option>[\s\S]*?<option value="individuelt">Individuelt<\/option>[\s\S]*?<option value="lag">Lag<\/option>/.test(kmBar),
+].forEach(function (id) { assert.ok(bar.indexOf('id="' + id + '"') !== -1, 'bar has ' + id); });
+assert.ok(bar.indexOf('Mesterskapstype') > -1, 'the mesterskapstype group is labeled');
+assert.ok(bar.indexOf('mesterskap-mesterskap-btn') < bar.indexOf('mesterskap-ovelse-btn'),
+    'mesterskapstype leads the bar');
+assert.ok(bar.indexOf('checkbox-dropdown') !== -1, 'øvelse/klasse/mesterskap/krets/distrikt use checkbox dropdowns');
+assert.ok(bar.indexOf('autocomplete-list') !== -1, 'klubb uses the tag-combo pattern');
+assert.ok(/id="mesterskap-type"[^>]*>[\s\S]*?<option value="">Alle<\/option>[\s\S]*?<option value="individuelt">Individuelt<\/option>[\s\S]*?<option value="lag">Lag<\/option>/.test(bar),
     'the Type select offers Alle/Individuelt/Lag');
-assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/.test(kmBar),
+assert.ok(/id="mesterskap-rows"[\s\S]*?<option value="30" selected>30<\/option>/.test(bar),
     'the Rader select defaults to 30');
 
 // ── tableSpecFor: the dense podium table ────────────────────────────────
@@ -212,6 +219,9 @@ assert.ok(failed.indexOf('ranking-card') !== -1, 'rendered as a card, not a bare
 var empty = MP.emptyYearCard('bane', 2025, false);
 assert.ok(empty.indexOf('baneskyting') !== -1);
 assert.ok(empty.indexOf('2025') !== -1);
+var emptyAlle = MP.emptyYearCard('alle', 2026, false);
+assert.ok(emptyAlle.indexOf('feltskyting og baneskyting') !== -1,
+    'alle names both branches');
 
 // ── tableSpecFor cells: lag member rows (sub-line under Navn) ────────
 // Owner ruling 2026-11-23: the lag name goes under the person's name as
