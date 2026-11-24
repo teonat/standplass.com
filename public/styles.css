@@ -2178,6 +2178,14 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
 /* The hidden attribute vs .filter-group's display:flex: author
    styles beat the UA stylesheet, so a hidden filter-group would keep
    rendering — the same trap #mesterskap-filterbar[hidden] guards.
-   The unified page's krets/distrikt groups hide via the hidden
-   attribute when the loaded rows carry neither field. */
+   Consumers: the person modal's initially-hidden filter groups. */
 .filter-group[hidden] { display: none; }
+
+/* Ruling 2026-11-24 (unified mesterskap): a region filter with
+   nothing to filter greys out and goes inert — the inert attribute
+   removes the whole group from pointer, keyboard and
+   accessibility-tree interaction, so no per-control disabled state
+   is needed; it reactivates when the view again carries its field.
+   The site's disabled visual idiom is opacity 0.5. */
+.filter-group--inactive { opacity: 0.5; }
+.filter-group--inactive .checkbox-dropdown-btn { cursor: default; }

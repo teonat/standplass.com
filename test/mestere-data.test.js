@@ -577,6 +577,11 @@ assert.strictEqual(byType.km.champRegion, byType.km.region);
 assert.strictEqual(byType.dm.champRegion, byType.dm.distrikt);
 assert.strictEqual(byType.nm.champRegion, null);
 
+// The comp title rides on every row — the Arrangør column's comp-modal
+// link passes it as the modal header (ruling 14).
+assert.strictEqual(byType.km.title, 'Teststevne ' + byType.km.compId,
+    'rows carry their comp title');
+
 // Ruling 11: a dual km+dm comp emits one entry per scope — Anne on
 // both podiums gets two rows (KM-gull and DM-gull), never a merged
 // or deduped one.

@@ -156,8 +156,8 @@ assert.strictEqual(col('ovelseRank').label, 'Øvelse');
 assert.strictEqual(col('ovelseRank').cell(rows[0]), rows[0].ovelse,
     'Øvelse displays the name, sorts by ovelseRank');
 assert.strictEqual(col('medalRank').label, 'Medalje');
-assert.strictEqual(col('medalRank').cell(rows[0]), rows[0].medal,
-    'Medalje displays the name, sorts by medalRank');
+assert.ok(col('medalRank').cell(rows[0]).indexOf(rows[0].medal) !== -1,
+    'Medalje displays the name (as a medal chip, ruling 13), sorts by medalRank');
 assert.strictEqual(col('region').label, 'Krets', 'km carries the krets context column');
 assert.strictEqual(col('region').defaultHidden, true,
     'the region column hides behind the group row');
@@ -258,6 +258,32 @@ assert.deepStrictEqual(MP.initialSortFor(mixedRows), { key: 'typeRank', dir: 'as
 assert.strictEqual(MP.initialSortFor(rows), null,
     'single-type views open unsorted (page order)');
 
+// Ruling 13: the Medalje column renders medal chips, golden/silver/
+// bronze like the other tables' badges.
+var gullCell = mcol2('medalRank').cell({ medal: 'Gull' });
+assert.ok(gullCell.indexOf('medal--gold') !== -1 && gullCell.indexOf('Gull') !== -1,
+    'Gull renders as a golden chip');
+assert.ok(mcol2('medalRank').cell({ medal: 'Sølv' }).indexOf('medal--silver') !== -1,
+    'Sølv renders as a silver chip');
+assert.ok(mcol2('medalRank').cell({ medal: 'Bronse' }).indexOf('medal--bronze') !== -1,
+    'Bronse renders as a bronze chip');
+assert.strictEqual(mcol2('medalRank').cell({ medal: 'Ukjent' }), 'Ukjent',
+    'unknown medal names stay plain text');
+
+// Ruling 14: the Arrangør column links each row to the comp modal
+// (the full result list) — visible by default now that it carries
+// the affordance.
+var orgColR14 = mcol2('organizer');
+assert.ok(!orgColR14.defaultHidden, 'Arrangør is visible — it carries the comp link');
+var orgLinkCell = orgColR14.cell({ organizer: 'Brumunddal PK', compId: 'c8', title: 'Teststevne c8' });
+assert.ok(orgLinkCell.indexOf('stevner-comp-btn') !== -1
+    && orgLinkCell.indexOf('data-comp-id="c8"') !== -1
+    && orgLinkCell.indexOf('data-comp-title="Teststevne c8"') !== -1
+    && orgLinkCell.indexOf('Brumunddal PK') !== -1,
+    'the organizer cell links the comp modal, titled by the comp');
+assert.strictEqual(orgColR14.cell({ organizer: null, compId: null }), '–',
+    'no organizer and no comp stay a plain dash');
+
 // bareSpec: the surgical re-render shape — no wrapClass (re-wrapping
 // nests scroll regions), no picker (the surviving toolbar button keeps
 // its wiring), everything else shared by reference.
@@ -335,15 +361,39 @@ assert.deepStrictEqual(MP.toItemIds([{ id: 'nm', name: 'NM' }, { id: 'dm', name:
     ['nm', 'dm'], 'object items reduce to their ids');
 assert.deepStrictEqual(MP.toItemIds([]), []);
 
-console.log('mesterskap-page.test.js: all assertions passed');
+// ── Ruling 12: region-filter availability is per view ────────────────
+// An nm-only view carries neither region field, so both region
+// filters grey out and go inert; adding DM/KM back to the type filter
+// reactivates them. The basis excludes the region filters' own
+// selections — a krets pick must not deactivate its own dropdown.
+var availRows = [
+    { type: 'km', ovelse: 'Felt Fin', klasse: 'A', medal: 'Gull', region: 'Hedmark', isTeam: false },
+    { type: 'dm', ovelse: 'Felt Fin', klasse: 'A', medal: 'Gull', distrikt: 'Øst', isTeam: false },
+    { type: 'nm', ovelse: 'Felt Fin', klasse: 'A', medal: 'Gull', isTeam: false }
+];
+assert.deepStrictEqual(MP.regionFilterAvailability(availRows, {}),
+    { krets: true, distrikt: true }, 'the unfiltered view carries both region fields');
+assert.deepStrictEqual(MP.regionFilterAvailability(availRows, { mesterskap: ['nm'] }),
+    { krets: false, distrikt: false }, 'an nm-only view greys out both region filters');
+assert.deepStrictEqual(MP.regionFilterAvailability(availRows, { mesterskap: ['nm', 'dm'] }),
+    { krets: false, distrikt: true }, 'adding DM back reactivates distrikt');
+assert.deepStrictEqual(MP.regionFilterAvailability(availRows, { mesterskap: ['km'] }),
+    { krets: true, distrikt: false }, 'a km-only view keeps krets, drops distrikt');
+assert.deepStrictEqual(MP.regionFilterAvailability(availRows, { krets: ['Hedmark'], distrikt: ['Øst'] }),
+    { krets: true, distrikt: true },
+    "the region filters' own selections are excluded from the basis");
 
-// ── the krets/distrikt hide needs its CSS companion ────────────────────
-// applyRegionFilterAvailability hides the groups via the hidden
-// attribute; .filter-group's display:flex beats the UA stylesheet, so
-// the rule below must exist or the hide is a visual no-op (review
-// finding — the documented [hidden] trap).
+// ── the region-filter looks need their CSS ─────────────────────────────
+// setRegionFilterActive greys a group out via the filter-group--
+// inactive class — the rule must exist or the grey-out is a visual
+// no-op. The [hidden] companion stays: the person modal's
+// initially-hidden filter groups rely on it against .filter-group's
+// display:flex.
 var fs = require('node:fs');
 var styles = fs.readFileSync(__dirname + '/../public/styles.css', 'utf8');
+assert.ok(styles.indexOf('.filter-group--inactive') !== -1,
+    'styles.css carries the .filter-group--inactive greying rule');
 assert.ok(styles.indexOf('.filter-group[hidden]') !== -1,
     'styles.css carries the .filter-group[hidden] display:none companion rule');
+
 console.log('mesterskap-page.test.js: all assertions passed');
