@@ -167,7 +167,9 @@ var StandplassMesterskapPage = (function () {
             var label = row.personId
                 ? '<button type="button" class="stevner-person-btn link-btn"'
                     + ' data-person-id="' + esc(row.personId)
-                    + '" data-person-name="' + esc(row.name) + '">'
+                    + '" data-person-name="' + esc(row.name)
+                    + '" data-comp-id="' + esc(row.compId == null ? '' : row.compId)
+                    + '" data-sum="' + (row.sum == null ? '' : esc(String(row.sum))) + '">'
                     + esc(row.name) + '</button>'
                 : esc(row.name);
             return label
@@ -177,7 +179,9 @@ var StandplassMesterskapPage = (function () {
         if (row.personId && !row.isTeam) {
             return '<button type="button" class="stevner-person-btn link-btn"'
                 + ' data-person-id="' + esc(row.personId)
-                + '" data-person-name="' + esc(row.name) + '">'
+                + '" data-person-name="' + esc(row.name)
+                + '" data-comp-id="' + esc(row.compId == null ? '' : row.compId)
+                + '" data-sum="' + (row.sum == null ? '' : esc(String(row.sum))) + '">'
                 + esc(row.name) + '</button>';
         }
         if (row.isTeam) {
@@ -450,6 +454,42 @@ var StandplassMesterskapPage = (function () {
         return regionDropdownsFor(basis);
     }
 
+    // The person-modal entry activation from a podium row. The modal's
+    // entries come from the NSF API year JSONs while podium rows come
+    // from the parsed result files — two datasets whose øvelse and
+    // klasse vocabularies never match (measured: 0/1856 rows, 2026),
+    // so felt/bane's exact spec cannot be built here. Instead the row's
+    // comp pins the candidates, and activation happens only when
+    // unambiguous: the person's only entry at that stevne, or a unique
+    // score match on the podium sum (the result file's sum and the
+    // API's score are the same total — resolves ~91% of 2026's podium
+    // rows). Anything else stays unactivated rather than risk a wrong
+    // highlight. Returns the chosen entry's own spec — the API's
+    // strings — so findEntryIndex matches exactly.
+    function resolveActivation(entries, compId, sum) {
+        if (compId == null) { return null; }
+        var candidates = (entries || []).filter(function (e) {
+            return e.competitionId === compId;
+        });
+        if (!candidates.length) { return null; }
+        var chosen = null;
+        if (candidates.length === 1) {
+            chosen = candidates[0];
+        } else if (sum != null) {
+            var byScore = candidates.filter(function (e) {
+                return e.score != null && Number(e.score) === Number(sum);
+            });
+            if (byScore.length === 1) { chosen = byScore[0]; }
+        }
+        if (!chosen) { return null; }
+        return {
+            date: chosen.date,
+            competitionId: chosen.competitionId,
+            discipline: chosen.discipline,
+            class: chosen.class
+        };
+    }
+
     // The mixed view's opening sort: type-first sections (NM, DM, KM),
     // each in program order via the base's secondary key over the
     // pre-sorted rows. Single-type views open unsorted (page order).
@@ -495,6 +535,32 @@ var StandplassMesterskapPage = (function () {
         // here — branch-agnostic, fetched by compId from the API.
         var compModalHost = null;
 
+        // The person modal's entry source. Hoisted to a named function:
+        // the table's person-link click path also calls it to resolve
+        // the entry activation before opening — the same cached fetch
+        // the modal itself will use (one load per person-year).
+        function fetchEntriesForYear(personId, year) {
+            function fromBase(dataBase) {
+                return fetcher.fetchYear(dataBase, year).then(function (yearData) {
+                    return StandplassStevnerPage.flattenRows(yearData)
+                        .filter(function (r) { return r.personId === personId; })
+                        .map(function (r) {
+                            return { date: r.date, discipline: r.discipline, class: r.class,
+                                competitionId: r.competitionId,
+                                competitionType: r.competitionType, competition: r.competition,
+                                position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                        });
+                }).catch(function () { return []; });
+            }
+            // gren=alle: both branches' entries (the controller
+            // already handles mixed-branch entries + the switcher).
+            if (gren === 'alle') {
+                return Promise.all([fromBase('/data/felt'), fromBase('/data/bane')])
+                    .then(function (pair) { return pair[0].concat(pair[1]); });
+            }
+            return fromBase(gren === 'felt' ? '/data/felt' : '/data/bane');
+        }
+
         var personModal = StandplassPersonModalController.create({
             idPrefix: 'mesterskap',
             root: root,
@@ -502,26 +568,7 @@ var StandplassMesterskapPage = (function () {
             onOpenComp: function (compId, compTitle) {
                 if (compModalHost) { compModalHost.open(compId, compTitle); }
             },
-            fetchEntriesForYear: function (personId, year) {
-                function fromBase(dataBase) {
-                    return fetcher.fetchYear(dataBase, year).then(function (yearData) {
-                        return StandplassStevnerPage.flattenRows(yearData)
-                            .filter(function (r) { return r.personId === personId; })
-                            .map(function (r) {
-                                return { date: r.date, discipline: r.discipline, class: r.class,
-                                    competitionType: r.competitionType, competition: r.competition,
-                                    position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
-                            });
-                    }).catch(function () { return []; });
-                }
-                // gren=alle: both branches' entries (the controller
-                // already handles mixed-branch entries + the switcher).
-                if (gren === 'alle') {
-                    return Promise.all([fromBase('/data/felt'), fromBase('/data/bane')])
-                        .then(function (pair) { return pair[0].concat(pair[1]); });
-                }
-                return fromBase(gren === 'felt' ? '/data/felt' : '/data/bane');
-            },
+            fetchEntriesForYear: fetchEntriesForYear,
             defaultYear: ar,
             firstYear: FIRST_YEAR,
             currentYear: CURRENT_YEAR,
@@ -533,10 +580,19 @@ var StandplassMesterskapPage = (function () {
         contentEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.stevner-person-btn');
             if (!btn) { return; }
-            personModal.open(btn, {
-                personId: btn.dataset.personId,
-                personName: btn.dataset.personName,
-                initialDisc: null
+            // The entry-activation spec is an open() argument, so the
+            // person's API entries must load before the modal opens.
+            // This is the modal's own cached fetch: one load on the
+            // first open per person-year, instant after.
+            fetchEntriesForYear(btn.dataset.personId, ar).then(function (entries) {
+                var sum = btn.dataset.sum;
+                personModal.open(btn, {
+                    personId: btn.dataset.personId,
+                    personName: btn.dataset.personName,
+                    initialDisc: null,
+                    entry: resolveActivation(entries, btn.dataset.compId || null,
+                        sum == null || sum === '' ? null : Number(sum))
+                });
             });
         });
         // Comp-modal wiring for the Arrangør links (ruling 14) — the
@@ -1042,6 +1098,7 @@ var StandplassMesterskapPage = (function () {
         stampGren: stampGren,
         regionDropdownsFor: regionDropdownsFor,
         regionFilterAvailability: regionFilterAvailability,
+        resolveActivation: resolveActivation,
         initialSortFor: initialSortFor,
         emptyYearCard: emptyYearCard,
         init: init

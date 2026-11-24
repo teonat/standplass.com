@@ -184,6 +184,8 @@ assert.strictEqual(col('title').cell({ compId: 'c9', gren: 'felt' }), '–',
 var link = col('name').cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
 assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
     'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
+assert.ok(link.indexOf('data-comp-id="') !== -1 && link.indexOf('data-sum="') !== -1,
+    'person buttons carry their comp and sum — the entry activation\'s match keys');
 var teamRow = rows.filter(function (r) { return r.isTeam; })[0];
 var teamCell = col('name').cell(teamRow);
 assert.ok(teamCell.indexOf('GPK 1') !== -1,
@@ -282,6 +284,41 @@ assert.strictEqual(MP.mergeMestereIndexes([null, null]).comps.length, 0);
 assert.deepStrictEqual(MP.stampGren({ comps: [{ compId: 'a' }] }, 'bane').comps,
     [{ compId: 'a', gren: 'bane' }], 'comps get their branch stamped');
 assert.strictEqual(MP.stampGren(null, 'felt'), null, 'a failed fetch passes through');
+
+// ── resolveActivation: the person-modal entry spec from a podium row ──
+// The modal's entries (NSF API year JSONs) and the podium rows
+// (parsed result files) use different øvelse/klasse vocabularies —
+// measured 0/1856 exact string matches on 2026 — so felt/bane's exact
+// spec can't be built here. The row's comp pins the candidates, and
+// activation happens only when unambiguous: the person's only entry
+// at that stevne, or a unique score match on the podium sum.
+var actEntries = [
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Finfelt', class: 'C', score: 88 },
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Grovfelt', class: 'B', score: 90 },
+    { date: '2026-06-20', competitionId: 'c2', discipline: 'Finfelt', class: 'A', score: 92 }
+];
+assert.deepStrictEqual(MP.resolveActivation(actEntries, 'c1', 90),
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Grovfelt', class: 'B' },
+    'a unique score match pins the entry (the spec carries the API\'s own strings)');
+assert.deepStrictEqual(MP.resolveActivation(actEntries, 'c2', 77),
+    { date: '2026-06-20', competitionId: 'c2', discipline: 'Finfelt', class: 'A' },
+    'a single candidate activates even without a score match');
+assert.strictEqual(MP.resolveActivation(actEntries, 'c1', 99), null,
+    'multiple candidates without a unique score stay unactivated');
+assert.strictEqual(MP.resolveActivation(actEntries, 'c1', null), null,
+    'multiple candidates and no sum stay unactivated');
+assert.strictEqual(MP.resolveActivation(actEntries, 'cX', 88), null,
+    'no candidates (person absent from the API results) stays unactivated');
+assert.strictEqual(MP.resolveActivation(actEntries, null, 88), null,
+    'no compId — nothing to pin');
+assert.strictEqual(MP.resolveActivation(null, 'c1', 88), null,
+    'no entries — nothing to activate');
+var dupScore = [
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Finfelt', class: 'C', score: 88 },
+    { date: '2026-06-06', competitionId: 'c1', discipline: 'Grovfelt', class: 'B', score: 88 }
+];
+assert.strictEqual(MP.resolveActivation(dupScore, 'c1', 88), null,
+    'an ambiguous score match (two candidates) stays unactivated');
 assert.strictEqual(MP.mergeMestereIndexes().comps.length, 0);
 
 assert.deepStrictEqual(MP.regionDropdownsFor(global.StandplassMestereData.podiumRows(pageIndex, 'nm')),
