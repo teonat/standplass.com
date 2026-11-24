@@ -2162,6 +2162,24 @@ th[aria-sort="descending"] .dt-sort-arrow::before { border-top: 5px solid curren
   border-radius: 3px;
 }
 
+/* Owner ruling 2026-11-24: the Mesterskap chips carry type colors —
+   blue NM, green DM, purple KM — from the chart palette's text
+   variants (they flip per theme in themes.css; the border follows
+   currentColor, the background is a faint tint of the same hue).
+   Gold/silver/bronze stay reserved for the Medalje chips. */
+.mesterskap-type-chip--nm {
+  color: var(--chart-blue-text);
+  background: rgba(74, 144, 217, 0.10);
+}
+.mesterskap-type-chip--dm {
+  color: var(--chart-green-text);
+  background: rgba(34, 197, 94, 0.10);
+}
+.mesterskap-type-chip--km {
+  color: var(--chart-purple-text);
+  background: rgba(168, 85, 247, 0.10);
+}
+
 /* Lag member rows: the lag name rides as a muted sub-line under the
    person's name (owner ruling 2026-11-23 — no dedicated Lag column). */
 .mesterskap-lag-sub {

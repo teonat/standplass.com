@@ -268,6 +268,14 @@ var StandplassMesterskapPage = (function () {
         var mixed = types.length > 1;
         var regionKey = !mixed && types[0] === 'km' ? 'region'
             : !mixed && types[0] === 'dm' ? 'distrikt' : null;
+        // Owner ruling 2026-11-24: Mesterskap first, Medalje second —
+        // the championship type and the medal are the primary scanning
+        // keys. Single-type views have no Mesterskap column (the type
+        // is the block header), so Medalje leads there.
+        var medalCol = {
+            key: 'medalRank', label: 'Medalje', align: 'center', sortable: true, defaultDir: 'asc',
+            cellClass: 'medal-cell', raw: true, cell: function (row) { return medalChip(row.medal); }
+        };
         var columns = [
             { key: 'name', label: 'Navn', sortable: true, defaultDir: 'asc', raw: true, cell: personCell },
             {
@@ -277,10 +285,6 @@ var StandplassMesterskapPage = (function () {
             {
                 key: 'klasse', label: 'Klasse', align: 'center', sortable: true, defaultDir: 'asc',
                 cell: function (row) { return row.klasse == null ? '–' : row.klasse; }
-            },
-            {
-                key: 'medalRank', label: 'Medalje', align: 'center', sortable: true, defaultDir: 'asc',
-                cellClass: 'medal-cell', raw: true, cell: function (row) { return medalChip(row.medal); }
             },
             {
                 key: 'club', label: 'Klubb', sortable: true, defaultDir: 'asc', hideBelow: 900,
@@ -293,6 +297,24 @@ var StandplassMesterskapPage = (function () {
                 }
             }
         ];
+        columns.unshift(medalCol);
+        if (mixed) {
+            columns.unshift({
+                key: 'typeRank', label: 'Mesterskap', align: 'center',
+                sortable: true, defaultDir: 'asc', secondaryKey: 'ovelseRank',
+                hideBelow: 700, raw: true,
+                cell: function (row) {
+                    // Owner ruling 2026-11-24: type colors (blue NM,
+                    // green DM, purple KM) via the modifier class; the
+                    // border follows currentColor, the vars flip per
+                    // theme in themes.css.
+                    var known = TYPE_LABELS[row.type];
+                    return '<span class="mesterskap-type-chip'
+                        + (known ? ' mesterskap-type-chip--' + row.type : '') + '">'
+                        + esc(known || String(row.type || '').toUpperCase()) + '</span>';
+                }
+            });
+        }
         if (rows.some(function (r) { return r.sum != null; })) {
             columns.push({
                 key: 'sum', label: 'Sum', align: 'right', sortable: true, defaultDir: 'desc',
@@ -320,16 +342,6 @@ var StandplassMesterskapPage = (function () {
             });
         }
         if (mixed) {
-            columns.push({
-                key: 'typeRank', label: 'Mesterskap', align: 'center',
-                sortable: true, defaultDir: 'asc', secondaryKey: 'ovelseRank',
-                hideBelow: 700, raw: true,
-                cell: function (row) {
-                    return '<span class="mesterskap-type-chip">'
-                        + esc(TYPE_LABELS[row.type] || String(row.type || '').toUpperCase())
-                        + '</span>';
-                }
-            });
             columns.push({
                 key: 'champRegion', label: 'Region', sortable: true, defaultDir: 'asc',
                 hideBelow: 900,

@@ -150,8 +150,8 @@ function col(key) {
     return spec.columns.filter(function (c) { return c.key === key; })[0];
 }
 assert.deepStrictEqual(spec.columns.map(function (c) { return c.key; }),
-    ['name', 'ovelseRank', 'klasse', 'medalRank', 'club', 'sum', 'region', 'title', 'date', 'organizer'],
-    'Navn leads — the person is the row\u2019s identity (owner ruling)');
+    ['medalRank', 'name', 'ovelseRank', 'klasse', 'club', 'sum', 'region', 'title', 'date', 'organizer'],
+    'Medalje leads in single-type views (owner ruling 2026-11-24)');
 assert.strictEqual(col('ovelseRank').label, 'Øvelse');
 assert.strictEqual(col('ovelseRank').cell(rows[0]), rows[0].ovelse,
     'Øvelse displays the name, sorts by ovelseRank');
@@ -237,6 +237,9 @@ assert.strictEqual(mixedSpec.groupRows, null, 'mixed views are flat');
 var mixedKeys = mixedSpec.columns.map(function (c) { return c.key; });
 assert.ok(mixedKeys.indexOf('region') === -1 && mixedKeys.indexOf('distrikt') === -1,
     'no per-type region columns in the mixed view');
+assert.deepStrictEqual(mixedKeys,
+    ['typeRank', 'medalRank', 'name', 'ovelseRank', 'klasse', 'club', 'sum', 'champRegion', 'title', 'date', 'organizer'],
+    'Mesterskap first, Medalje second (owner ruling 2026-11-24)');
 function mcol2(key) {
     return mixedSpec.columns.filter(function (c) { return c.key === key; })[0];
 }
@@ -248,6 +251,14 @@ assert.strictEqual(typeCol.secondaryKey, 'ovelseRank',
 assert.ok(typeCol.cell({ type: 'km' }).indexOf('KM') !== -1
     && typeCol.cell({ type: 'nm' }).indexOf('NM') !== -1,
     'the type cell renders the NM/DM/KM chip');
+// Owner ruling 2026-11-24: the chips carry type colors (blue NM,
+// green DM, purple KM) so the mixed view's rows read at a glance.
+assert.ok(typeCol.cell({ type: 'km' }).indexOf('mesterskap-type-chip--km') !== -1,
+    'the KM chip carries its color modifier');
+assert.ok(typeCol.cell({ type: 'nm' }).indexOf('mesterskap-type-chip--nm') !== -1,
+    'the NM chip carries its color modifier');
+assert.ok(typeCol.cell({ type: 'dm' }).indexOf('mesterskap-type-chip--dm') !== -1,
+    'the DM chip carries its color modifier');
 assert.ok(typeCol.cell({ type: 'dm' }).indexOf('mesterskap-type-chip') !== -1,
     'chips carry the shared styling hook');
 var regionCol = mcol2('champRegion');
@@ -427,6 +438,13 @@ assert.ok(styles.indexOf('.filter-group[hidden]') !== -1,
 assert.ok(styles.indexOf('#mesterskap-root .stevner-comp-btn') !== -1
     && styles.indexOf('#mesterskap-root .stevner-resultfile-btn') !== -1,
     'the table row links carry the theme-adaptive link convention');
+
+// The type chips' color modifiers must exist in CSS — the class alone
+// is a visual no-op without them.
+['nm', 'dm', 'km'].forEach(function (t) {
+    assert.ok(styles.indexOf('.mesterskap-type-chip--' + t) !== -1,
+        'styles.css colors the ' + t.toUpperCase() + ' chip');
+});
 
 // The resultfile modal (ruling 15) must be loaded by the page — the
 // Arrangement links die without it.
