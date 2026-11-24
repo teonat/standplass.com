@@ -336,3 +336,14 @@ assert.deepStrictEqual(MP.toItemIds([{ id: 'nm', name: 'NM' }, { id: 'dm', name:
 assert.deepStrictEqual(MP.toItemIds([]), []);
 
 console.log('mesterskap-page.test.js: all assertions passed');
+
+// ── the krets/distrikt hide needs its CSS companion ────────────────────
+// applyRegionFilterAvailability hides the groups via the hidden
+// attribute; .filter-group's display:flex beats the UA stylesheet, so
+// the rule below must exist or the hide is a visual no-op (review
+// finding — the documented [hidden] trap).
+var fs = require('node:fs');
+var styles = fs.readFileSync(__dirname + '/../public/styles.css', 'utf8');
+assert.ok(styles.indexOf('.filter-group[hidden]') !== -1,
+    'styles.css carries the .filter-group[hidden] display:none companion rule');
+console.log('mesterskap-page.test.js: all assertions passed');
