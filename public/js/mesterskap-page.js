@@ -86,7 +86,16 @@ var StandplassMesterskapPage = (function () {
     // implementation for the unified page: every dropdown always in
     // the markup, availability data-driven at runtime by what the
     // loaded rows carry). Static markup only — widget items are
-    // injected at runtime through textContent, no escaping surface.
+    // injected at runtime through textContent, no escaping surface.    // Select-all stores ids, never the {id, name} label objects the
+    // mesterskapstype dropdown's items carry — every other dropdown's
+    // raw items are the ids themselves, and the filter state must hold
+    // one shape for matching, labels and the URL codec alike.
+    function toItemIds(items) {
+        return (items || []).map(function (n) {
+            return typeof n === 'string' ? n : n.id;
+        });
+    }
+
     function dropdownGroup(param, label, listLabel) {
         return '<div class="filter-group">'
             + '<label>' + label + '</label>'
@@ -542,7 +551,7 @@ var StandplassMesterskapPage = (function () {
                     applyFilters();
                 },
                 onSelectAll: function () {
-                    filters[selKey] = itemsFn().slice();
+                    filters[selKey] = toItemIds(itemsFn());
                     dropdown.rebuild();
                     applyFilters();
                 }
@@ -877,6 +886,7 @@ var StandplassMesterskapPage = (function () {
         resolveFilters: resolveFilters,
         filterParams: filterParams,
         filterBarMarkup: filterBarMarkup,
+        toItemIds: toItemIds,
         tableSpecFor: tableSpecFor,
         bareSpec: bareSpec,
         mergeMestereIndexes: mergeMestereIndexes,

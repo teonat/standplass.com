@@ -323,4 +323,16 @@ assert.strictEqual(mcol('club').cell({ isTeam: true, lag: 'GPK 1', club: null, n
 assert.strictEqual(mcol('club').cell({ isTeam: true, lag: null, club: null, name: 'GPK 1' }), 'GPK',
     'memberless team rows keep the derived club display');
 
+// ── toItemIds: select-all stores ids, never label objects ───────────────
+// The mesterskapstype dropdown's items carry {id, name} objects (the
+// NM/DM/KM labels); every other dropdown's raw items are the ids
+// themselves. "Merk alle" must store ids either way — review finding:
+// objects in the filter state matched zero rows and serialized as
+// [object Object] into the URL.
+assert.deepStrictEqual(MP.toItemIds(['nm', 'dm']), ['nm', 'dm'],
+    'string items are ids already');
+assert.deepStrictEqual(MP.toItemIds([{ id: 'nm', name: 'NM' }, { id: 'dm', name: 'DM' }]),
+    ['nm', 'dm'], 'object items reduce to their ids');
+assert.deepStrictEqual(MP.toItemIds([]), []);
+
 console.log('mesterskap-page.test.js: all assertions passed');
