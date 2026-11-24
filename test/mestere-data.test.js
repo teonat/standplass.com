@@ -381,9 +381,11 @@ assert.deepStrictEqual(MD.statsFor(kmRows, 'km'),
     'øvelser count Felt Fin + Felt Grov (lag variants merge into their øvelse); klubber include the lag club (KSS+Brumunddal+Bodø+Hurum)');
 assert.strictEqual(MD.filterPodiumRows(kmRows, { ovelse: [], klasse: [], region: [], distrikt: [], klubb: 'Hurum SKL', navn: '', type: '' }).length, 1,
     'the klubb filter matches lag rows via their resolved club');
-assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, null, 'nm has no region stat');
+assert.strictEqual(MD.statsFor(kmRows, 'nm').regioner, 2,
+    'legacy scope arg ignored — regioner counts champRegion regardless');
 assert.deepStrictEqual(MD.statsFor(nmRows, 'nm'),
-    { medaljer: 2, ovselser: 2, regioner: null, klubber: 1 });
+    { medaljer: 2, ovselser: 2, regioner: 0, klubber: 1 },
+    'nm rows carry no champRegion — regioner counts 0, never null');
 
 // ── podiumRows: lag member expansion (v15 team members) ───────────────
 // Owner rulings 2026-11-23 (v2): one row per member; Øvelse keeps its
@@ -462,7 +464,7 @@ assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
     'member rows sort by klasse/medal/name like any other row (Lag Å < Mix-lag < Å)');
 
 assert.deepStrictEqual(MD.statsFor(mRows, 'nm'),
-    { medaljer: 4, ovselser: 1, regioner: null, klubber: 4 },
+    { medaljer: 4, ovselser: 1, regioner: 0, klubber: 4 },
     'the team medal counts once (1 individual + 3 teams); the lag variants merge into their øvelse');
 assert.strictEqual(MD.filterPodiumRows(mRows, memberFilters({ ovelse: ['Felt Fin'], type: 'lag' })).length, 5,
     'the øvelse filter keeps individual and lag rows of the same øvelse; the type filter narrows');
@@ -583,5 +585,34 @@ var anneDual = allRows.filter(function (r) {
 });
 assert.strictEqual(anneDual.length, 2, 'one entry per scope, never merged');
 assert.deepStrictEqual(anneDual.map(function (r) { return r.type; }).sort(), ['dm', 'km']);
+
+// ── filterPodiumRows: mesterskapstype + statsFor: champRegion ─────────
+// Spec rulings 3 and 10: mesterskap filters by row type (empty = all);
+// under a region filter, rows that carry no region (nm rows) drop out —
+// the filter means "championships of this region". statsFor counts
+// distinct non-null champRegion values, scope-independent.
+
+// Mesterskapstype filter: empty = all; list = membership.
+var fAll = MD.filterPodiumRows(allRows, {});
+assert.strictEqual(fAll.length, allRows.length, 'no mesterskap filter = all types');
+var fKm = MD.filterPodiumRows(allRows, { mesterskap: ['km'] });
+assert.ok(fKm.every(function (r) { return r.type === 'km'; }),
+    'mesterskap filters by row type');
+assert.strictEqual(MD.filterPodiumRows(allRows, { mesterskap: ['nm', 'dm'] }).length,
+    allRows.length - fKm.length, 'multi-type membership (nm+dm = the complement of km)');
+
+// Ruling 10: NM rows carry no region/distrikt and DROP OUT under a
+// region filter — but dm rows match their host krets (the krets rule).
+var fKrets = MD.filterPodiumRows(allRows, { region: [byType.km.region] });
+assert.ok(fKrets.every(function (r) { return r.region === byType.km.region; }));
+assert.ok(fKrets.every(function (r) { return r.type !== 'nm'; }),
+    'nm rows never match a region filter');
+
+// statsFor: distinct non-null champRegion, nulls ignored.
+var sAll = MD.statsFor(allRows);
+var expectedRegions = {};
+allRows.forEach(function (r) { if (r.champRegion != null) { expectedRegions[r.champRegion] = true; } });
+assert.strictEqual(sAll.regioner, Object.keys(expectedRegions).length,
+    'regioner counts distinct non-null champRegion');
 
 console.log('mestere-data.test.js: all assertions passed');

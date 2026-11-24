@@ -402,21 +402,24 @@ var StandplassMestereData = (function () {
         return rows;
     }
 
-    // filters: {ovelse: [], klasse: [], medal: [], region: [],
-    // distrikt: [], klubb: '', navn: '', type: ''} — empty array/string
-    // is a no-op. The page maps the URL's krets param to region (km)
-    // before calling; null row values never match a non-empty filter.
+    // filters: {ovelse: [], klasse: [], medal: [], mesterskap: [],
+    // region: [], distrikt: [], klubb: '', navn: '', type: ''} — empty
+    // array/string is a no-op. mesterskap filters by row type (the
+    // unified page's mesterskapstype filter); null row values never
+    // match a non-empty filter.
     function filterPodiumRows(rows, filters) {
         var f = filters || {};
         var ovelse = f.ovelse || [];
         var klasse = f.klasse || [];
         var medal = f.medal || [];
+        var mesterskap = f.mesterskap || [];
         var region = f.region || [];
         var distrikt = f.distrikt || [];
         var klubb = f.klubb || '';
         var navn = String(f.navn || '').toLowerCase();
         var type = f.type || '';
         return (rows || []).filter(function (r) {
+            if (mesterskap.length && mesterskap.indexOf(r.type) === -1) { return false; }
             if (ovelse.length && ovelse.indexOf(r.ovelse) === -1) { return false; }
             if (klasse.length && klasse.indexOf(r.klasse) === -1) { return false; }
             if (medal.length && medal.indexOf(r.medal) === -1) { return false; }
@@ -431,10 +434,12 @@ var StandplassMestereData = (function () {
     }
 
     // Counts for the stats line over the filtered rows: medals, distinct
-    // øvelser, distinct regions (krets for km, distrikt for dm, none for
-    // nm) and distinct clubs. A team's medal counts once — its member
-    // rows share a podiumKey (owner ruling 2026-11-23).
-    function statsFor(rows, scope) {
+    // øvelser, distinct championship regions (champRegion — krets for km
+    // rows, distrikt for dm rows, nothing for nm) and distinct clubs. A
+    // team's medal counts once — its member rows share a podiumKey
+    // (owner ruling 2026-11-23). The legacy scope arg (the pre-unified
+    // pages pass one) is ignored: the count is scope-independent.
+    function statsFor(rows) {
         var ovelser = {};
         var regions = {};
         var clubs = {};
@@ -443,8 +448,7 @@ var StandplassMestereData = (function () {
         (rows || []).forEach(function (r) {
             ovelser[r.ovelse] = true;
             if (r.club != null) { clubs[r.club] = true; }
-            if (scope === 'km' && r.region != null) { regions[r.region] = true; }
-            if (scope === 'dm' && r.distrikt != null) { regions[r.distrikt] = true; }
+            if (r.champRegion != null) { regions[r.champRegion] = true; }
             if (r.isTeam && r.podiumKey != null) {
                 teamMedals[r.podiumKey] = true;
             } else {
@@ -454,7 +458,7 @@ var StandplassMestereData = (function () {
         return {
             medaljer: medals + Object.keys(teamMedals).length,
             ovselser: Object.keys(ovelser).length,
-            regioner: scope === 'nm' ? null : Object.keys(regions).length,
+            regioner: Object.keys(regions).length,
             klubber: Object.keys(clubs).length
         };
     }
