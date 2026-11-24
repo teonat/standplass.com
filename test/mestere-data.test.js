@@ -319,8 +319,10 @@ assert.strictEqual(kmRows.length, 6,
     'c1 km (3) + c2 km (1) + c3 kmLag (1) + c4 km (1)');
 var fin = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin'; });
 assert.strictEqual(fin.length, 4);
-assert.ok(fin[0].klasse === 'Lag Menn' && fin[0].isTeam,
-    'klasse Lag Menn sorts before U, so the lag row leads Felt Fin');
+assert.ok(!fin[0].isTeam && fin[0].klasse === 'U',
+    'the øvelse leads with its individual klasses');
+assert.ok(fin[3].klasse === 'Lag Menn' && fin[3].isTeam,
+    'lag rows come last within the øvelse (ruling 2026-11-24)');
 var teamRow = kmRows.filter(function (r) { return r.isTeam; })[0];
 assert.strictEqual(teamRow.name, 'Hurum SKL', 'team rows carry the team as name');
 assert.strictEqual(teamRow.personId, null);
@@ -332,7 +334,7 @@ assert.ok(kmRows.slice(0, 4).every(function (r) { return r.ovelseRank === 1; }),
 assert.ok(kmRows.slice(4).every(function (r) { return r.ovelse === 'Felt Grov'; }));
 assert.strictEqual(kmRows[0].region, 'Buskerud');
 assert.strictEqual(kmRows[0].date, '2025-06-11');
-assert.strictEqual(kmRows[0].organizer, 'Arrangør c3', 'kmRows[0] is c3\u2019s lag row');
+assert.strictEqual(kmRows[0].organizer, 'Arrangør c1', 'kmRows[0] is c1\u2019s leading individual row');
 var uRows = kmRows.filter(function (r) { return r.ovelse === 'Felt Fin' && !r.isTeam; });
 assert.deepStrictEqual(uRows.map(function (r) { return r.medal; }),
     ['Gull', 'Sølv', 'Bronse'], 'medalRank tiebreak within øvelse+klasse');
@@ -460,8 +462,8 @@ assert.strictEqual(mona.klasse, 'Mix-lag');
 assert.strictEqual(mona.club, 'Larvik SK', 'each member carries their own club — mix halves can differ');
 assert.strictEqual(mona.lagSum, 198, 'mix member rows carry the team sum too');
 assert.deepStrictEqual(mRows.map(function (r) { return r.name; }),
-    ['Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad', 'Solo'],
-    'member rows sort by klasse/medal/name like any other row (Lag Å < Mix-lag < Å)');
+    ['Solo', 'Tore Vrålstad', 'Ukjent Skytter', 'Bærum PK', 'Kjetil Skogshagen', 'Mona Gjelstad'],
+    'individual rows first, then the øvelse\'s lag rows by klasse/medal/name (ruling 2026-11-24)');
 
 assert.deepStrictEqual(MD.statsFor(mRows, 'nm'),
     { medaljer: 4, ovselser: 1, regioner: 0, klubber: 4 },
@@ -596,6 +598,36 @@ var anneDual = allRows.filter(function (r) {
 });
 assert.strictEqual(anneDual.length, 2, 'one entry per scope, never merged');
 assert.deepStrictEqual(anneDual.map(function (r) { return r.type; }).sort(), ['dm', 'km']);
+
+// Ruling 20 (2026-11-24): within an øvelse, lag rows come after ALL
+// individual rows — their 'Lag M'-style klasse otherwise sorts
+// alphabetically before the 'M'/'V' klasses (before men and
+// veterans), which reads as the klasse sort not being applied.
+// Within each klasse the podium rank orders the rows (Gull → Sølv →
+// Bronse), also across comps.
+var lagOrderIndex = {
+    year: 2026,
+    comps: [
+        comp('lo1', {
+            km: [
+                sec('Felt Fin', 'V55', [{ medal: 'Gull', name: 'Veteran', club: 'A SK' }]),
+                sec('Felt Fin', 'M', [{ medal: 'Gull', name: 'Mann', club: 'A SK' }])
+            ],
+            kmLag: [sec('Felt Fin', 'M', [{ medal: 'Sølv', team: 'Laget', sum: 300, club: 'A SK' }])]
+        }),
+        comp('lo2', {
+            km: [sec('Felt Fin', 'M', [
+                { medal: 'Sølv', name: 'Annemann', club: 'B SK' },
+                { medal: 'Bronse', name: 'Carlmann', club: 'B SK' }
+            ])]
+        })
+    ]
+};
+var lagOrderRows = MD.podiumRows(lagOrderIndex);
+assert.deepStrictEqual(
+    lagOrderRows.map(function (r) { return (r.isTeam ? 'lag:' : 'person:') + r.name; }),
+    ['person:Mann', 'person:Annemann', 'person:Carlmann', 'person:Veteran', 'lag:Laget'],
+    'individual klasses first (Norwegian collation), podium rank within each klasse, then the øvelse\'s lag rows last');
 
 // ── filterPodiumRows: mesterskapstype + statsFor: champRegion ─────────
 // Spec rulings 3 and 10: mesterskap filters by row type (empty = all);

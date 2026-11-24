@@ -183,7 +183,7 @@ assert.strictEqual(col('title').cell({ compId: 'c9', gren: 'felt' }), '–',
     'no title renders a dash');
 var link = col('name').cell(rows.filter(function (r) { return r.personId === 'p1'; })[0]);
 assert.ok(link.indexOf('stevner-person-btn') !== -1 && link.indexOf('data-person-id="p1"') !== -1,
-    'person rows link (rows[0] itself is the lag row — klasse M sorts before U)');
+    'person rows link (p1 is c1\u2019s Gull row — individuals lead, lag last)');
 assert.ok(link.indexOf('data-comp-id="') !== -1 && link.indexOf('data-sum="') !== -1,
     'person buttons carry their comp and sum — the entry activation\'s match keys');
 var teamRow = rows.filter(function (r) { return r.isTeam; })[0];

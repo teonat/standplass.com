@@ -393,6 +393,13 @@ var StandplassMestereData = (function () {
         });
         rows.sort(function (a, b) {
             if (a.ovelseRank !== b.ovelseRank) { return a.ovelseRank - b.ovelseRank; }
+            // Owner ruling 2026-11-24: within the øvelse, lag rows come
+            // after every individual row — their 'Lag M'-style klasse
+            // otherwise sorts alphabetically before the 'M'/'V' klasses
+            // (before men and veterans). Within each klasse the podium
+            // rank orders the rows (Gull → Sølv → Bronse), also across
+            // comps.
+            if (a.isTeam !== b.isTeam) { return a.isTeam ? 1 : -1; }
             if (a.klasse == null && b.klasse == null) { /* fall through */ }
             else if (a.klasse == null) { return 1; }
             else if (b.klasse == null) { return -1; }
