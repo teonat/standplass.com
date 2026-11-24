@@ -167,7 +167,8 @@ var StandplassPersonModal = (function () {
     function chartPoints(entries, metric) {
         return entries.filter(function (e) {
             if (!e.date || e[metric] == null) { return false; }
-            if (metric === 'rankingScore' && Number(e.rankingScore) === 0) { return false; }
+            if (metric === 'rankingScore' && (Number(e.rankingScore) === 0
+                || StandplassRankingBand.isGarbageRankingScore(e.rankingScore))) { return false; }
             return true;
         });
     }
@@ -631,10 +632,13 @@ var StandplassPersonModal = (function () {
     // dot predicate (chartPoints), which the activation must agree with
     // exactly: the listing encodes "no ranking" as zero, not just null,
     // and chartPoints excludes ranking-0 rows from the ranking series.
+    // Score-scale garbage above the 100-point ladder is not a ranking
+    // either — the activation must agree with the chart's predicate.
     // A zero poeng sum is a real dot; positions are 1-based.
     function hasMetricValue(entry, metric) {
         if (metric === 'rankingScore') {
-            return entry.rankingScore != null && Number(entry.rankingScore) !== 0;
+            return entry.rankingScore != null && Number(entry.rankingScore) !== 0
+                && !StandplassRankingBand.isGarbageRankingScore(entry.rankingScore);
         }
         if (metric === 'score') { return entry.score != null; }
         if (metric === 'position') { return entry.position != null; }

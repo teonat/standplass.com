@@ -64,8 +64,17 @@ var StandplassRankingBand = (function () {
     // needed: the text is Number.toFixed output (digits, dot, minus
     // only) and the color and label are this module's own static
     // strings.
+    // A ranking score lives on the 0–100 ladder. The Hurtig u*-class
+    // bane listings put the raw score in the rankingScore field
+    // (score-scale 500+ values) — anything above the ladder is source
+    // garbage, not a ranking: the same source-encoding defense class
+    // as the zero rule the chart/activation helpers already make.
+    function isGarbageRankingScore(value) {
+        return value != null && Number(value) > 100;
+    }
+
     function cellHtml(rankingScore, cls) {
-        if (rankingScore == null) { return '–'; }
+        if (rankingScore == null || isGarbageRankingScore(rankingScore)) { return '–'; }
         var text = Number(rankingScore).toFixed(2);
         var band = bandFor(cls, rankingScore);
         if (!band) { return text; }
@@ -106,6 +115,7 @@ var StandplassRankingBand = (function () {
     }
 
     return { bandFor: bandFor, cellHtml: cellHtml, positionCellHtml: positionCellHtml,
+        isGarbageRankingScore: isGarbageRankingScore,
              deltaCellHtml: deltaCellHtml, BANDS: BANDS };
 })();
 
