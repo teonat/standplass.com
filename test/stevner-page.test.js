@@ -68,8 +68,8 @@ assert.ok(links1.indexOf('data-resultfile="https://example.test/r.pdf"') !== -1,
     'the action carries the result file url for the modal');
 assert.ok(links1.indexOf('data-title="Vårfelt"') !== -1,
     'the action carries the comp title');
-assert.ok(links1.indexOf('>Resultatfil <span class="nav-beta-tag"') !== -1,
-    'the action carries the beta pill (partial result-file coverage)');
+assert.ok(links1.indexOf('>Resultatfil<span class="nav-beta-tag"') !== -1,
+    'the action carries the beta pill (partial result-file coverage), corner-tag markup');
 assert.ok(links1.indexOf('stevner-resultfile-btn') < links1.indexOf('>PDF</a>'),
     'the Resultatfil action sits before the raw PDF link');
 var links2 = SP.cardLinksHtml(cards[1]);

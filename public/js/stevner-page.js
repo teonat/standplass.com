@@ -362,7 +362,7 @@ var StandplassStevnerPage = (function () {
         }
         return '<button type="button" class="stevner-resultfile-btn" data-comp-id="' + esc(card.id)
             + '" data-title="' + esc(card.title || '') + '" data-resultfile="' + esc(card.resultFileUrl) + '">'
-            + 'Resultatfil <span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
+            + 'Resultatfil<span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
             + '<a href="' + esc(card.resultFileUrl) + '" target="_blank" rel="noopener">PDF</a> '
             + (card.deepLink
                 ? '<a href="' + esc(card.deepLink) + '" target="_blank" rel="noopener">skyting.no</a>'

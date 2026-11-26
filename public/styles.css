@@ -600,11 +600,21 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* The Resultatfil action shares the pill look but keeps its OWN class
    so no handler ever matches it by look (the Kolonner lesson); a
    button additionally needs the resets anchors get for free. The
-   nested .nav-beta-tag reuses the Mesterskap nav tag's look. */
+   nested .nav-beta-tag rides as a corner tag on the pill's top
+   border (the person-modal tabs' treatment — absolutely positioned,
+   no width, no height) rather than inline beside the label. */
 .stevner-comp-links .stevner-resultfile-btn {
     font-family: inherit;
     background: none;
     cursor: pointer;
+    position: relative;
+}
+.stevner-comp-links .stevner-resultfile-btn .nav-beta-tag {
+    position: absolute;
+    top: -0.45rem;
+    right: -0.15rem;
+    margin: 0;
+    background: var(--surface-card);
 }
 .stevner-comp-links .stevner-resultfile-btn:hover { background: var(--border-faint); }
 .stevner-comp-meta {
