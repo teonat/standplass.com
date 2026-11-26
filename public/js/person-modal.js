@@ -12,12 +12,15 @@ var StandplassPersonModal = (function () {
         };
     }
 
-    function buildPersonUrl(search, personId, year) {
+    // The person URL is just the person param. The page's `year` param
+    // is the page's own filter state: the modal never writes or deletes
+    // it — a fresh open runs on the page's live year (cfg.defaultYear,
+    // kept current by the host's reset), and the modal's own year state
+    // rides p_year (written only when the selection differs from the
+    // page's year).
+    function buildPersonUrl(search, personId) {
         var params = new URLSearchParams(search);
         params.set('person', personId);
-        if (year) {
-            params.set('year', String(year));
-        }
         return '?' + params.toString();
     }
 
@@ -27,7 +30,6 @@ var StandplassPersonModal = (function () {
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
         params.delete('person');
-        params.delete('year');
         FILTER_PARAM_KEYS.forEach(function (k) { params.delete(k); });
         var qs = params.toString();
         return qs ? '?' + qs : '';

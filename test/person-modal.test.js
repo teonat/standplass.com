@@ -15,26 +15,28 @@ assert.deepStrictEqual(
     { personId: '42', year: null }
 );
 
-var built = StandplassPersonModal.buildPersonUrl('?klubb=eksempel', '42', 2026);
-assert.strictEqual(built, '?klubb=eksempel&person=42&year=2026');
+var built = StandplassPersonModal.buildPersonUrl('?klubb=eksempel', '42');
+assert.strictEqual(built, '?klubb=eksempel&person=42',
+    'the modal writes only the person param — the year is the page\'s own filter state');
 
 var cleared = StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026');
-assert.strictEqual(cleared, '?klubb=eksempel');
+assert.strictEqual(cleared, '?klubb=eksempel&year=2026',
+    'closing keeps the page\'s year param — the modal never owns it');
 
-// clearPersonFromUrl also strips the in-modal filter params, not just person/year
+// clearPersonFromUrl also strips the in-modal filter params — never the page's year
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_year=2024,2025&p_disc=Felt'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 // ...including the meritter tab + branch params
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_tab=meritter&p_branch=felt'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 // ...and the activated entry param
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_entry=2026-06-06~c1~Felt+Fin~%C3%85'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");

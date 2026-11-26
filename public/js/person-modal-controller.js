@@ -803,12 +803,14 @@ var StandplassPersonModalController = (function () {
 
         function open(triggerEl, opts) {
             modalOpener = triggerEl || null;
-            // opts.year opens the modal on a specific year — a resultfile
-            // member click resolves its entry on the comp's year; without
-            // it every open starts on the page's default year. The year
-            // rides renderPersonModal's openYear slot (urlFilters carries
-            // no years on this path, and p_year is only a deep-link input).
-            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, opts.year || cfg.defaultYear));
+            // The page's year param is the page's own filter state — the
+            // modal never writes it. A fresh open runs on the page's live
+            // year (cfg.defaultYear, kept current via the host's reset);
+            // a resolved resultfile member click passes its own year
+            // through opts.year → renderPersonModal's openYear, and the
+            // modal's p_year carries any non-default selection for deep
+            // links.
+            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId));
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
             // ask for a specific chart (a placements leaderboard opens

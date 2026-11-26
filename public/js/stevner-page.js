@@ -720,6 +720,10 @@ var StandplassStevnerPage = (function () {
             var qs = new URLSearchParams(urlState.getSearch());
             qs.set('year', String(activeYear));
             urlState.setSearch('?' + qs.toString());
+            // The person modal's fresh-open year follows the page's year —
+            // its cfg.defaultYear is an init-time snapshot otherwise (the
+            // klubb program-toggle's reset pattern).
+            personModal.reset({ defaultYear: activeYear });
             loadYear(activeYear);
         });
 
