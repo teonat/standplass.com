@@ -875,24 +875,23 @@ var StandplassPersonModal = (function () {
     }
 
     function skammekrokenChips(statuses) {
-        // Individual and lag starts are separate classifications of
-        // (often) the same physical start — a DSQ on the individual
-        // start and on the lag never sum into one ×2 chip; lag
-        // entries count under their own "<STATUS> Lag" chip (owner
-        // ruling 2026-11-26). Unknown statuses stay uncounted.
+        // One chip per status definition (owner ruling 2026-11-26):
+        // "DSQ: 1 | Lag: 1" — the individual count, then the lag
+        // count in the same pill, shown only when the person has lag
+        // starts with that status. The two classifications of one
+        // start never sum into one number; a lag-only status keeps
+        // its pill with a zero individual count. Unknown statuses
+        // stay uncounted.
         var counts = {};
         statuses.forEach(function (s) {
             if (STATUS_ORDER.indexOf(s.status) === -1) { return; }
-            var key = s.lag ? s.status + ' Lag' : s.status;
-            counts[key] = (counts[key] || 0) + 1;
+            var c = counts[s.status];
+            if (!c) { c = counts[s.status] = { ind: 0, lag: 0 }; }
+            if (s.lag) { c.lag += 1; } else { c.ind += 1; }
         });
-        var order = [];
-        STATUS_ORDER.forEach(function (k) {
-            order.push(k, k + ' Lag');
-        });
-        return order.filter(function (k) { return counts[k] > 0; })
+        return STATUS_ORDER.filter(function (k) { return counts[k]; })
             .map(function (k) {
-                return { key: k, label: k, count: counts[k] };
+                return { key: k, count: counts[k].ind, lagCount: counts[k].lag };
             });
     }
 
@@ -953,8 +952,10 @@ var StandplassPersonModal = (function () {
             ? statuses.filter(function (s) { return s.branch === branch; })
             : statuses;
         var chipsHtml = skammekrokenChips(shown).map(function (c) {
+            var text = c.key + ': ' + c.count;
+            if (c.lagCount) { text += ' | Lag: ' + c.lagCount; }
             return '<span class="person-meritt-chip" data-kind="'
-                + esc(c.key) + '">' + esc(c.label) + ' ×' + c.count + '</span>';
+                + esc(c.key) + '">' + esc(text) + '</span>';
         }).join('');
         var years = [];
         var byYear = {};

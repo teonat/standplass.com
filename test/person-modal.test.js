@@ -725,15 +725,15 @@ assert.strictEqual(StandplassPersonModal.renderSkammekrokenBody([]),
 
 var skamBody = StandplassPersonModal.renderSkammekrokenBody(collected,
     { compLinks: true });
-assert.ok(skamBody.indexOf('DNS ×1') !== -1
-    && skamBody.indexOf('DSQ ×1') !== -1,
-    'chips use the raw abbreviations shooters know');
-assert.ok(skamBody.indexOf('DNF Lag ×1') !== -1,
-    'lag entries count under their own chip, not the individual one');
-assert.ok(skamBody.indexOf('DNF ×1') === -1,
-    'the lag DNF does not also count as an individual DNF');
-assert.ok(skamBody.indexOf('DNS ×1') < skamBody.indexOf('DNF Lag ×1')
-    && skamBody.indexOf('DNF Lag ×1') < skamBody.indexOf('DSQ ×1'),
+assert.ok(skamBody.indexOf('DNS: 1') !== -1
+    && skamBody.indexOf('DSQ: 1') !== -1,
+    'individual-only chips read "STATUS: n"');
+assert.ok(skamBody.indexOf('DNF: 0 | Lag: 1') !== -1,
+    'a lag-only status keeps its pill, with a zero individual count');
+assert.ok(skamBody.indexOf('×') === -1,
+    'no × chip format remains');
+assert.ok(skamBody.indexOf('DNS: 1') < skamBody.indexOf('DNF: 0 | Lag: 1')
+    && skamBody.indexOf('DNF: 0 | Lag: 1') < skamBody.indexOf('DSQ: 1'),
     'chips render in fixed DNS → DNF → DSQ order');
 assert.ok(StandplassPersonModal.renderSkammekrokenBody(
     collected.filter(function (s) { return s.compId === 'f1'; }),
@@ -786,7 +786,8 @@ assert.ok(skamFallback.indexOf('person-meritt-chips"></div>') === -1,
 
 // One physical start, two classifications: an individual DSQ and
 // the lag DSQ on the same øvelse (Sonja Lillesand at NM Magnumfelt
-// 2026, found in owner QA) — separate chips, never a summed ×2.
+// 2026, found in owner QA) — one pill, both counts inline, never a
+// summed number.
 var doubleDSQ = [
     { year: 2026, branch: 'felt', compId: 'nm-mag', date: '2026-07-28',
       title: 'NM Magnumfelt 2026', resultFileUrl: null,
@@ -798,13 +799,13 @@ var doubleDSQ = [
       lag: true, team: 'Trondhjems PK 1' }
 ];
 var doubleBody = StandplassPersonModal.renderSkammekrokenBody(doubleDSQ, {});
-assert.ok(doubleBody.indexOf('DSQ ×1') !== -1
-    && doubleBody.indexOf('DSQ Lag ×1') !== -1,
-    'an individual DSQ and a lag DSQ are two separate chips');
-assert.ok(doubleBody.indexOf('DSQ ×2') === -1,
-    'never a summed ×2 across individual and lag starts');
-assert.ok(doubleBody.indexOf('DSQ ×1') < doubleBody.indexOf('DSQ Lag ×1'),
-    'within a status, the individual chip comes before the lag chip');
+assert.ok(doubleBody.indexOf('DSQ: 1 | Lag: 1') !== -1,
+    'one pill carries the individual and lag counts inline');
+assert.strictEqual(doubleBody.split('person-meritt-chip"').length - 1, 1,
+    'one chip per status definition');
+assert.ok(doubleBody.indexOf('DSQ: 2') === -1
+    && doubleBody.indexOf('DSQ Lag:') === -1,
+    'never a summed count or a separate lag chip');
 
 var hostileSkam = StandplassPersonModal.renderSkammekrokenBody([{
     year: 2025, branch: 'felt', compId: '<x>', date: '2025-01-01',
