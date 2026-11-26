@@ -774,8 +774,15 @@ var StandplassPersonModal = (function () {
         var branches = BRANCH_ORDER.filter(function (b) {
             return merits.some(function (m) { return m.branch === b; });
         });
-        var shown = opts.branch
-            ? merits.filter(function (m) { return m.branch === opts.branch; })
+        // The shared branch filter (ruling 7) can point at a branch
+        // this person has nothing in on this tab — carried from the
+        // other tab's switcher, or a stale p_branch deep link. A
+        // filter that matches nothing falls back to unfiltered rather
+        // than a blank, switcher-less panel.
+        var branch = opts.branch && branches.indexOf(opts.branch) !== -1
+            ? opts.branch : null;
+        var shown = branch
+            ? merits.filter(function (m) { return m.branch === branch; })
             : merits;
         var chipsHtml = meritterChips(shown).map(function (c) {
             var counts = MERITT_MEDALS.filter(function (md) { return c.counts[md.name] > 0; })
@@ -801,10 +808,10 @@ var StandplassPersonModal = (function () {
         var toggle = '';
         if (branches.length > 1) {
             toggle = '<div class="program-toggle person-meritt-branch-toggle" role="group" aria-label="Gren">'
-                + branchBtnHtml('', 'Alle', !opts.branch)
+                + branchBtnHtml('', 'Alle', !branch)
                 + branches.map(function (b) {
                     return branchBtnHtml(b, b.charAt(0).toUpperCase() + b.slice(1),
-                        opts.branch === b);
+                        branch === b);
                 }).join('')
                 + '</div>';
         }
@@ -926,8 +933,13 @@ var StandplassPersonModal = (function () {
         var branches = BRANCH_ORDER.filter(function (b) {
             return statuses.some(function (s) { return s.branch === b; });
         });
-        var shown = opts.branch
-            ? statuses.filter(function (s) { return s.branch === opts.branch; })
+        // Same fallback as renderMeritterBody: a shared branch filter
+        // that matches nothing here renders unfiltered, never a
+        // blank panel.
+        var branch = opts.branch && branches.indexOf(opts.branch) !== -1
+            ? opts.branch : null;
+        var shown = branch
+            ? statuses.filter(function (s) { return s.branch === branch; })
             : statuses;
         var chipsHtml = skammekrokenChips(shown).map(function (c) {
             return '<span class="person-meritt-chip" data-kind="'
@@ -953,11 +965,11 @@ var StandplassPersonModal = (function () {
         if (branches.length > 1) {
             toggle = '<div class="program-toggle person-meritt-branch-toggle"'
                 + ' role="group" aria-label="Gren">'
-                + branchBtnHtml('', 'Alle', !opts.branch)
+                + branchBtnHtml('', 'Alle', !branch)
                 + branches.map(function (b) {
                     return branchBtnHtml(b,
                         b.charAt(0).toUpperCase() + b.slice(1),
-                        opts.branch === b);
+                        branch === b);
                 }).join('')
                 + '</div>';
         }

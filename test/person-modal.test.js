@@ -665,6 +665,18 @@ assert.ok(StandplassPersonModal.renderMeritterBody(
 ).indexOf('person-meritt-branch-toggle') === -1,
     'single-branch merits render no switcher — nothing to filter');
 
+// The shared branch filter can point at a branch this person has
+// nothing in on this tab (carried from the other tab's switcher, or
+// a stale p_branch deep link); a filter that matches nothing falls
+// back to unfiltered — never a blank, switcher-less panel.
+var meritFallback = StandplassPersonModal.renderMeritterBody(
+    branchMerits.filter(function (m) { return m.branch === 'bane'; }),
+    { branch: 'felt' });
+assert.ok(meritFallback.indexOf('25m Grovpistol') !== -1,
+    'a felt filter on bane-only merits still shows the bane rows');
+assert.ok(meritFallback.indexOf('person-meritt-chips"></div>') === -1,
+    'never a bare empty chips div');
+
 // --- Skammekroken: collectStatusEntries ----------------------------------
 
 var utfallLoaded = [
@@ -717,6 +729,13 @@ assert.ok(skamBody.indexOf('DNS ×1') !== -1
     && skamBody.indexOf('DNF ×1') !== -1
     && skamBody.indexOf('DSQ ×1') !== -1,
     'chips use the raw abbreviations shooters know');
+assert.ok(skamBody.indexOf('DNS ×1') < skamBody.indexOf('DNF ×1')
+    && skamBody.indexOf('DNF ×1') < skamBody.indexOf('DSQ ×1'),
+    'chips render in fixed DNS → DNF → DSQ order');
+assert.ok(StandplassPersonModal.renderSkammekrokenBody(
+    collected.filter(function (s) { return s.compId === 'f1'; }),
+    { compLinks: true }).indexOf('data-comp-file') === -1,
+    'no resultFileUrl → no data-comp-file attribute');
 assert.ok(skamBody.indexOf('resultfile-status">DNS</span>') !== -1,
     'row badges show the raw abbreviation, the resultfile-modal idiom');
 assert.ok(skamBody.indexOf('person-utfall-legend') !== -1,
@@ -753,6 +772,14 @@ var skamFelt = StandplassPersonModal.renderSkammekrokenBody(collected,
     { branch: 'felt' });
 assert.ok(skamFelt.indexOf('Baneskyting 2024') === -1,
     'the branch filter drops the other branch\'s rows');
+
+var skamFallback = StandplassPersonModal.renderSkammekrokenBody(
+    collected.filter(function (s) { return s.branch === 'bane'; }),
+    { branch: 'felt' });
+assert.ok(skamFallback.indexOf('Baneskyting 2024') !== -1,
+    'a felt filter on bane-only statuses still shows the bane rows');
+assert.ok(skamFallback.indexOf('person-meritt-chips"></div>') === -1,
+    'never a bare empty chips div');
 
 var hostileSkam = StandplassPersonModal.renderSkammekrokenBody([{
     year: 2025, branch: 'felt', compId: '<x>', date: '2025-01-01',
