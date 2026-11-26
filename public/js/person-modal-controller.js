@@ -685,19 +685,20 @@ var StandplassPersonModalController = (function () {
                 // switch programmatically (inert blocks user events only).
                 ensureMestereEntries().then(function (entries) {
                     if (mySeq !== personOpenSeq) { return; }
-                    var merits = entries.length
-                        ? StandplassMestereData.meritterForPerson(entries, personId) : [];
+                    // All fetches failed → unknown, not empty: keep the
+                    // tab clickable (its panel carries the error
+                    // message); grey out only a known-empty person.
                     setTabAvailable(
                         modalEl.querySelector('.person-modal-tab-btn[data-person-tab="meritter"]'),
-                        merits.length > 0);
+                        !entries.length
+                        || StandplassMestereData.meritterForPerson(entries, personId).length > 0);
                 });
                 ensureStatusEntries().then(function (entries) {
                     if (mySeq !== personOpenSeq) { return; }
-                    var statuses = entries.length
-                        ? StandplassPersonModal.collectStatusEntries(entries, personId) : [];
                     setTabAvailable(
                         modalEl.querySelector('.person-modal-tab-btn[data-person-tab="skammekroken"]'),
-                        statuses.length > 0);
+                        !entries.length
+                        || StandplassPersonModal.collectStatusEntries(entries, personId).length > 0);
                 });
                 refresh();
                 if (initialEntry) { activateInitialEntry(initialEntry); }
