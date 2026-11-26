@@ -1285,9 +1285,34 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* Same program-toggle chrome the chart's metric toggle uses; the
    active tab lives in the button classes, panels toggle via hidden.
    (.person-modal-shell .program-toggle's width:auto applies here
-   too — no full-width tab bar.) */
+   too — no full-width tab bar.)
+   The beta tags ride as corner tags on the pills' top border —
+   absolutely positioned, consuming no width (an inline tag next
+   to "Skammekroken" wrapped onto a second line, fattening the
+   pill) and no height. Straddling the border needs the toggle's
+   overflow: hidden off; the first/last buttons carry the corner
+   radii the clip used to provide, and the tag's own background
+   matches the pill fill so the border reads as stitched through. */
 .person-modal-tabs {
     margin: 0;
+    overflow: visible;
+}
+.person-modal-tabs .program-btn:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+}
+.person-modal-tabs .program-btn:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+.person-modal-tab-btn { position: relative; }
+.person-modal-tab-btn .nav-beta-tag {
+    position: absolute;
+    top: -0.4rem;
+    right: 0.25rem;
+    margin: 0;
+    background: var(--surface-card);
+}
+.person-modal-tab-btn.program-btn--active .nav-beta-tag {
+    background: var(--surface-dark);
 }
 
 /* The tabs ride in the fixed header: the title takes the free space so
