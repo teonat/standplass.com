@@ -12,12 +12,15 @@ var StandplassPersonModal = (function () {
         };
     }
 
-    function buildPersonUrl(search, personId, year) {
+    // The person URL is just the person param. The page's `year` param
+    // is the page's own filter state: the modal never writes or deletes
+    // it — a fresh open runs on the page's live year (cfg.defaultYear,
+    // kept current by the host's reset), and the modal's own year state
+    // rides p_year (written only when the selection differs from the
+    // page's year).
+    function buildPersonUrl(search, personId) {
         var params = new URLSearchParams(search);
         params.set('person', personId);
-        if (year) {
-            params.set('year', String(year));
-        }
         return '?' + params.toString();
     }
 
@@ -27,7 +30,6 @@ var StandplassPersonModal = (function () {
     function clearPersonFromUrl(search) {
         var params = new URLSearchParams(search);
         params.delete('person');
-        params.delete('year');
         FILTER_PARAM_KEYS.forEach(function (k) { params.delete(k); });
         var qs = params.toString();
         return qs ? '?' + qs : '';
@@ -622,6 +624,44 @@ var StandplassPersonModal = (function () {
         return -1;
     }
 
+    // A resultfile member click → the modal's entry spec. The parsed
+    // øvelse names and the API's discipline names are different
+    // vocabularies, so the resolution goes through the comp's own API
+    // rows: the person's rows in that competition, disambiguated by the
+    // row's printed sum (the API score) when they shot several øvelser
+    // in one comp. Null when nothing resolves — the modal then opens
+    // without a filter or activation (a DNS/DNF/DSQ row has no API row
+    // at all).
+    function resolveResultfileEntry(yearData, compId, personId, sum) {
+        var comps = (yearData && yearData.competitions) || [];
+        for (var i = 0; i < comps.length; i++) {
+            if (comps[i].id !== compId) { continue; }
+            var comp = comps[i];
+            var rows = (comp.results || []).filter(function (r) {
+                return r.personId === personId;
+            });
+            var row = null;
+            if (rows.length === 1) {
+                row = rows[0];
+            } else if (sum != null) {
+                // Several øvelser in one comp: the printed sum is the
+                // API score; the first match wins when two øvelser
+                // happen to share it.
+                for (var j = 0; j < rows.length; j++) {
+                    if (String(rows[j].score) === String(sum)) { row = rows[j]; break; }
+                }
+            }
+            if (!row) { return null; }
+            return {
+                date: comp.startDate ? String(comp.startDate).slice(0, 10) : '',
+                competitionId: compId,
+                discipline: row.discipline,
+                class: row.class != null ? row.class : null
+            };
+        }
+        return null;
+    }
+
     // The chart metric an entry can actually be activated on: a
     // rankless entry has no dot on the ranking graph, so the poeng
     // graph takes over; every other metric stays as-is.
@@ -744,7 +784,9 @@ var StandplassPersonModal = (function () {
         if (compLinks && m.compId != null) {
             parts.push('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
                 + ' data-comp-id="' + esc(m.compId) + '"'
-                + ' data-comp-title="' + title + '">' + title + '</button>');
+                + ' data-comp-year="' + esc(String(m.year)) + '"'
+                + ' data-comp-title="' + title + '"'
+                + ' data-comp-branch="' + esc(m.branch) + '">' + title + '</button>');
         } else {
             parts.push('<span class="person-meritt-comp">' + title + '</span>');
         }
@@ -756,8 +798,8 @@ var StandplassPersonModal = (function () {
     // merits; rows stay untagged), the chips row and the year-grouped
     // list, all computed from the branch-filtered merits.
     // opts.compLinks renders comp titles as delegated link buttons
-    // (hosts with a comp modal) instead of plain spans; opts.branch
-    // (null/undefined = Alle) filters the merits.
+    // (hosts with a resultfile modal) instead of plain spans;
+    // opts.branch (null/undefined = Alle) filters the merits.
     var BRANCH_ORDER = ['felt', 'bane'];
 
     function branchBtnHtml(branch, label, active) {
@@ -1022,6 +1064,7 @@ var StandplassPersonModal = (function () {
         getFilteredEntries: getFilteredEntries,
         resolveInitialFilter: resolveInitialFilter,
         findEntryIndex: findEntryIndex,
+        resolveResultfileEntry: resolveResultfileEntry,
         activationMetric: activationMetric,
         hasMetricValue: hasMetricValue,
         hasChartDot: hasChartDot,

@@ -207,6 +207,10 @@ assert.ok(body.indexOf('Jakob Kråkevik (85)') !== -1,
     'members render with their sums');
 assert.ok(body.indexOf('Eirik Djønne</button> (90)') !== -1,
     'person-linked members carry their sum outside the button');
+assert.ok(body.indexOf('data-person-id="p1" data-person-name="Eirik Djønne" data-sum="90"') !== -1,
+    'person buttons carry the printed sum — the member click resolves the API entry by it');
+assert.ok(body.indexOf('data-person-name="Kari Nordmann"') === -1,
+    'rows without a personId carry no button, sum or not');
 assert.ok(body.indexOf('Per Persen (63)') !== -1,
     'every member of a two-team club renders (all six, not three)');
 assert.ok(body.indexOf('<td>Greipstad PK1</td>') !== -1,

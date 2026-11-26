@@ -600,11 +600,21 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* The Resultatfil action shares the pill look but keeps its OWN class
    so no handler ever matches it by look (the Kolonner lesson); a
    button additionally needs the resets anchors get for free. The
-   nested .nav-beta-tag reuses the Mesterskap nav tag's look. */
+   nested .nav-beta-tag rides as a corner tag on the pill's top
+   border (the person-modal tabs' treatment — absolutely positioned,
+   no width, no height) rather than inline beside the label. */
 .stevner-comp-links .stevner-resultfile-btn {
     font-family: inherit;
     background: none;
     cursor: pointer;
+    position: relative;
+}
+.stevner-comp-links .stevner-resultfile-btn .nav-beta-tag {
+    position: absolute;
+    top: -0.65rem;
+    right: -0.15rem;
+    margin: 0;
+    background: var(--surface-card);
 }
 .stevner-comp-links .stevner-resultfile-btn:hover { background: var(--border-faint); }
 .stevner-comp-meta {
@@ -1285,9 +1295,34 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 /* Same program-toggle chrome the chart's metric toggle uses; the
    active tab lives in the button classes, panels toggle via hidden.
    (.person-modal-shell .program-toggle's width:auto applies here
-   too — no full-width tab bar.) */
+   too — no full-width tab bar.)
+   The beta tags ride as corner tags on the pills' top border —
+   absolutely positioned, consuming no width (an inline tag next
+   to "Skammekroken" wrapped onto a second line, fattening the
+   pill) and no height. Straddling the border needs the toggle's
+   overflow: hidden off; the first/last buttons carry the corner
+   radii the clip used to provide, and the tag's own background
+   matches the pill fill so the border reads as stitched through. */
 .person-modal-tabs {
     margin: 0;
+    overflow: visible;
+}
+.person-modal-tabs .program-btn:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+}
+.person-modal-tabs .program-btn:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+.person-modal-tab-btn { position: relative; }
+.person-modal-tab-btn .nav-beta-tag {
+    position: absolute;
+    top: -0.4rem;
+    right: 0.25rem;
+    margin: 0;
+    background: var(--surface-card);
+}
+.person-modal-tab-btn.program-btn--active .nav-beta-tag {
+    background: var(--surface-dark);
 }
 
 /* The tabs ride in the fixed header: the title takes the free space so
@@ -1397,9 +1432,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 }
 
 /* A tab with nothing to show greys out and goes inert (the JS sets
-   the inert attribute) — the same 0.5 the filter-group--inactive
-   idiom uses. */
-.person-modal-tab-btn--inactive { opacity: 0.5; }
+   the inert attribute). Inert also suppresses pointer events, so a
+   not-allowed cursor can never fire — the dim itself has to carry
+   the disabled signal, and 0.5 read as still-clickable next to
+   Resultater (owner QA find 2026-11-27); 0.35 is deliberately
+   deeper than the filter-group--inactive idiom. */
+.person-modal-tab-btn--inactive { opacity: 0.35; }
 
 
 /* ── Competition-detail modal (native <dialog>) ─ */

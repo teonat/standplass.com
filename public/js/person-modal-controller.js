@@ -268,9 +268,13 @@ var StandplassPersonModalController = (function () {
             { key: 'position', label: 'Plassering' }
         ];
 
-        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry) {
+        // openYear (from open()'s opts.year) opens a fresh modal on a
+        // specific year — a resultfile member click resolves its entry
+        // on the comp's year. Deep links (urlFilters.years) still win.
+        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry, openYear) {
             var mySeq = ++personOpenSeq;
-            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
+            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice()
+                : [openYear || cfg.defaultYear];
             var entriesByYear = {};
             // Value filters use the felt/terminliste convention: nothing
             // picked = everything shown. [] (or a normalized null from the
@@ -412,12 +416,15 @@ var StandplassPersonModalController = (function () {
             // The tab pair lives in the fixed header, not the scrollable
             // body: the open-from-row activation scrolls the chart into
             // view, which would push a body-mounted pair out of sight
-            // (owner QA). HeaderExtras slot on showModal.
+            // (owner QA). HeaderExtras slot on showModal. Meritter and
+            // Skammekroken carry the house beta tag (nav-beta-tag, the
+            // Mesterskap/Resultatfil convention) — it comes off when
+            // the tabs leave beta.
             function personModalTabsMarkup() {
                 return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
                     + '<button type="button" class="program-btn person-modal-tab-btn program-btn--active" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
-                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
-                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="skammekroken" aria-pressed="false">Skammekroken</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter<span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="skammekroken" aria-pressed="false">Skammekroken<span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
                     + '</div>';
             }
 
@@ -476,7 +483,7 @@ var StandplassPersonModalController = (function () {
                         }
                         var merits = StandplassMestereData.meritterForPerson(entries, personId);
                         panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
-                            compLinks: !!cfg.onOpenComp,
+                            compLinks: !!cfg.onOpenResultfile,
                             branch: merittBranch
                         });
                         // The switcher buttons re-render the panel from
@@ -669,7 +676,10 @@ var StandplassPersonModalController = (function () {
                 for (var i = 0; i < selectedYears.length && !resolvedName; i++) {
                     resolvedName = ((entriesByYear[selectedYears[i]] || [])[0] || {}).name;
                 }
-                if (!urlFilters) {
+                // initialDisc applies on direct opens even when open()
+                // passed a metric-only urlFilters (an entry point's chart
+                // request); a p_disc deep link is the only override.
+                if (!urlFilters || !urlFilters.discs) {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
                 modalDisplayName = resolvedName || modalDisplayName;
@@ -709,13 +719,19 @@ var StandplassPersonModalController = (function () {
         ensureModalEl();
         // Meritter-tab comp links (delegated once on the persistent
         // modal element -- the buttons are re-rendered per person).
-        // Only rendered as buttons at all when the host passed an
-        // onOpenComp; the guard keeps a stray click a no-op even if
-        // markup changed underneath.
+        // Both tabs' comp links open the host's resultfile modal
+        // (owner ruling 2026-11-27: the parsed file is the evidence
+        // for merits and statuses alike; the comp modal stays a
+        // main-table affordance); the guard keeps a stray click a
+        // no-op even if markup changed underneath.
         modalEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.person-meritt-comp');
-            if (!btn || !cfg.onOpenComp) { return; }
-            cfg.onOpenComp(btn.getAttribute('data-comp-id'), btn.getAttribute('data-comp-title'));
+            if (!btn || !cfg.onOpenResultfile) { return; }
+            cfg.onOpenResultfile(btn.getAttribute('data-comp-id'),
+                btn.getAttribute('data-comp-year'),
+                btn.getAttribute('data-comp-title'),
+                btn.getAttribute('data-comp-branch'),
+                btn.getAttribute('data-comp-file'));
         });
         // Skammekroken-tab comp links (delegated once on the persistent
         // modal element, same guard pattern): the host's resultfile
@@ -790,14 +806,22 @@ var StandplassPersonModalController = (function () {
 
         function open(triggerEl, opts) {
             modalOpener = triggerEl || null;
-            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, cfg.defaultYear));
+            // The page's year param is the page's own filter state — the
+            // modal never writes it. A fresh open runs on the page's live
+            // year (cfg.defaultYear, kept current via the host's reset);
+            // a resolved resultfile member click passes its own year
+            // through opts.year → renderPersonModal's openYear, and the
+            // modal's p_year carries any non-default selection for deep
+            // links.
+            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId));
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
             // ask for a specific chart (a placements leaderboard opens
             // Plassering). Without it every fresh open starts on the
             // page's default chart.
             renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
-                opts.metric ? { metric: opts.metric } : null, opts.entry || null);
+                opts.metric ? { metric: opts.metric } : null, opts.entry || null,
+                opts.year || null);
         }
 
         function openFromUrl() {

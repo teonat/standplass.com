@@ -565,13 +565,11 @@ var StandplassMesterskapPage = (function () {
             idPrefix: 'mesterskap',
             root: root,
             urlState: urlState,
-            onOpenComp: function (compId, compTitle) {
-                if (compModalHost) { compModalHost.open(compId, compTitle); }
-            },
-            // Skammekroken rows open the resultfile modal (the parsed
-            // file is the evidence for a status); every open carries the
-            // row's branch as a per-comp detailBase — the same override
-            // the Arrangement links use (ruling 15).
+            // Both tabs' comp links open the resultfile modal (owner
+            // ruling 2026-11-27 — the parsed file is the evidence for
+            // merits and statuses alike); every open carries the row's
+            // branch as a per-comp detailBase — the same override the
+            // Arrangement links use (ruling 15).
             onOpenResultfile: function (compId, year, title, branch, resultFileUrl) {
                 resultfileHost.open({
                     id: compId,
@@ -620,15 +618,52 @@ var StandplassMesterskapPage = (function () {
         // parsed result file. Every open carries the row's branch via
         // comp.detailBase — the host default never matters here;
         // person buttons inside route through the page's person modal.
+        // A member click resolves the member's API entry in the comp
+        // (the year JSON is cached by the page's fetcher; every resultfile
+        // open here carries its branch as detailBase) and opens the
+        // person modal like the main tables do: the comp's year, the
+        // øvelse pre-filtered, the entry activated. Nothing resolves → a
+        // plain open.
         var resultfileHost = StandplassResultfileModal.ensureDialog({
             idPrefix: 'mesterskap',
             root: root,
-            onPerson: function (btn) {
-                personModal.open(btn, {
-                    personId: btn.dataset.personId,
-                    personName: btn.dataset.personName,
-                    initialDisc: btn.dataset.discipline || null
-                });
+            onPerson: function (btn, comp) {
+                var year = comp && comp.year ? Number(comp.year) : null;
+                // The stevne's branch decides the opening chart (the
+                // bane/unranked-vs-ranked-felt rule): a person clicked in
+                // a banestevne's resultfile opens on poeng, even when
+                // nothing resolves. Every resultfile open here carries
+                // its branch as detailBase; an unknown comp falls back to
+                // the page's gren-based default.
+                var compMetric = comp && comp.detailBase
+                    ? (String(comp.detailBase).indexOf('/bane') >= 0 ? 'score' : 'rankingScore')
+                    : null;
+                function plainOpen() {
+                    // Unresolved clicks still open on the comp's year —
+                    // the member's context; the page default only when the
+                    // comp itself is unknown.
+                    personModal.open(btn, {
+                        personId: btn.dataset.personId,
+                        personName: btn.dataset.personName,
+                        year: year,
+                        metric: compMetric
+                    });
+                }
+                if (!comp || !comp.id || !year || !comp.detailBase) { plainOpen(); return; }
+                fetcher.fetchYear(String(comp.detailBase).replace('/detaljer', ''), year)
+                    .then(function (yearData) {
+                        var spec = StandplassPersonModal.resolveResultfileEntry(yearData,
+                            comp.id, btn.dataset.personId,
+                            btn.dataset.sum != null ? btn.dataset.sum : null);
+                        personModal.open(btn, {
+                            personId: btn.dataset.personId,
+                            personName: btn.dataset.personName,
+                            initialDisc: spec ? spec.discipline : null,
+                            entry: spec,
+                            year: year,
+                            metric: compMetric
+                        });
+                    }, plainOpen);
             }
         });
         contentEl.addEventListener('click', function (e) {

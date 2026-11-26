@@ -15,26 +15,28 @@ assert.deepStrictEqual(
     { personId: '42', year: null }
 );
 
-var built = StandplassPersonModal.buildPersonUrl('?klubb=eksempel', '42', 2026);
-assert.strictEqual(built, '?klubb=eksempel&person=42&year=2026');
+var built = StandplassPersonModal.buildPersonUrl('?klubb=eksempel', '42');
+assert.strictEqual(built, '?klubb=eksempel&person=42',
+    'the modal writes only the person param — the year is the page\'s own filter state');
 
 var cleared = StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026');
-assert.strictEqual(cleared, '?klubb=eksempel');
+assert.strictEqual(cleared, '?klubb=eksempel&year=2026',
+    'closing keeps the page\'s year param — the modal never owns it');
 
-// clearPersonFromUrl also strips the in-modal filter params, not just person/year
+// clearPersonFromUrl also strips the in-modal filter params — never the page's year
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_year=2024,2025&p_disc=Felt'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 // ...including the meritter tab + branch params
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_tab=meritter&p_branch=felt'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 // ...and the activated entry param
 assert.strictEqual(
     StandplassPersonModal.clearPersonFromUrl('?klubb=eksempel&person=42&year=2026&p_entry=2026-06-06~c1~Felt+Fin~%C3%85'),
-    '?klubb=eksempel'
+    '?klubb=eksempel&year=2026'
 );
 
 assert.strictEqual(StandplassPersonModal.shortDate('2024-01-15T00:00:00Z'), "15. jan '24");
@@ -419,11 +421,11 @@ assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carrie
 
 var meritFixture = [
     { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
-      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null },
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null, branch: 'felt' },
     { year: 2026, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
-      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1' },
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1', branch: 'felt' },
     { year: 2025, scope: 'nm', ovelse: 'Felt Fin', klasse: null, region: null,
-      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null }
+      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null, branch: 'felt' }
 ];
 
 var chips = StandplassPersonModal.meritterChips(meritFixture);
@@ -495,10 +497,13 @@ var teamAt = meritBody.indexOf('Tysnes SSK 1');
 assert.ok(meritBody.indexOf('Lag Å') < teamAt && teamAt < meritBody.indexOf('Vestlandet'),
     'the team name sits inline between the class and the region, muted by its class');
 
-// comp links on: buttons carrying id + title for delegation
+// comp links on: buttons carrying id + year + title + branch for the
+// resultfile delegation (owner ruling 2026-11-27: both tabs' comp
+// links open the resultfile modal, mirroring the skammekroken attrs)
 assert.ok(meritBody.indexOf('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
-    + ' data-comp-id="c2" data-comp-title="KM felt 2026 lag">KM felt 2026 lag</button>') !== -1,
-    'comp titles render as link buttons carrying id + title for delegation');
+    + ' data-comp-id="c2" data-comp-year="2026" data-comp-title="KM felt 2026 lag"'
+    + ' data-comp-branch="felt">KM felt 2026 lag</button>') !== -1,
+    'comp titles render as link buttons carrying id, year, title and branch for delegation');
 
 // comp links off (and by default): plain spans, no buttons
 var plainBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: false });
@@ -551,6 +556,47 @@ assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
     'another competition is no match');
 assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture, null), -1,
     'no spec is no match');
+
+// ── resolveResultfileEntry (resultfile member → the modal's entry) ────
+// The resultfile's parsed øvelse names and the API's discipline names
+// are different vocabularies, so a member click resolves through the
+// comp's own API rows: the printed sum (the API score) picks the
+// øvelse when the person shot several in one comp. Null when nothing
+// resolves — the modal then opens without a filter or activation.
+
+var rfYear = {
+    competitions: [
+        { id: 'c1', startDate: '2026-07-28T12:30:00', results: [
+            { personId: 'p1', name: 'A', discipline: 'Magnumfelt 1', class: 'Åpen',
+              position: 1, score: 87 },
+            { personId: 'p1', name: 'A', discipline: 'Magnumfelt 2', class: 'Åpen',
+              position: 4, score: 83 },
+            { personId: 'p2', name: 'B', discipline: 'Magnumfelt 1', class: 'Åpen',
+              position: 2, score: 90 }
+        ] },
+        { id: 'c2', startDate: '2026-08-02T00:00:00', results: [
+            { personId: 'p3', name: 'C', discipline: 'Grovfelt', class: 'Å',
+              position: 1, score: 95 }
+        ] }
+    ]
+};
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', '87'),
+    { date: '2026-07-28', competitionId: 'c1', discipline: 'Magnumfelt 1', class: 'Åpen' },
+    'a printed sum picks the right øvelse among several in one comp');
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', '83'),
+    { date: '2026-07-28', competitionId: 'c1', discipline: 'Magnumfelt 2', class: 'Åpen' },
+    'the other sum picks the other øvelse');
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c2', 'p3', null),
+    { date: '2026-08-02', competitionId: 'c2', discipline: 'Grovfelt', class: 'Å' },
+    'a single row in the comp resolves without a sum');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', null), null,
+    'several rows and no printed sum — ambiguous, no activation');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'pX', '87'), null,
+    'a person with no API row (DNS/DNF/DSQ or unmatched) resolves nothing');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'cX', 'p1', '87'), null,
+    'an unknown comp resolves nothing');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(null, 'c1', 'p1', '87'), null,
+    'no year data resolves nothing');
 
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: null, score: 94 }, 'rankingScore'), 'score',

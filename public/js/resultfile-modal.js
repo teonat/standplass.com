@@ -138,13 +138,16 @@ var StandplassResultfileModal = (function () {
     }
 
     // Rows with a matched personId link to the person modal (byte
-    // pattern of the stevne tables' buttons; the detail rows carry no
-    // discipline, so the modal opens without an initialDisc).
+    // pattern of the stevne tables' buttons). The printed sum rides
+    // along (data-sum) so the host can resolve the member's API entry
+    // in the comp — the parsed øvelse names and the API's discipline
+    // names are different vocabularies, and the sum is the join key.
     function personCellHtml(r) {
         if (r.personId) {
             return '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
-                + esc(r.personId) + '" data-person-name="' + esc(r.name) + '">'
-                + esc(r.name || '–') + '</button>';
+                + esc(r.personId) + '" data-person-name="' + esc(r.name) + '"'
+                + (r.sum != null ? ' data-sum="' + esc(String(r.sum)) + '"' : '')
+                + '>' + esc(r.name || '–') + '</button>';
         }
         return esc(r.name || '–');
     }
@@ -178,8 +181,9 @@ var StandplassResultfileModal = (function () {
         var names = (t.members || []).map(function (m) {
             var label = m.personId
                 ? '<button type="button" class="stevner-person-btn link-btn" data-person-id="'
-                    + esc(m.personId) + '" data-person-name="' + esc(m.name) + '">'
-                    + esc(m.name) + '</button>'
+                    + esc(m.personId) + '" data-person-name="' + esc(m.name) + '"'
+                    + (m.sum != null ? ' data-sum="' + esc(String(m.sum)) + '"' : '')
+                    + '>' + esc(m.name) + '</button>'
                 : esc(m.name);
             // The member's own sum rides along when printed — for a
             // km/dm team the members' sums add up to the team sum,
@@ -323,9 +327,18 @@ var StandplassResultfileModal = (function () {
             if (e.target === dlg) { dlg.close(); }
         });
         if (onPerson) {
+            // A person modal opened from inside the dialog renders in the
+            // page layer, which the dialog's top layer always covers —
+            // a div overlay can never stack above a showModal() dialog,
+            // whatever its z-index. So the dialog closes as the person
+            // modal opens; the person modal's comp links (or the table's
+            // Resultatfil button) can reopen it. The callback receives
+            // the comp the dialog was opened with, so the host can
+            // resolve the member's API entry in it (year, branch, id).
+            var currentComp = null;
             dlg.addEventListener('click', function (e) {
                 var btn = e.target.closest('.stevner-person-btn');
-                if (btn) { onPerson(btn); }
+                if (btn) { dlg.close(); onPerson(btn, currentComp); }
             });
         }
 
@@ -333,6 +346,7 @@ var StandplassResultfileModal = (function () {
         function open(comp) {
             var mySeq = ++openSeq;
             var c = comp || {};
+            currentComp = c;
             dlg.querySelector('.comp-modal-title').textContent = c.title || 'Resultatfil';
             var metaEl = dlg.querySelector('.comp-modal-meta');
             var bodyEl = dlg.querySelector('.comp-modal-body');
