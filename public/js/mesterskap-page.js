@@ -628,13 +628,17 @@ var StandplassMesterskapPage = (function () {
             idPrefix: 'mesterskap',
             root: root,
             onPerson: function (btn, comp) {
+                var year = comp && comp.year ? Number(comp.year) : null;
                 function plainOpen() {
+                    // Unresolved clicks still open on the comp's year —
+                    // the member's context; the page default only when the
+                    // comp itself is unknown.
                     personModal.open(btn, {
                         personId: btn.dataset.personId,
-                        personName: btn.dataset.personName
+                        personName: btn.dataset.personName,
+                        year: year
                     });
                 }
-                var year = comp && comp.year ? Number(comp.year) : null;
                 if (!comp || !comp.id || !year || !comp.detailBase) { plainOpen(); return; }
                 fetcher.fetchYear(String(comp.detailBase).replace('/detaljer', ''), year)
                     .then(function (yearData) {

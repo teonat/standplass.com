@@ -268,9 +268,13 @@ var StandplassPersonModalController = (function () {
             { key: 'position', label: 'Plassering' }
         ];
 
-        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry) {
+        // openYear (from open()'s opts.year) opens a fresh modal on a
+        // specific year — a resultfile member click resolves its entry
+        // on the comp's year. Deep links (urlFilters.years) still win.
+        function renderPersonModal(personId, personName, initialDisc, urlFilters, initialEntry, openYear) {
             var mySeq = ++personOpenSeq;
-            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice() : [cfg.defaultYear];
+            var selectedYears = (urlFilters && urlFilters.years) ? urlFilters.years.slice()
+                : [openYear || cfg.defaultYear];
             var entriesByYear = {};
             // Value filters use the felt/terminliste convention: nothing
             // picked = everything shown. [] (or a normalized null from the
@@ -801,7 +805,9 @@ var StandplassPersonModalController = (function () {
             modalOpener = triggerEl || null;
             // opts.year opens the modal on a specific year — a resultfile
             // member click resolves its entry on the comp's year; without
-            // it every open starts on the page's default year.
+            // it every open starts on the page's default year. The year
+            // rides renderPersonModal's openYear slot (urlFilters carries
+            // no years on this path, and p_year is only a deep-link input).
             cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, opts.year || cfg.defaultYear));
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
@@ -809,7 +815,8 @@ var StandplassPersonModalController = (function () {
             // Plassering). Without it every fresh open starts on the
             // page's default chart.
             renderPersonModal(opts.personId, opts.personName, opts.initialDisc || null,
-                opts.metric ? { metric: opts.metric } : null, opts.entry || null);
+                opts.metric ? { metric: opts.metric } : null, opts.entry || null,
+                opts.year || null);
         }
 
         function openFromUrl() {
