@@ -4,7 +4,9 @@
 Rebuilds public/data/detaljer as one bundle per branch-year (detaljer/
 <branch>/<year>.json, via detaljer_bundles), replacing the per-comp
 detail tree that spends nearly the whole Cloudflare file-count budget.
-Every per-comp file is read and checked (compId == filename stem),
+Every per-comp file is read and checked (a present compId must match
+the filename stem; quarantine markers carry no compId and key by
+their stem),
 every scope's bundle is written, then each written bundle is
 re-verified — comp count plus per-comp deep-equality with the source
 files — and only after every scope verified are the old year
@@ -82,9 +84,12 @@ def _year_dirs(root):
 
 def _read_comps(year_dir):
     """{compId: detail} for every per-comp *.json in a year dir.
-    Each detail's compId must equal its filename stem — the bundle key
-    has to agree with the detail's own id before the source file
-    disappears into the bundle."""
+    A detail's compId, when present, must match its filename stem —
+    the bundle key has to agree with the detail's own id before the
+    source file disappears into the bundle. Quarantine markers carry
+    no compId; they key by their stem, the comp id the old pipeline
+    built their path from (and the key the pipeline itself uses when
+    storing markers into bundles)."""
     comps = {}
     for name in sorted(os.listdir(year_dir)):
         if not name.endswith('.json'):
@@ -93,9 +98,10 @@ def _read_comps(year_dir):
         with open(path, encoding='utf-8') as f:
             detail = json.load(f)
         stem = name[:-len('.json')]
-        if detail.get('compId') != stem:
+        cid = detail.get('compId')
+        if cid is not None and cid != stem:
             raise RuntimeError(
-                f'{path}: compId {detail.get("compId")!r} does not match '
+                f'{path}: compId {cid!r} does not match '
                 f'filename stem {stem!r}')
         comps[stem] = detail
     return comps

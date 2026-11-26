@@ -165,6 +165,26 @@ class MigrateDetaljerBundles(unittest.TestCase):
         self.assertFalse(os.path.exists(
             bundle_path('felt', 2023, root=self.root)))
 
+    def test_quarantine_marker_without_comp_id_keys_by_stem(self):
+        """Old-pipeline quarantine markers carry no compId; the
+        filename stem — the comp id their path was built from — is
+        their identity, the same key the pipeline uses when it stores
+        markers into bundles."""
+        marker = {'generator': 'quarantined', 'sourceHash': 'sha-x',
+                  'parserVersion': 3, 'pdfEtag': '"e"'}
+        scopes = {('felt', 2023): {'comp-aa': detail('comp-aa'),
+                                   'comp-q': marker}}
+        write_old_tree(self.root, scopes)
+
+        summary = migrate(root=self.root)
+
+        # the migration succeeds and the marker lands under its stem,
+        # deep-equal, alongside the ordinary detail
+        self.assertEqual(summary[('felt', 2023)]['comps'], 2)
+        bundle = load_bundle(bundle_path('felt', 2023, root=self.root))
+        self.assertEqual(bundle['comps'].get('comp-q'), marker)
+        self.assertEqual(bundle['comps'].get('comp-aa'), detail('comp-aa'))
+
     def test_no_deletion_on_verification_failure(self):
         scopes = {
             ('felt', 2023): {'comp-aa': detail('comp-aa'),
