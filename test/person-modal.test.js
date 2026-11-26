@@ -725,15 +725,15 @@ assert.strictEqual(StandplassPersonModal.renderSkammekrokenBody([]),
 
 var skamBody = StandplassPersonModal.renderSkammekrokenBody(collected,
     { compLinks: true });
-assert.ok(skamBody.indexOf('DNS: 1') !== -1
-    && skamBody.indexOf('DSQ: 1') !== -1,
-    'individual-only chips read "STATUS: n"');
-assert.ok(skamBody.indexOf('DNF: 0 | Lag: 1') !== -1,
-    'a lag-only status keeps its pill, with a zero individual count');
-assert.ok(skamBody.indexOf('×') === -1,
-    'no × chip format remains');
-assert.ok(skamBody.indexOf('DNS: 1') < skamBody.indexOf('DNF: 0 | Lag: 1')
-    && skamBody.indexOf('DNF: 0 | Lag: 1') < skamBody.indexOf('DSQ: 1'),
+assert.ok(skamBody.indexOf('DNS<span class="person-utfall-count">1</span>') !== -1
+    && skamBody.indexOf('DSQ<span class="person-utfall-count">1</span>') !== -1,
+    'individual-only chips: status word plus one count badge');
+assert.ok(skamBody.indexOf('DNF<span class="person-utfall-count">0</span>Lag<span class="person-utfall-count">1</span>') !== -1,
+    'a lag-only status keeps its pill with a zero count badge');
+assert.ok(skamBody.indexOf('|') === -1 && skamBody.indexOf('×') === -1,
+    'no literal pipe or × separators remain');
+assert.ok(skamBody.indexOf('data-kind="DNS"') < skamBody.indexOf('data-kind="DNF"')
+    && skamBody.indexOf('data-kind="DNF"') < skamBody.indexOf('data-kind="DSQ"'),
     'chips render in fixed DNS → DNF → DSQ order');
 assert.ok(StandplassPersonModal.renderSkammekrokenBody(
     collected.filter(function (s) { return s.compId === 'f1'; }),
@@ -799,13 +799,12 @@ var doubleDSQ = [
       lag: true, team: 'Trondhjems PK 1' }
 ];
 var doubleBody = StandplassPersonModal.renderSkammekrokenBody(doubleDSQ, {});
-assert.ok(doubleBody.indexOf('DSQ: 1 | Lag: 1') !== -1,
-    'one pill carries the individual and lag counts inline');
+assert.ok(doubleBody.indexOf('DSQ<span class="person-utfall-count">1</span>Lag<span class="person-utfall-count">1</span>') !== -1,
+    'one pill: both counts as sub-pills, lag segment only when present');
 assert.strictEqual(doubleBody.split('person-meritt-chip"').length - 1, 1,
     'one chip per status definition');
-assert.ok(doubleBody.indexOf('DSQ: 2') === -1
-    && doubleBody.indexOf('DSQ Lag:') === -1,
-    'never a summed count or a separate lag chip');
+assert.ok(doubleBody.indexOf('person-utfall-count">2<') === -1,
+    'never a summed count');
 
 var hostileSkam = StandplassPersonModal.renderSkammekrokenBody([{
     year: 2025, branch: 'felt', compId: '<x>', date: '2025-01-01',

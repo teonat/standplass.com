@@ -895,6 +895,14 @@ var StandplassPersonModal = (function () {
             });
     }
 
+    // The count sub-pills inside a skammekroken chip (owner ruling
+    // 2026-11-26): the numbers sit in their own small pills — the
+    // word/badge contrast splits the segments, no literal separator
+    // character.
+    function utfallCountBadge(n) {
+        return '<span class="person-utfall-count">' + n + '</span>';
+    }
+
     function skammekrokenRowHtml(s, compLinks) {
         var parts = ['<span class="person-utfall-date">'
             + (s.date ? esc(shortDate(s.date)) : '') + '</span>'];
@@ -952,10 +960,10 @@ var StandplassPersonModal = (function () {
             ? statuses.filter(function (s) { return s.branch === branch; })
             : statuses;
         var chipsHtml = skammekrokenChips(shown).map(function (c) {
-            var text = c.key + ': ' + c.count;
-            if (c.lagCount) { text += ' | Lag: ' + c.lagCount; }
+            var inner = c.key + utfallCountBadge(c.count);
+            if (c.lagCount) { inner += 'Lag' + utfallCountBadge(c.lagCount); }
             return '<span class="person-meritt-chip" data-kind="'
-                + esc(c.key) + '">' + esc(text) + '</span>';
+                + esc(c.key) + '">' + inner + '</span>';
         }).join('');
         var years = [];
         var byYear = {};
