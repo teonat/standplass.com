@@ -8,3 +8,6 @@ docs/
 opencode.json
 .cache/
 .DS_Store
+public/data/detaljer/**/*.tmp
+public/data/bane/*.tmp
+public/data/felt/*.tmp

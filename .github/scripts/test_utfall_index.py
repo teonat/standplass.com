@@ -9,6 +9,7 @@ import os
 import tempfile
 import unittest
 
+from detaljer_bundles import bundle_path, write_bundle_if_changed
 from utfall_index import build_utfall_index, utfall_census, utfall_path
 
 
@@ -55,12 +56,8 @@ class UtfallIndexBase(unittest.TestCase):
         os.makedirs(year_dir, exist_ok=True)
         with open(os.path.join(year_dir, f'{year}.json'), 'w') as f:
             json.dump({'competitions': comps}, f)
-        ddir = os.path.join(self.root, 'public', 'data', 'detaljer',
-                            branch, str(year))
-        os.makedirs(ddir, exist_ok=True)
-        for cid, d in details.items():
-            with open(os.path.join(ddir, cid + '.json'), 'w') as f:
-                json.dump(d, f)
+        write_bundle_if_changed(bundle_path(branch, year, root=self.root),
+                                details)
 
     def build(self, branch, year, comps, details):
         self.setup_year(branch, year, comps, details)

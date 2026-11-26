@@ -3,8 +3,8 @@
 
 Orchestrates the parsers in result_file_parse.py and the person matcher
 in result_file_matching.py over the competitions in the scraped year
-JSONs, writing detail files under public/data/detaljer/ and the
-per-year mestere (championship) indexes. Detail files are additive:
+JSONs, writing per-year detail bundles under public/data/detaljer/ and
+the per-year mestere (championship) indexes. Detail files are additive:
 existing year JSONs are never modified.
 
 Run tests directly:
@@ -31,6 +31,11 @@ import pdfplumber
 # fallback geometry or quarantine — the spam adds nothing to output.
 logging.getLogger('pdfminer').setLevel(logging.ERROR)
 
+from detaljer_bundles import (
+    bundle_path,
+    load_bundle,
+    write_bundle_if_changed,
+)
 from mestere_index import build_mestere_index, mestere_path
 from utfall_index import build_utfall_index, utfall_path
 from result_file_parse import PARSER_VERSION, UnsupportedFormatError, parse_result
@@ -46,12 +51,8 @@ FETCH_SPACING_SECONDS = 0.25
 
 _YEAR_FILE = re.compile(r'^\d{4}$')
 
-
-def detail_path(branch, year, comp_id, root='.'):
-    """Path of a comp's detail file under the given repo root."""
-    return os.path.normpath(os.path.join(
-        root, DATA_DIR, 'detaljer', branch, year, f'{comp_id}.json'
-    ))
+# A branch dir entry is a scope bundle when it is exactly YYYY.json.
+_BUNDLE_FILE = re.compile(r'^\d{4}\.json$')
 
 
 def source_hash(comp, url):
@@ -128,6 +129,26 @@ def write_detail(path, detail):
         json.dump(detail, f, ensure_ascii=False, separators=(',', ':'))
 
 
+def _scope_comps(scope_bundles, branch, year, root):
+    """The (branch, year) scope's comps map, loaded from its bundle on
+    first touch. Stores mutate the map in place; the run flushes every
+    loaded scope's bundle once at the end, so years outside the run's
+    targets are never touched and orphans survive untouched."""
+    key = (branch, year)
+    if key not in scope_bundles:
+        scope_bundles[key] = load_bundle(
+            bundle_path(branch, year, root=root))['comps']
+    return scope_bundles[key]
+
+
+def _flush_bundles(scope_bundles, root):
+    """Persist every scope loaded this run. write_bundle_if_changed
+    leaves unchanged bundles untouched, so a run that re-parsed
+    nothing writes nothing."""
+    for (branch, year), comps in scope_bundles.items():
+        write_bundle_if_changed(bundle_path(branch, year, root=root), comps)
+
+
 def fetch_pdf(url):
     """Download a result file; returns (content, etag or None)."""
     response = requests.get(url, headers=REQUEST_HEADERS, timeout=60)
@@ -183,9 +204,11 @@ def collect_targets(opts, root):
     return targets
 
 
-def _parse_and_write(comp, url, content, etag, path, summary, dry_run):
-    """Parse fetched content, attach person ids, stamp, and write the
-    detail file (or a quarantine marker). Counts into summary."""
+def _parse_and_store(branch, year, comp, url, content, etag, comps,
+                     summary, dry_run):
+    """Parse fetched content, attach person ids, stamp, and store the
+    detail (or a quarantine marker) into the scope's comps map.
+    Counts into summary."""
     try:
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             detail = parse_result(pdf)
@@ -208,10 +231,10 @@ def _parse_and_write(comp, url, content, etag, path, summary, dry_run):
                 # lets version-bump retries re-parse from the PDF
                 # cache instead of re-fetching
                 marker['pdfEtag'] = etag
-            write_detail(path, marker)
+            comps[comp['id']] = marker
         summary['quarantined'] += 1
         summary['quarantine_list'].append(
-            (path.split(os.sep)[-3], path.split(os.sep)[-2], comp['id'], reason)
+            (branch, year, comp['id'], reason)
         )
         return False
     attach_person_ids(detail, comp.get('results') or [])
@@ -226,7 +249,7 @@ def _parse_and_write(comp, url, content, etag, path, summary, dry_run):
     detail['parsedAt'] = datetime.now(timezone.utc).isoformat()
     detail['parserVersion'] = PARSER_VERSION
     if not dry_run:
-        write_detail(path, detail)
+        comps[comp['id']] = detail
     summary['parsed'] += 1
     generator = detail['generator']
     summary['by_family'][generator] = summary['by_family'].get(generator, 0) + 1
@@ -246,7 +269,7 @@ _default_fetch_conditional = fetch_conditional
 
 
 def _detaljer_scopes(opts, root='.'):
-    """(branch, year) pairs that have detail files on disk, narrowed
+    """(branch, year) pairs that have a detail bundle on disk, narrowed
     by the opts' branch/year filters when given."""
     detaljer = os.path.join(root, DATA_DIR, 'detaljer')
     scopes = []
@@ -255,9 +278,9 @@ def _detaljer_scopes(opts, root='.'):
             bdir = os.path.join(detaljer, branch)
             if not os.path.isdir(bdir):
                 continue
-            for year in sorted(os.listdir(bdir)):
-                if os.path.isdir(os.path.join(bdir, year)):
-                    scopes.append((branch, year))
+            for name in sorted(os.listdir(bdir)):
+                if _BUNDLE_FILE.match(name):
+                    scopes.append((branch, name[:-5]))
     if opts.get('branch'):
         scopes = [s for s in scopes if s[0] == opts['branch']]
     if opts.get('year'):
@@ -326,7 +349,7 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
     """Weekly freshness sweep: conditional-GET every parsed PDF and
     re-parse the ones organizers replaced behind the same URL.
 
-    Detail files without a stored etag are fetched once and gain one.
+    Detail entries without a stored etag are fetched once and gain one.
     """
     if fetch_conditional is None:
         fetch_conditional = _default_fetch_conditional
@@ -343,15 +366,17 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
         'quarantine_list': [],
     }
     fetched_any = False
+    dry_run = opts.get('dry_run')
+    scope_bundles = {}
     targets = list(collect_targets(opts, root))
     for branch, year, comp in targets:
         url = comp['resultFileUrl']
         if not url.lower().split('?')[0].endswith('.pdf'):
             continue
-        path = detail_path(branch, year, comp['id'], root=root)
-        if not os.path.exists(path):
+        comps = _scope_comps(scope_bundles, branch, year, root)
+        if comp['id'] not in comps:
             continue
-        existing = load_detail(path)
+        existing = comps[comp['id']]
         if existing.get('generator') == 'quarantined':
             continue
         if fetched_any:
@@ -374,10 +399,12 @@ def run_sweep(opts, *, fetch_conditional=None, root='.'):
             continue
         summary['changed'] += 1
         cache_put(url, content, etag, root=root)
-        if _parse_and_write(comp, url, content, etag, path, summary,
-                            opts.get('dry_run')):
+        if _parse_and_store(branch, year, comp, url, content, etag,
+                            comps, summary, dry_run):
             summary['re-parsed'] += 1
-    _write_indexes(targets, summary, root, opts.get('dry_run'))
+    if not dry_run:
+        _flush_bundles(scope_bundles, root)
+    _write_indexes(targets, summary, root, dry_run)
     return summary
 
 
@@ -388,7 +415,7 @@ def run(opts, *, fetch_pdf=None, root='.'):
     the network with the house user agent); identical URLs are fetched
     once per run and written to every branch that lists them. With
     opts['indexes_only'] nothing is fetched — the mestere indexes
-    are rebuilt from the detail files already on disk.
+    are rebuilt from the detail bundles already on disk.
     """
     if opts.get('indexes_only'):
         summary = _new_summary()
@@ -400,6 +427,8 @@ def run(opts, *, fetch_pdf=None, root='.'):
         fetch_pdf = _default_fetch_pdf
     summary = _new_summary()
     fetch_cache = {}
+    dry_run = opts.get('dry_run')
+    scope_bundles = {}
 
     def cached_fetch(url):
         if url not in fetch_cache:
@@ -414,8 +443,8 @@ def run(opts, *, fetch_pdf=None, root='.'):
         if not url.lower().split('?')[0].endswith('.pdf'):
             summary['skipped_non_pdf'] += 1
             continue
-        path = detail_path(branch, year, comp['id'], root=root)
-        existing = load_detail(path) if os.path.exists(path) else None
+        comps = _scope_comps(scope_bundles, branch, year, root)
+        existing = comps.get(comp['id'])
         if existing is not None:
             if existing.get('generator') == 'quarantined':
                 if existing.get('parserVersion', 0) >= PARSER_VERSION:
@@ -440,10 +469,12 @@ def run(opts, *, fetch_pdf=None, root='.'):
                 print(f'  fetch failed {url}: {exc}')
                 continue
             cache_put(url, content, etag, root=root)
-        _parse_and_write(comp, url, content, etag, path, summary,
-                         opts.get('dry_run'))
+        _parse_and_store(branch, year, comp, url, content, etag,
+                         comps, summary, dry_run)
 
-    _write_indexes(targets, summary, root, opts.get('dry_run'))
+    if not dry_run:
+        _flush_bundles(scope_bundles, root)
+    _write_indexes(targets, summary, root, dry_run)
     return summary
 
 

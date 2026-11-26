@@ -275,8 +275,9 @@ var StandplassResultfileModal = (function () {
     }
 
     // The open() body decision, pure: a quarantined or missing detail
-    // (including a failed fetch, which arrives here as null) renders
-    // the PDF-link fallback; a parsed detail renders its sections.
+    // (a comp absent from its year bundle, or a failed fetch — both
+    // arrive here as null) renders the PDF-link fallback; a parsed
+    // detail renders its sections.
     function renderFor(detail, comp) {
         if (!detail || detail.generator === 'quarantined') {
             return renderFallback(comp);
@@ -284,13 +285,14 @@ var StandplassResultfileModal = (function () {
         return renderDetailBody(detail);
     }
 
-    // The detail file's URL: the host's configured base, or a
+    // The year bundle's URL: the host's configured base, or a
     // comp-level override for pages whose rows span branches (the
     // unified mesterskap page passes /data/detaljer/felt or -bane per
-    // row). Pure so the open() wiring stays untested DOM glue.
+    // row). The comp itself is looked up inside the bundle by id in
+    // open(). Pure so the open() wiring stays untested DOM glue.
     function detailUrl(base, comp) {
         var c = comp || {};
-        return (c.detailBase || base) + '/' + c.year + '/' + c.id + '.json';
+        return (c.detailBase || base) + '/' + c.year + '.json';
     }
 
     // ── the dialog host (wiring — manual QA per house rule) ───────────
@@ -342,6 +344,12 @@ var StandplassResultfileModal = (function () {
             });
         }
 
+        // One bundle fetch per year per dialog: every comp of a year
+        // shares the same resolved promise, so browsing a stevne's
+        // results costs one request, not one per opened comp. A
+        // rejected promise is evicted so a later open retries the
+        // bundle instead of replaying a cached failure.
+        var bundleCache = new Map();
         var openSeq = 0;
         function open(comp) {
             var mySeq = ++openSeq;
@@ -357,19 +365,25 @@ var StandplassResultfileModal = (function () {
                 bodyEl.innerHTML = renderFallback(c);
                 return;
             }
-            fetchImpl(detailUrl(detailBase, c))
-                .then(function (res) {
+            var url = detailUrl(detailBase, c);
+            var loaded = bundleCache.get(url);
+            if (!loaded) {
+                loaded = fetchImpl(url).then(function (res) {
                     if (!res.ok) { throw new Error('HTTP ' + res.status); }
                     return res.json();
-                })
-                .then(function (detail) {
-                    if (mySeq !== openSeq) { return; }
-                    metaEl.textContent = maxFeltLine(detail && detail.maxFeltPoints);
-                    bodyEl.innerHTML = renderFor(detail, c);
-                }, function () {
-                    if (mySeq !== openSeq) { return; }
-                    bodyEl.innerHTML = renderFallback(c);
                 });
+                bundleCache.set(url, loaded);
+                loaded.catch(function () { bundleCache.delete(url); });
+            }
+            loaded.then(function (bundle) {
+                if (mySeq !== openSeq) { return; }
+                var detail = bundle && bundle.comps ? (bundle.comps[c.id] || null) : null;
+                metaEl.textContent = maxFeltLine(detail && detail.maxFeltPoints);
+                bodyEl.innerHTML = renderFor(detail, c);
+            }, function () {
+                if (mySeq !== openSeq) { return; }
+                bodyEl.innerHTML = renderFallback(c);
+            });
         }
         return { open: open };
     }

@@ -86,7 +86,7 @@ locs.forEach(function (loc) {
 // --- render-critical resources must stay crawlable -------------------
 // Pages fetch these while rendering; blocking them is what starved
 // crawlers of all content before the policy flip.
-['/data/felt/2026.json', '/data/detaljer/felt/2026/x.json', '/js/stevner-page.js', '/styles.css'].forEach(function (path) {
+['/data/felt/2026.json', '/data/detaljer/felt/2026.json', '/js/stevner-page.js', '/styles.css'].forEach(function (path) {
     assert.ok(robotsAllows(path),
         path + ' must stay robots-allowed - pages fetch it while rendering');
 });
