@@ -50,6 +50,17 @@ def make_comp(comp_id, url, results=None):
     }
 
 
+def snapshot_detaljer(root):
+    detaljer = os.path.join(root, 'public', 'data', 'detaljer')
+    snapshot = {}
+    for dirpath, _, filenames in os.walk(detaljer):
+        for name in filenames:
+            path = os.path.join(dirpath, name)
+            with open(path, 'rb') as f:
+                snapshot[path] = f.read()
+    return snapshot
+
+
 BANE_PDF_RESULTS = [
     {'name': 'Lars Erik Fjelldal', 'club': 'Stavanger Pistolklubb',
      'personId': 'p1', 'class': 'A', 'discipline': 'T96 Fin'},
@@ -395,6 +406,11 @@ class MestereIndex(unittest.TestCase):
         self.assertEqual(index['year'], 2025)
 
     def test_second_run_rewrites_no_indexes(self):
+        before = snapshot_detaljer(self.root)
+        # a vacuous snapshot would pin nothing — the first run must
+        # have left bundles behind
+        self.assertTrue(before)
+
         def fetch(url):
             raise AssertionError('second run must not fetch anything')
 
@@ -403,6 +419,10 @@ class MestereIndex(unittest.TestCase):
         self.assertEqual(summary['parsed'], 0)
         self.assertEqual(summary['up_to_date'], 5)
         self.assertEqual(summary['indexes_written'], 0)
+        after = snapshot_detaljer(self.root)
+        self.assertEqual(sorted(after), sorted(before))
+        for path in sorted(before):
+            self.assertEqual(after[path], before[path])
 
     def test_indexes_only_rebuilds_without_fetching(self):
         for branch in ('felt', 'bane'):
