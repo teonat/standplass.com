@@ -664,3 +664,110 @@ assert.ok(StandplassPersonModal.renderMeritterBody(
     branchMerits.filter(function (m) { return m.branch === 'felt'; }), {}
 ).indexOf('person-meritt-branch-toggle') === -1,
     'single-branch merits render no switcher — nothing to filter');
+
+// --- Skammekroken: collectStatusEntries ----------------------------------
+
+var utfallLoaded = [
+    { year: 2024, branch: 'bane',
+      index: { year: 2024,
+          comps: { b1: { title: 'Baneskyting 2024', date: '2024-06-01',
+                         resultFileUrl: 'https://example.com/b1.pdf' } },
+          persons: { p1: [
+              { compId: 'b1', ovelse: '25m Fin', klasse: 'A',
+                status: 'DNS' } ] } } },
+    { year: 2025, branch: 'felt',
+      index: { year: 2025,
+          comps: { f1: { title: 'Feltskyting 2025', date: '2025-08-16' },
+                   f2: { title: 'KM 2025', date: '2025-06-01' } },
+          persons: { p1: [
+              { compId: 'f1', ovelse: 'KM: Felt Fin', klasse: 'A',
+                status: 'DSQ' },
+              { compId: 'f2', ovelse: 'Felt Grov', status: 'DNF',
+                lag: true, team: 'K1' } ] } } },
+    { year: 2023, branch: 'felt', index: null }  // failed fetch → absent
+];
+
+var collected = StandplassPersonModal.collectStatusEntries(utfallLoaded, 'p1');
+assert.strictEqual(collected.length, 3, 'both years carry entries');
+assert.strictEqual(collected[0].year, 2025, 'newest year first');
+assert.strictEqual(collected[0].compId, 'f1', 'date desc within the year');
+assert.deepStrictEqual(collected[0],
+    { year: 2025, branch: 'felt', compId: 'f1', date: '2025-08-16',
+      title: 'Feltskyting 2025', resultFileUrl: null,
+      ovelse: 'KM: Felt Fin', klasse: 'A', status: 'DSQ',
+      lag: false, team: null });
+assert.deepStrictEqual(collected[2],
+    { year: 2024, branch: 'bane', compId: 'b1', date: '2024-06-01',
+      title: 'Baneskyting 2024',
+      resultFileUrl: 'https://example.com/b1.pdf',
+      ovelse: '25m Fin', klasse: 'A', status: 'DNS',
+      lag: false, team: null });
+assert.deepStrictEqual(
+    StandplassPersonModal.collectStatusEntries(utfallLoaded, 'p2'), [],
+    'a person with no statuses collects nothing');
+
+// --- Skammekroken: renderSkammekrokenBody ---------------------------------
+
+assert.strictEqual(StandplassPersonModal.renderSkammekrokenBody([]),
+    '<p class="ranking-status-msg">Ingen registrerte utfall.</p>');
+
+var skamBody = StandplassPersonModal.renderSkammekrokenBody(collected,
+    { compLinks: true });
+assert.ok(skamBody.indexOf('Ikke startet ×1') !== -1, 'DNS chip');
+assert.ok(skamBody.indexOf('Fullførte ikke ×1') !== -1, 'DNF chip');
+assert.ok(skamBody.indexOf('Diskvalifisert ×1') !== -1, 'DSQ chip');
+assert.ok(skamBody.indexOf('2025') !== -1
+    && skamBody.indexOf('2024') !== -1, 'per-year headings');
+assert.ok(skamBody.indexOf('person-utfall-comp') !== -1,
+    'comp links render as buttons under compLinks');
+assert.ok(skamBody.indexOf('data-comp-id="f1"') !== -1
+    && skamBody.indexOf('data-comp-year="2025"') !== -1
+    && skamBody.indexOf('data-comp-branch="felt"') !== -1,
+    'the comp button carries its deep-link attrs');
+assert.ok(skamBody.indexOf('data-comp-file="https://example.com/b1.pdf"') !== -1,
+    'the comp button carries the result file url when present');
+assert.ok(skamBody.indexOf('lag: K1') !== -1,
+    'team rows carry the lag sub-line');
+assert.ok(skamBody.indexOf('person-meritt-branch-toggle') !== -1,
+    'entries in both branches render the switcher');
+
+var skamPlain = StandplassPersonModal.renderSkammekrokenBody(collected, {});
+assert.ok(skamPlain.indexOf('stevner-person-btn') === -1,
+    'no compLinks → plain comp spans');
+assert.ok(skamPlain.indexOf('<span class="person-utfall-comp">') !== -1,
+    'comp titles render as spans without compLinks');
+assert.ok(skamPlain.indexOf('person-utfall-team') !== -1);
+
+var skamFelt = StandplassPersonModal.renderSkammekrokenBody(collected,
+    { branch: 'felt' });
+assert.ok(skamFelt.indexOf('Baneskyting 2024') === -1,
+    'the branch filter drops the other branch\'s rows');
+
+var hostileSkam = StandplassPersonModal.renderSkammekrokenBody([{
+    year: 2025, branch: 'felt', compId: '<x>', date: '2025-01-01',
+    title: '<script>', resultFileUrl: null, ovelse: '<img>',
+    klasse: '<b>', status: 'DNS', lag: false, team: '<t>'
+}], { compLinks: true });
+assert.ok(hostileSkam.indexOf('<script>') === -1
+    && hostileSkam.indexOf('<img>') === -1
+    && hostileSkam.indexOf('<b>') === -1
+    && hostileSkam.indexOf('<t>') === -1,
+    'skammekroken rows escape their input');
+
+// --- p_tab=skammekroken round-trip -----------------------------------------
+
+assert.strictEqual(
+    StandplassPersonModal.parsePersonFilterParams('?p_tab=skammekroken&p_branch=felt').tab,
+    'skammekroken');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(
+        { selectedYears: [2026], activeYear: 2026, types: [], discs: [],
+          classes: [], metric: null, defaultMetric: null,
+          tab: 'skammekroken', branch: 'felt' }).p_tab,
+    'skammekroken');
+assert.strictEqual(
+    StandplassPersonModal.buildPersonFilterParams(
+        { selectedYears: [2026], activeYear: 2026, types: [], discs: [],
+          classes: [], metric: null, defaultMetric: null,
+          tab: 'bogus', branch: null }).p_tab,
+    null);
