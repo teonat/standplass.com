@@ -875,11 +875,22 @@ var StandplassPersonModal = (function () {
     }
 
     function skammekrokenChips(statuses) {
-        var counts = { DNS: 0, DNF: 0, DSQ: 0 };
+        // Individual and lag starts are separate classifications of
+        // (often) the same physical start — a DSQ on the individual
+        // start and on the lag never sum into one ×2 chip; lag
+        // entries count under their own "<STATUS> Lag" chip (owner
+        // ruling 2026-11-26). Unknown statuses stay uncounted.
+        var counts = {};
         statuses.forEach(function (s) {
-            if (counts[s.status] != null) { counts[s.status] += 1; }
+            if (STATUS_ORDER.indexOf(s.status) === -1) { return; }
+            var key = s.lag ? s.status + ' Lag' : s.status;
+            counts[key] = (counts[key] || 0) + 1;
         });
-        return STATUS_ORDER.filter(function (k) { return counts[k] > 0; })
+        var order = [];
+        STATUS_ORDER.forEach(function (k) {
+            order.push(k, k + ' Lag');
+        });
+        return order.filter(function (k) { return counts[k] > 0; })
             .map(function (k) {
                 return { key: k, label: k, count: counts[k] };
             });
