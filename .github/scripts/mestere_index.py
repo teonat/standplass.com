@@ -1,6 +1,6 @@
 """Mestere index builder — championship classification at index time.
 
-build_mestere_index reads a branch-year's detail files plus the year
+build_mestere_index reads a branch-year's detail bundle plus the year
 JSON and writes-ready-returns the mestere index (public/data/{branch}/
 mestere-{year}.json shape). Classification deliberately lives here,
 not in the parsers: NM is comp-typed, which the parse layer cannot
@@ -38,6 +38,7 @@ import json
 import os
 import re
 
+from detaljer_bundles import bundle_path, load_bundle
 from org_regions import DISTRIKTER, normalize_region, resolve_region
 
 DATA_DIR = 'public/data'
@@ -391,17 +392,12 @@ def build_mestere_index(branch, year, root='.'):
         with open(year_file, encoding='utf-8') as f:
             comps = {c['id']: c
                      for c in json.load(f).get('competitions', [])}
-    detaljer_dir = os.path.join(root, DATA_DIR, 'detaljer',
-                                branch, str(year))
+    bundle = load_bundle(bundle_path(branch, year, root=root))
     entries = []
     warnings = []
-    if os.path.isdir(detaljer_dir):
-        for name in sorted(os.listdir(detaljer_dir)):
-            if not name.endswith('.json'):
-                continue
-            with open(os.path.join(detaljer_dir, name),
-                      encoding='utf-8') as f:
-                detail = json.load(f)
+    if bundle['comps']:
+        for comp_id in sorted(bundle['comps']):
+            detail = bundle['comps'][comp_id]
             if detail.get('generator') == 'quarantined':
                 continue
             comp = comps.get(detail.get('compId'))

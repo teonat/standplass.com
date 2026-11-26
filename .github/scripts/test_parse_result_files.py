@@ -9,12 +9,16 @@ import os
 import tempfile
 import unittest
 
+from detaljer_bundles import (
+    bundle_path,
+    load_bundle,
+    write_bundle_if_changed,
+)
 from mestere_index import build_mestere_index, mestere_path
 from utfall_index import utfall_path
 from parse_result_files import (
     PARSER_VERSION,
     _write_indexes,
-    detail_path,
     run,
     run_sweep,
     should_reparse,
@@ -59,20 +63,6 @@ T96_KM_URL = ('https://nsfstorage.blob.core.windows.net/'
               'resultfiles/t96-km.pdf')
 # Sogn og Fjordane Skyttarkrins (kretser.json) — the felt DM comp's krets
 SOGN_FJORDANE_GUID = '67706903-3b5b-4d47-c2bb-08d859126e0a'
-
-
-class DetailPath(unittest.TestCase):
-    def test_path_under_repo_root(self):
-        self.assertEqual(
-            detail_path('felt', '2026', 'abc'),
-            'public/data/detaljer/felt/2026/abc.json',
-        )
-
-    def test_path_honors_root(self):
-        self.assertEqual(
-            detail_path('bane', '2024', 'abc', root='/tmp/x'),
-            os.path.join('/tmp/x', 'public/data/detaljer/bane/2024/abc.json'),
-        )
 
 
 class WriteDetail(unittest.TestCase):
@@ -164,10 +154,9 @@ class RunOrchestrator(unittest.TestCase):
         fetch, _ = self.fake_fetch(self.PDF_URL)
         summary = run({'full_scan': True, 'year': '2025', 'branch': 'felt',
                        'dry_run': False}, fetch_pdf=fetch, root=self.root)
-        path = detail_path('felt', '2025', 'comp-a', root=self.root)
-        self.assertTrue(os.path.exists(path))
-        with open(path, encoding='utf-8') as f:
-            detail = json.load(f)
+        detail = load_bundle(
+            bundle_path('felt', 2025, root=self.root))['comps'].get('comp-a')
+        self.assertIsNotNone(detail)
         self.assertEqual(detail['compId'], 'comp-a')
         self.assertEqual(detail['sourceUrl'], self.PDF_URL)
         self.assertEqual(detail['pdfEtag'], '"etag-1"')
@@ -193,9 +182,9 @@ class RunOrchestrator(unittest.TestCase):
         summary = run(opts, fetch_pdf=fetch, root=self.root)
         self.assertEqual(summary['quarantined'], 1)
         self.assertEqual(summary['parsed'], 0)
-        path = detail_path('bane', '2025', 'comp-junk', root=self.root)
-        with open(path, encoding='utf-8') as f:
-            marker = json.load(f)
+        marker = load_bundle(
+            bundle_path('bane', 2025, root=self.root))['comps'].get('comp-junk')
+        self.assertIsNotNone(marker)
         self.assertEqual(marker['generator'], 'quarantined')
         self.assertTrue(marker['reason'])
         self.assertEqual(marker['parserVersion'], PARSER_VERSION)
@@ -215,8 +204,12 @@ class RunOrchestrator(unittest.TestCase):
         summary = run({'full_scan': True, 'year': '2025', 'branch': None,
                        'dry_run': False}, fetch_pdf=fetch, root=self.root)
         self.assertEqual(len(calls), 1)
-        self.assertTrue(os.path.exists(detail_path('felt', '2025', 'comp-dup', root=self.root)))
-        self.assertTrue(os.path.exists(detail_path('bane', '2025', 'comp-dup', root=self.root)))
+        self.assertIsNotNone(
+            load_bundle(bundle_path('felt', 2025,
+                                    root=self.root))['comps'].get('comp-dup'))
+        self.assertIsNotNone(
+            load_bundle(bundle_path('bane', 2025,
+                                    root=self.root))['comps'].get('comp-dup'))
         self.assertEqual(summary['parsed'], 2)
 
     def test_dry_run_writes_nothing_but_counts(self):
@@ -227,7 +220,7 @@ class RunOrchestrator(unittest.TestCase):
         summary = run({'full_scan': True, 'year': '2025', 'branch': 'felt',
                        'dry_run': True}, fetch_pdf=fetch, root=self.root)
         self.assertFalse(os.path.exists(
-            detail_path('felt', '2025', 'comp-a', root=self.root)))
+            bundle_path('felt', 2025, root=self.root)))
         self.assertEqual(summary['parsed'], 1)
         self.assertEqual(summary['matched'], 2)
 
@@ -261,8 +254,9 @@ class RunOrchestrator(unittest.TestCase):
                        'dry_run': True}, fetch_pdf=fetch, root=self.root)
         self.assertEqual(summary['parsed'], 2)
         self.assertEqual(len(calls), 2)
-        self.assertFalse(os.path.exists(
-            detail_path('felt', '2021', 'c-old', root=self.root)))
+        self.assertIsNone(
+            load_bundle(bundle_path('felt', 2021,
+                                    root=self.root))['comps'].get('c-old'))
 
 
 class MestereIndex(unittest.TestCase):
@@ -492,15 +486,13 @@ class UtfallIndex(unittest.TestCase):
         comp = make_comp('c1', 'https://example.com/r.pdf')
         comp['startDate'] = '2025-08-16T00:00:00'
         write_year(self.root, 'felt', '2025', [comp])
-        ddir = os.path.join(self.root, 'public', 'data', 'detaljer',
-                            'felt', '2025')
-        os.makedirs(ddir, exist_ok=True)
         rows = ([{'name': 'Kari', 'personId': 'p1', 'status': 'DNS'}]
                 if with_status else [])
-        with open(os.path.join(ddir, 'c1.json'), 'w') as f:
-            json.dump({'compId': 'c1', 'generator': 'plain-NO',
-                       'ovelser': [{'navn': 'Felt Fin', 'classes': [
-                           {'klasse': 'A', 'rows': rows}]}]}, f)
+        write_bundle_if_changed(
+            bundle_path('felt', 2025, root=self.root),
+            {'c1': {'compId': 'c1', 'generator': 'plain-NO',
+                    'ovelser': [{'navn': 'Felt Fin', 'classes': [
+                        {'klasse': 'A', 'rows': rows}]}]}})
 
     def regen(self):
         summary = {}
@@ -563,9 +555,8 @@ class EtagSweep(unittest.TestCase):
                    'dry_run': False}, fetch_pdf=plain_fetch, root=self.root)
 
     def _detail(self):
-        with open(detail_path('felt', '2025', 'comp-a', root=self.root),
-                  encoding='utf-8') as f:
-            return json.load(f)
+        return load_bundle(
+            bundle_path('felt', 2025, root=self.root))['comps']['comp-a']
 
     def test_304_leaves_file_untouched(self):
         self._run_once()
@@ -614,10 +605,10 @@ class EtagSweep(unittest.TestCase):
 
     def test_missing_etag_treated_as_changed_once(self):
         self._run_once()
-        path = detail_path('felt', '2025', 'comp-a', root=self.root)
-        detail = json.load(open(path))
-        detail.pop('pdfEtag')
-        json.dump(detail, open(path, 'w'))
+        path = bundle_path('felt', 2025, root=self.root)
+        comps = load_bundle(path)['comps']
+        comps['comp-a'].pop('pdfEtag')
+        write_bundle_if_changed(path, comps)
 
         def conditional(url, etag):
             assert etag is None
@@ -650,19 +641,18 @@ class PdfCache(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _path(self):
-        return detail_path('felt', '2025', 'comp-cache', root=self.root)
+    def _bundle(self):
+        return bundle_path('felt', 2025, root=self.root)
 
     def _detail(self):
-        with open(self._path(), encoding='utf-8') as f:
-            return json.load(f)
+        return load_bundle(self._bundle())['comps']['comp-cache']
 
     def _age_detail(self):
         """Simulate a parser version bump: same comp, older version."""
-        detail = self._detail()
-        detail['parserVersion'] = PARSER_VERSION - 1
-        with open(self._path(), 'w', encoding='utf-8') as f:
-            json.dump(detail, f)
+        path = self._bundle()
+        comps = load_bundle(path)['comps']
+        comps['comp-cache']['parserVersion'] = PARSER_VERSION - 1
+        write_bundle_if_changed(path, comps)
 
     def _run(self, fetch):
         return run({'full_scan': True, 'year': '2025', 'branch': 'felt',
@@ -732,10 +722,10 @@ class PdfCache(unittest.TestCase):
             return fixture_bytes('inrx-bane.pdf'), '"e1"'
 
         self._run(fetch)
-        detail = self._detail()
-        detail.pop('pdfEtag')  # like the earliest detail-file format
-        with open(self._path(), 'w', encoding='utf-8') as f:
-            json.dump(detail, f)
+        path = self._bundle()
+        comps = load_bundle(path)['comps']
+        comps['comp-cache'].pop('pdfEtag')  # like the earliest detail format
+        write_bundle_if_changed(path, comps)
         self._age_detail()
 
         summary = self._run(fetch)

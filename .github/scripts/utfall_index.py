@@ -1,8 +1,8 @@
 """Utfall index builder — per-person DNS/DNF/DSQ history at index time.
 
-build_utfall_index reads a branch-year's detail files plus the year
+build_utfall_index reads a branch-year's detail bundle plus the year
 JSON and returns the utfall index (the public/data/{branch}/
-utfall-{year}.json shape). Statuses live only in the parsed files —
+utfall-{year}.json shape). Statuses live only in the parsed details —
 the API results carry none.
 
 Rules (spec: 2026-11-26-skammekroken-design.md):
@@ -25,13 +25,15 @@ Rules (spec: 2026-11-26-skammekroken-design.md):
    resultFileUrl when present) — the same field the resultfile modal
    reads for its PDF fallback.
 
-utfall_census walks the same files and reports the raw home counts
+utfall_census walks the same bundle and reports the raw home counts
 plus the built index's totals, so index coverage stays reconcilable:
 entries = ovelser_pid + km_pid + dm_pid − deduped + team_members.
 """
 import json
 import os
 import re
+
+from detaljer_bundles import bundle_path, load_bundle
 
 DATA_DIR = 'public/data'
 _SCOPE_PREFIX = re.compile(r'^(?:KM|DM):\s*')
@@ -105,24 +107,19 @@ def _team_entry(cid, ovelse, klasse, status, team):
 
 def _scan(branch, year, root):
     """(comps, persons, counts) for a branch-year — one walk over the
-    detail files, deduped per rule 4."""
+    year's detail bundle, deduped per rule 4."""
     comps_by_id = _year_comps(branch, year, root)
-    detaljer_dir = os.path.join(root, DATA_DIR, 'detaljer',
-                                 branch, str(year))
+    bundle = load_bundle(bundle_path(branch, year, root=root))
     counts = {'ovelser_rows': 0, 'ovelser_pid': 0,
               'km_rows': 0, 'km_pid': 0,
               'dm_rows': 0, 'dm_pid': 0,
               'lag_teams': 0, 'team_members': 0, 'deduped': 0}
     persons = {}
     comps = {}
-    if not os.path.isdir(detaljer_dir):
+    if not bundle['comps']:
         return comps, persons, counts
-    for name in sorted(os.listdir(detaljer_dir)):
-        if not name.endswith('.json'):
-            continue
-        with open(os.path.join(detaljer_dir, name),
-                  encoding='utf-8') as f:
-            detail = json.load(f)
+    for comp_id in sorted(bundle['comps']):
+        detail = bundle['comps'][comp_id]
         if detail.get('generator') == 'quarantined':
             continue
         comp = comps_by_id.get(detail.get('compId'))
