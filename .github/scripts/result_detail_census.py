@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Local-only detail census: point at silent partial parses.
 
-Walks the parsed detail files plus the comp year JSONs and reports
+Walks the parsed detail bundles plus the comp year JSONs and reports
 anomaly checks — printed-vs-parsed deltakere counts, person names
 that swallowed their club (comma tails, club words) or a whole lag
 team line (digits, parentheses), empty øvelser, duplicate rows,
 sum < ix, and championship-titled comps that never reached the
-mestere index (bucketed by why: no detail file, quarantined, no
+mestere index (bucketed by why: no detail, quarantined, no
 championship sections, or sections the index did not pick up).
 
 A pointing tool, not a gate: it is wired into no workflow and never
@@ -25,10 +25,15 @@ import os
 import re
 import sys
 
+from detaljer_bundles import bundle_path, load_bundle
 from result_file_parse import _CLUB_ACRONYMS, _CLUB_ENDINGS
+
+DATA_DIR = 'public/data'
 
 CHAMP_TITLE = re.compile(r'\b(KM|DM|NM)\b')
 _TEAM_LINE_NAME = re.compile(r'[\d(]')
+# A branch dir entry is a bundle when it is exactly YYYY.json.
+_BUNDLE_FILE = re.compile(r'^\d{4}\.json$')
 CHECKS = (
     'deltakere_mismatch', 'fused_comma', 'team_lines_as_persons',
     'club_words_in_name', 'sum_lt_ix', 'empty_ovelser', 'duplicate_rows',
@@ -166,8 +171,8 @@ def _coverage(detail):
     return persons, matched
 
 
-def census_corpus(data_dir='public/data', max_samples=5):
-    """Census over every detail file under data_dir, joined with the
+def census_corpus(root='.', max_samples=5):
+    """Census over every detail bundle under root, joined with the
     comp year JSONs and the mestere indexes."""
     counts = {name: 0 for name in CHECKS}
     samples = {name: [] for name in CHECKS}
@@ -175,7 +180,7 @@ def census_corpus(data_dir='public/data', max_samples=5):
              'samples': []}
     coverage = []
     files = 0
-    detaljer = os.path.join(data_dir, 'detaljer')
+    detaljer = os.path.join(root, DATA_DIR, 'detaljer')
     if not os.path.isdir(detaljer):
         return {'files': 0,
                 'checks': {k: {'count': 0, 'samples': []}
@@ -186,42 +191,39 @@ def census_corpus(data_dir='public/data', max_samples=5):
         bdir = os.path.join(detaljer, branch)
         if not os.path.isdir(bdir):
             continue
-        for year in sorted(os.listdir(bdir)):
-            ydir = os.path.join(bdir, year)
-            if not os.path.isdir(ydir):
+        for name in sorted(os.listdir(bdir)):
+            if not _BUNDLE_FILE.match(name):
                 continue
-            year_json = os.path.join(data_dir, branch, f'{year}.json')
+            year = name[:-5]
+            year_json = os.path.join(root, DATA_DIR, branch,
+                                     f'{year}.json')
             comps = {}
             if os.path.exists(year_json):
                 with open(year_json, encoding='utf-8') as f:
                     comps = {c.get('id'): c for c in
                              json.load(f).get('competitions') or []}
             index_json = os.path.join(
-                data_dir, branch, f'mestere-{year}.json')
+                root, DATA_DIR, branch, f'mestere-{year}.json')
             indexed = set()
             if os.path.exists(index_json):
                 with open(index_json, encoding='utf-8') as f:
                     indexed = {e.get('compId') for e in
                                json.load(f).get('comps') or []}
-            details = {}
-            for name in sorted(os.listdir(ydir)):
-                if not name.endswith('.json'):
-                    continue
-                path = os.path.join(ydir, name)
-                with open(path, encoding='utf-8') as f:
-                    detail = json.load(f)
+            details = load_bundle(
+                bundle_path(branch, year, root=root))['comps']
+            for comp_id in sorted(details):
+                detail = details[comp_id]
                 files += 1
-                details[detail.get('compId')] = detail
-                rel = os.path.relpath(path, data_dir)
                 for check, findings in census_detail(detail).items():
                     counts[check] += len(findings)
                     room = max_samples - len(samples[check])
                     for finding in findings[:room]:
-                        samples[check].append(dict(finding, file=rel))
+                        samples[check].append(
+                            dict(finding, compId=comp_id))
                 persons, matched = _coverage(detail)
                 if persons:
                     coverage.append(
-                        {'file': rel, 'persons': persons,
+                        {'compId': comp_id, 'persons': persons,
                          'matched': matched,
                          'coverage': round(matched / persons, 4)})
             for comp_id, comp in comps.items():
@@ -314,7 +316,7 @@ def _print_report(report):
     print('lowest personId coverage:')
     for cov in report['coverage_worst'][:10]:
         print(f"    {cov['coverage']:.0%} "
-              f"{cov['matched']}/{cov['persons']} {cov['file']}")
+              f"{cov['matched']}/{cov['persons']} {cov['compId']}")
 
 
 def _print_diff(delta):
@@ -335,7 +337,7 @@ def _print_diff(delta):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description='Local-only detail census (never fails).')
-    parser.add_argument('--data-dir', default='public/data')
+    parser.add_argument('--root', default='.')
     parser.add_argument('--json', action='store_true', dest='as_json',
                         help='print the report as JSON')
     parser.add_argument('--save-baseline', metavar='PATH',
@@ -343,7 +345,7 @@ def main(argv=None):
     parser.add_argument('--diff', metavar='PATH',
                         help='print the drift vs a saved baseline')
     args = parser.parse_args(argv)
-    report = census_corpus(args.data_dir)
+    report = census_corpus(args.root)
     if args.diff:
         with open(args.diff, encoding='utf-8') as f:
             baseline = json.load(f)

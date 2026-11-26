@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 
+from detaljer_bundles import bundle_path, write_bundle_if_changed
 from result_detail_census import (
     census_corpus,
     census_detail,
@@ -151,27 +152,26 @@ class CensusDetail(unittest.TestCase):
 class CensusCorpus(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.root = os.path.join(self._tmp.name, 'data')
-        os.makedirs(os.path.join(self.root, 'detaljer', 'bane', '2021'))
-        os.makedirs(os.path.join(self.root, 'bane'))
+        self.root = self._tmp.name
+        os.makedirs(os.path.join(self.root, 'public', 'data', 'bane'))
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _write_detail(self, comp_id, detail):
-        with open(os.path.join(self.root, 'detaljer', 'bane', '2021',
-                               f'{comp_id}.json'), 'w',
-                  encoding='utf-8') as f:
-            json.dump(detail, f)
+    def _write_bundle(self, details):
+        write_bundle_if_changed(
+            bundle_path('bane', 2021, root=self.root), details)
 
     def _write_year(self, comps):
-        with open(os.path.join(self.root, 'bane', '2021.json'), 'w',
+        with open(os.path.join(self.root, 'public', 'data', 'bane',
+                               '2021.json'), 'w',
                   encoding='utf-8') as f:
             json.dump({'competitions': comps}, f)
 
     def _write_index(self, comp_ids):
-        with open(os.path.join(self.root, 'bane', 'mestere-2021.json'),
-                  'w', encoding='utf-8') as f:
+        with open(os.path.join(self.root, 'public', 'data', 'bane',
+                               'mestere-2021.json'), 'w',
+                  encoding='utf-8') as f:
             json.dump({'year': 2021,
                        'comps': [{'compId': cid} for cid in comp_ids],
                        'warnings': []}, f)
@@ -182,15 +182,17 @@ class CensusCorpus(unittest.TestCase):
             {'id': 'c2', 'title': 'KM Hordaland'},
             {'id': 'c3', 'title': '2109ppk52 Silhuett'},
         ])
-        self._write_detail('c1', {
-            'compId': 'c1', 'generator': 'datotid',
-            'ovelser': [_ovelse('X', [
-                {'klasse': 'A', 'rows': [{'name': 'A'}]}])],
-        })
-        self._write_detail('c2', {
-            'compId': 'c2', 'generator': 'blinken 3.0.15',
-            'km': {'sections': [{'navn': 'KM: X', 'klasse': 'Å',
-                                 'rows': [{'name': 'B'}]}]},
+        self._write_bundle({
+            'c1': {
+                'compId': 'c1', 'generator': 'datotid',
+                'ovelser': [_ovelse('X', [
+                    {'klasse': 'A', 'rows': [{'name': 'A'}]}])],
+            },
+            'c2': {
+                'compId': 'c2', 'generator': 'blinken 3.0.15',
+                'km': {'sections': [{'navn': 'KM: X', 'klasse': 'Å',
+                                     'rows': [{'name': 'B'}]}]},
+            },
         })
         self._write_index(['c2'])
         champ = census_corpus(self.root)['champ_titled_unindexed']
@@ -200,10 +202,12 @@ class CensusCorpus(unittest.TestCase):
 
     def test_champ_titled_comp_with_sections_but_unindexed(self):
         self._write_year([{'id': 'c1', 'title': 'KM X'}])
-        self._write_detail('c1', {
-            'compId': 'c1', 'generator': 'blinken 3',
-            'km': {'sections': [{'navn': 'KM: X', 'klasse': 'Å',
-                                 'rows': [{'name': 'B'}]}]},
+        self._write_bundle({
+            'c1': {
+                'compId': 'c1', 'generator': 'blinken 3',
+                'km': {'sections': [{'navn': 'KM: X', 'klasse': 'Å',
+                                     'rows': [{'name': 'B'}]}]},
+            },
         })
         self._write_index([])
         champ = census_corpus(self.root)['champ_titled_unindexed']
@@ -211,37 +215,41 @@ class CensusCorpus(unittest.TestCase):
 
     def test_champ_titled_comp_without_detail_file(self):
         self._write_year([{'id': 'c1', 'title': 'DM X'}])
+        self._write_bundle({})
         self._write_index([])
         champ = census_corpus(self.root)['champ_titled_unindexed']
         self.assertEqual(champ['by_reason'], {'no-detail': 1})
 
     def test_quarantined_champ_titled_comp(self):
         self._write_year([{'id': 'c1', 'title': 'NM X'}])
-        self._write_detail('c1', {'compId': 'c1',
-                                   'generator': 'quarantined'})
+        self._write_bundle({'c1': {'compId': 'c1',
+                                   'generator': 'quarantined'}})
         self._write_index([])
         champ = census_corpus(self.root)['champ_titled_unindexed']
         self.assertEqual(champ['by_reason'], {'quarantined': 1})
 
     def test_checks_and_coverage_aggregate_across_files(self):
         self._write_year([{'id': 'c1', 'title': '2109ppk52 Silhuett'}])
-        self._write_detail('c1', {
-            'compId': 'c1', 'generator': 'inrX 1',
-            'ovelser': [_ovelse('X', [{'klasse': 'A', 'rows': [
-                {'name': 'Ola Nordmann', 'club': 'K', 'personId': 'p1'},
-                {'name': 'Kari Nordmann', 'club': 'K'},
-                {'name': 'Fused, Tail'},
-            ]}])],
+        self._write_bundle({
+            'c1': {
+                'compId': 'c1', 'generator': 'inrX 1',
+                'ovelser': [_ovelse('X', [{'klasse': 'A', 'rows': [
+                    {'name': 'Ola Nordmann', 'club': 'K', 'personId': 'p1'},
+                    {'name': 'Kari Nordmann', 'club': 'K'},
+                    {'name': 'Fused, Tail'},
+                ]}])],
+            },
         })
         report = census_corpus(self.root)
         self.assertEqual(report['files'], 1)
         self.assertEqual(report['checks']['fused_comma']['count'], 1)
-        self.assertEqual(
-            report['checks']['fused_comma']['samples'][0]['file'],
-            'detaljer/bane/2021/c1.json')
+        sample = report['checks']['fused_comma']['samples'][0]
+        self.assertEqual(sample['compId'], 'c1')
+        self.assertNotIn('file', sample)
         self.assertEqual(report['champ_titled_unindexed']['count'], 0)
         cov = report['coverage_worst'][0]
         self.assertEqual((cov['matched'], cov['persons']), (1, 3))
+        self.assertEqual(cov['compId'], 'c1')
 
 
 class DiffAndMain(unittest.TestCase):
@@ -257,31 +265,31 @@ class DiffAndMain(unittest.TestCase):
 
     def test_save_baseline_then_diff(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = os.path.join(tmp, 'data')
-            os.makedirs(os.path.join(root, 'detaljer', 'bane', '2021'))
-            os.makedirs(os.path.join(root, 'bane'))
-            with open(os.path.join(root, 'bane', '2021.json'), 'w',
+            root = tmp
+            bane = os.path.join(root, 'public', 'data', 'bane')
+            os.makedirs(bane)
+            with open(os.path.join(bane, '2021.json'), 'w',
                       encoding='utf-8') as f:
                 json.dump({'competitions': []}, f)
-            detail_path = os.path.join(root, 'detaljer', 'bane', '2021',
-                                       'c1.json')
-            with open(detail_path, 'w', encoding='utf-8') as f:
-                json.dump({'compId': 'c1', 'generator': 'inrX 1',
-                           'ovelser': [_ovelse('X', [
-                               {'klasse': 'A', 'rows': [
-                                   {'name': 'Clean'}]}])]}, f)
+            write_bundle_if_changed(
+                bundle_path('bane', 2021, root=root), {'c1': {
+                    'compId': 'c1', 'generator': 'inrX 1',
+                    'ovelser': [_ovelse('X', [
+                        {'klasse': 'A', 'rows': [
+                            {'name': 'Clean'}]}])]}})
             baseline = os.path.join(tmp, 'baseline.json')
             with redirect_stdout(io.StringIO()):
-                main(['--data-dir', root, '--save-baseline', baseline])
-            with open(detail_path, 'w', encoding='utf-8') as f:
-                json.dump({'compId': 'c1', 'generator': 'inrX 1',
-                           'ovelser': [_ovelse('X', [
-                               {'klasse': 'A', 'rows': [
-                                   {'name': 'Clean'},
-                                   {'name': 'Fused, Tail'}]}])]}, f)
+                main(['--root', root, '--save-baseline', baseline])
+            write_bundle_if_changed(
+                bundle_path('bane', 2021, root=root), {'c1': {
+                    'compId': 'c1', 'generator': 'inrX 1',
+                    'ovelser': [_ovelse('X', [
+                        {'klasse': 'A', 'rows': [
+                            {'name': 'Clean'},
+                            {'name': 'Fused, Tail'}]}])]}})
             buf = io.StringIO()
             with redirect_stdout(buf):
-                main(['--data-dir', root, '--diff', baseline, '--json'])
+                main(['--root', root, '--diff', baseline, '--json'])
             delta = json.loads(buf.getvalue())
             self.assertEqual(delta['fused_comma']['delta'], 1)
 
