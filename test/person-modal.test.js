@@ -419,11 +419,11 @@ assert.ok(pmTable.indexOf('aria-sort="ascending"') >= 0, 'the date column carrie
 
 var meritFixture = [
     { year: 2026, scope: 'km', ovelse: 'Felt Fin', klasse: 'U', region: 'Buskerud',
-      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null },
+      medal: 'Gull', compId: 'c1', compTitle: 'KM felt 2026', team: null, branch: 'felt' },
     { year: 2026, scope: 'km', ovelse: 'Felt Grov', klasse: 'Lag Å', region: 'Vestlandet',
-      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1' },
+      medal: 'Sølv', compId: 'c2', compTitle: 'KM felt 2026 lag', team: 'Tysnes SSK 1', branch: 'felt' },
     { year: 2025, scope: 'nm', ovelse: 'Felt Fin', klasse: null, region: null,
-      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null }
+      medal: 'Bronse', compId: 'c3', compTitle: 'NM felt 2025', team: null, branch: 'felt' }
 ];
 
 var chips = StandplassPersonModal.meritterChips(meritFixture);
@@ -495,10 +495,13 @@ var teamAt = meritBody.indexOf('Tysnes SSK 1');
 assert.ok(meritBody.indexOf('Lag Å') < teamAt && teamAt < meritBody.indexOf('Vestlandet'),
     'the team name sits inline between the class and the region, muted by its class');
 
-// comp links on: buttons carrying id + title for delegation
+// comp links on: buttons carrying id + year + title + branch for the
+// resultfile delegation (owner ruling 2026-11-27: both tabs' comp
+// links open the resultfile modal, mirroring the skammekroken attrs)
 assert.ok(meritBody.indexOf('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
-    + ' data-comp-id="c2" data-comp-title="KM felt 2026 lag">KM felt 2026 lag</button>') !== -1,
-    'comp titles render as link buttons carrying id + title for delegation');
+    + ' data-comp-id="c2" data-comp-year="2026" data-comp-title="KM felt 2026 lag"'
+    + ' data-comp-branch="felt">KM felt 2026 lag</button>') !== -1,
+    'comp titles render as link buttons carrying id, year, title and branch for delegation');
 
 // comp links off (and by default): plain spans, no buttons
 var plainBody = StandplassPersonModal.renderMeritterBody(meritFixture, { compLinks: false });

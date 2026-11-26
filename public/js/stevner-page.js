@@ -1051,17 +1051,14 @@ var StandplassStevnerPage = (function () {
                 { branch: otherBranch,
                   base: mestereOrigin + '/' + otherBranch + '/utfall' }
             ],
-            // Comp titles in the Meritter tab open the page's comp
-            // modal; hosts without one (klubb, nasjonalt, ...) pass no
-            // callback and get plain text instead.
-            onOpenComp: function (compId, compTitle) {
-                compModalHost.open(compId, compTitle);
-            },
-            // Skammekroken rows open the resultfile modal instead — the
-            // parsed file is the evidence for a status. The row's branch
-            // rides along as a per-comp detailBase so a cross-branch row
-            // resolves its own detaljer base (the same override the
-            // unified mesterskap page uses).
+            // Both tabs' comp links open the resultfile modal (owner
+            // ruling 2026-11-27 — the parsed file is the evidence for
+            // merits and statuses alike); the row's branch rides along
+            // as a per-comp detailBase so a cross-branch row resolves
+            // its own detaljer base (the same override the unified
+            // mesterskap page uses). Hosts without a resultfile modal
+            // (klubb, nasjonalt, ...) pass no callback and get plain
+            // text instead.
             onOpenResultfile: function (compId, year, title, branch, resultFileUrl) {
                 resultfileHost.open({
                     id: compId,

@@ -476,7 +476,7 @@ var StandplassPersonModalController = (function () {
                         }
                         var merits = StandplassMestereData.meritterForPerson(entries, personId);
                         panel.innerHTML = StandplassPersonModal.renderMeritterBody(merits, {
-                            compLinks: !!cfg.onOpenComp,
+                            compLinks: !!cfg.onOpenResultfile,
                             branch: merittBranch
                         });
                         // The switcher buttons re-render the panel from
@@ -709,13 +709,19 @@ var StandplassPersonModalController = (function () {
         ensureModalEl();
         // Meritter-tab comp links (delegated once on the persistent
         // modal element -- the buttons are re-rendered per person).
-        // Only rendered as buttons at all when the host passed an
-        // onOpenComp; the guard keeps a stray click a no-op even if
-        // markup changed underneath.
+        // Both tabs' comp links open the host's resultfile modal
+        // (owner ruling 2026-11-27: the parsed file is the evidence
+        // for merits and statuses alike; the comp modal stays a
+        // main-table affordance); the guard keeps a stray click a
+        // no-op even if markup changed underneath.
         modalEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.person-meritt-comp');
-            if (!btn || !cfg.onOpenComp) { return; }
-            cfg.onOpenComp(btn.getAttribute('data-comp-id'), btn.getAttribute('data-comp-title'));
+            if (!btn || !cfg.onOpenResultfile) { return; }
+            cfg.onOpenResultfile(btn.getAttribute('data-comp-id'),
+                btn.getAttribute('data-comp-year'),
+                btn.getAttribute('data-comp-title'),
+                btn.getAttribute('data-comp-branch'),
+                btn.getAttribute('data-comp-file'));
         });
         // Skammekroken-tab comp links (delegated once on the persistent
         // modal element, same guard pattern): the host's resultfile

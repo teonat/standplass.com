@@ -744,7 +744,9 @@ var StandplassPersonModal = (function () {
         if (compLinks && m.compId != null) {
             parts.push('<button type="button" class="stevner-person-btn link-btn person-meritt-comp"'
                 + ' data-comp-id="' + esc(m.compId) + '"'
-                + ' data-comp-title="' + title + '">' + title + '</button>');
+                + ' data-comp-year="' + esc(String(m.year)) + '"'
+                + ' data-comp-title="' + title + '"'
+                + ' data-comp-branch="' + esc(m.branch) + '">' + title + '</button>');
         } else {
             parts.push('<span class="person-meritt-comp">' + title + '</span>');
         }
@@ -756,8 +758,8 @@ var StandplassPersonModal = (function () {
     // merits; rows stay untagged), the chips row and the year-grouped
     // list, all computed from the branch-filtered merits.
     // opts.compLinks renders comp titles as delegated link buttons
-    // (hosts with a comp modal) instead of plain spans; opts.branch
-    // (null/undefined = Alle) filters the merits.
+    // (hosts with a resultfile modal) instead of plain spans;
+    // opts.branch (null/undefined = Alle) filters the merits.
     var BRANCH_ORDER = ['felt', 'bane'];
 
     function branchBtnHtml(branch, label, active) {
