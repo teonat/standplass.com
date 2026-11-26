@@ -4,10 +4,13 @@
     python3 .github/scripts/test_migrate_detaljer_bundles.py
 """
 
+import io
 import json
 import os
 import tempfile
+import types
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 
 import migrate_detaljer_bundles
 from detaljer_bundles import bundle_path, load_bundle, write_bundle_if_changed
@@ -201,6 +204,58 @@ class MigrateDetaljerBundles(unittest.TestCase):
         for branch, year in scopes:
             self.assertTrue(os.path.isdir(year_dir(self.root, branch, year)))
         self.assertTrue(tampered and os.path.isfile(tampered[0]))
+
+    def test_deletion_phase_failure_gives_distinct_guidance(self):
+        scopes = {
+            ('felt', 2023): {'comp-aa': detail('comp-aa')},
+            ('bane', 2024): {'comp-bb': detail('comp-bb')},
+        }
+        write_old_tree(self.root, scopes)
+        real_shutil = migrate_detaljer_bundles.shutil
+        rmtree_calls = []
+
+        def failing_rmtree(path, *args, **kwargs):
+            rmtree_calls.append(path)
+            if len(rmtree_calls) == 2:  # second scope's year dir
+                raise OSError('cannot remove: disk error')
+            return real_shutil.rmtree(path, *args, **kwargs)
+
+        # swap the module's shutil binding (not the shared module)
+        # so only the migration's rmtree fails
+        migrate_detaljer_bundles.shutil = types.SimpleNamespace(
+            rmtree=failing_rmtree)
+        err = io.StringIO()
+        try:
+            with redirect_stderr(err):
+                code = migrate_detaljer_bundles.main(root=self.root)
+        finally:
+            migrate_detaljer_bundles.shutil = real_shutil
+
+        self.assertEqual(code, 1)
+        # deletion-phase guidance: keep the verified bundles, finish by
+        # hand — never advice to delete the bundles and re-run
+        self.assertIn('do NOT delete', err.getvalue())
+        self.assertNotIn('re-run', err.getvalue())
+        # every verified bundle survives; the first scope's old dir is
+        # gone, the failed one remains for manual removal
+        self.assertTrue(os.path.isfile(
+            bundle_path('bane', 2024, root=self.root)))
+        self.assertTrue(os.path.isfile(
+            bundle_path('felt', 2023, root=self.root)))
+        self.assertFalse(os.path.isdir(year_dir(self.root, 'bane', 2024)))
+        self.assertTrue(os.path.isdir(year_dir(self.root, 'felt', 2023)))
+
+    def test_no_scopes_found_is_an_error(self):
+        # an empty root (e.g. wrong CWD) must not report a successful
+        # "0 scopes migrated" run
+        err = io.StringIO()
+        out = io.StringIO()
+        with redirect_stderr(err), redirect_stdout(out):
+            code = migrate_detaljer_bundles.main(root=self.root)
+
+        self.assertEqual(code, 1)
+        self.assertIn('nothing to migrate', err.getvalue())
+        self.assertNotIn('scopes', out.getvalue())
 
 
 if __name__ == '__main__':

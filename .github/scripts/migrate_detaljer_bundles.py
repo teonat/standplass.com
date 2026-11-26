@@ -8,8 +8,7 @@ Every per-comp file is read and checked (compId == filename stem),
 every scope's bundle is written, then each written bundle is
 re-verified — comp count plus per-comp deep-equality with the source
 files — and only after every scope verified are the old year
-directories removed (branch dirs stay). A failure at any step deletes
-nothing.
+directories removed (branch dirs stay).
 
 One-shot guard: migrate refuses to start when any bundle already
 exists. On a mixed tree (bundles plus straggler per-comp files) a
@@ -18,9 +17,12 @@ clobber it — and its own count check would pass, because the
 baseline is whatever it happened to read. The guard makes that state
 unreachable.
 
-Recovery from a failed run: delete any bundles it managed to write
-and re-run — bundles are derived data, and the old tree is the source
-of truth until it has been verified and replaced.
+Recovery: a failure before deletion begins leaves the old tree fully
+intact — delete the bundles the run wrote and re-run (bundles are
+derived data). A failure during deletion is the opposite state: every
+bundle is already written and verified, so do NOT delete them —
+remove the remaining old year directories by hand and the migration
+is complete (DeletionIncomplete lists them).
 
 Run from the repo root:
 
@@ -43,6 +45,14 @@ from detaljer_bundles import (
     load_bundle,
     write_bundle_if_changed,
 )
+
+
+class DeletionIncomplete(RuntimeError):
+    """A migration failure during the deletion phase: every bundle is
+    written and verified, but only some old year directories were
+    removed. The bundles are the only complete copy at this point —
+    they must not be deleted; the remaining directories are removed
+    by hand."""
 
 
 def _year_dirs(root):
@@ -98,20 +108,31 @@ def migrate(root='.'):
 
     All-or-nothing: every scope is read, every bundle written, every
     written bundle re-verified against the source files, and only
-    then are the old year directories removed. Any failure — an
-    existing bundle (the one-shot guard), a compId that does not
-    match its filename, a verification mismatch — raises before
-    anything is deleted.
+    then are the old year directories removed. Failures before that
+    deletion — an existing bundle (the one-shot guard), no scopes
+    found, a compId that does not match its filename, a verification
+    mismatch — raise with the old tree fully intact. A failure during
+    the deletion raises DeletionIncomplete instead: every bundle is
+    complete and verified, only the old-dir cleanup is partial.
     """
     if has_any_bundle(root):
         raise RuntimeError(
             'bundles already exist under '
             f'{os.path.join(root, DATA_DIR, "detaljer")}; the migration '
-            'is one-shot — delete them first (they are derived data; '
-            'the old tree is the source of truth)')
+            'is one-shot. Delete-and-re-run is safe only when a failed '
+            'run deleted nothing — every old year directory still '
+            'present (bundles are derived data). If any year directory '
+            'is already gone, the bundles are the only complete copy: '
+            'keep them and remove the remaining year directories by '
+            'hand')
 
     scopes = [(branch, year, year_dir, _read_comps(year_dir))
               for branch, year, year_dir in _year_dirs(root)]
+    if not scopes:
+        raise RuntimeError(
+            'no per-comp detail year directories found under '
+            f'{os.path.join(root, DATA_DIR, "detaljer")} — nothing to '
+            'migrate; run from the repo root')
 
     # write every scope's bundle first; nothing is deleted until all
     # of them verify
@@ -140,10 +161,26 @@ def migrate(root='.'):
                     'differs from its source file; nothing has been '
                     'deleted')
 
-    # every scope verified — the old tree can go
+    # every scope verified — the old tree can go. A failure from here
+    # on means the bundles are the only complete copy: they must NOT
+    # be deleted; the remaining directories are removed by hand.
+    deleted = []
+    try:
+        for branch, year, year_dir, comps in scopes:
+            shutil.rmtree(year_dir)
+            deleted.append((branch, year, comps))
+    except (OSError, KeyboardInterrupt) as exc:
+        remaining = [year_dir for _b, _y, year_dir, _c in scopes
+                     if os.path.isdir(year_dir)]
+        raise DeletionIncomplete(
+            f'old-directory removal failed partway ({exc!r}); every '
+            'bundle is written and verified — do NOT delete them; '
+            'remove the remaining old year directories by hand and the '
+            'migration is complete (still present: '
+            f'{", ".join(remaining)})') from exc
+
     summary = {}
-    for branch, year, year_dir, comps in scopes:
-        shutil.rmtree(year_dir)
+    for branch, year, comps in deleted:
         summary[(branch, year)] = {
             'branch': branch,
             'year': year,
@@ -153,11 +190,13 @@ def migrate(root='.'):
     return summary
 
 
-def main():
-    """Run the migration from the repo root; returns an exit code."""
+def main(root='.'):
+    """Run the migration (repo root by default); returns an exit
+    code. Designed failures (RuntimeError) print one line to stderr
+    and exit 1; anything unexpected tracebacks."""
     try:
-        summary = migrate()
-    except Exception as exc:
+        summary = migrate(root=root)
+    except RuntimeError as exc:
         print(f'migration failed: {exc}', file=sys.stderr)
         return 1
     for stats in summary.values():
