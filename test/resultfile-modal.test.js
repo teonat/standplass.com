@@ -257,11 +257,11 @@ assert.strictEqual(RFM.placeCellHtml({}), '–',
 
 // ── detailUrl (the open() fetch target, pure) ──────────────────────────
 assert.strictEqual(RFM.detailUrl('/data/detaljer/felt', { year: 2026, id: 'abc-1' }),
-    '/data/detaljer/felt/2026/abc-1.json',
-    'the host base + year + compId');
+    '/data/detaljer/felt/2026.json',
+    'the host base + the year bundle (the comp is looked up inside it)');
 assert.strictEqual(
     RFM.detailUrl('/data/detaljer', { year: 2025, id: 'x', detailBase: '/data/detaljer/bane' }),
-    '/data/detaljer/bane/2025/x.json',
+    '/data/detaljer/bane/2025.json',
     'a comp-level detailBase overrides the host default (branch-spanning pages)');
 
 console.log('resultfile-modal.test.js: all assertions passed');
