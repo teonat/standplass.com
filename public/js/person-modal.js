@@ -812,12 +812,17 @@ var StandplassPersonModal = (function () {
             + '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
     }
 
-    // Skammekroken (DNS/DNF/DSQ history). STATUS_TITLES mirrors
-    // resultfile-modal.js's twin — loading that module on every modal
-    // host (embeds included) would cost more than three static
-    // strings; keep the two in sync by hand.
-    var STATUS_TITLES = {
-        DNS: 'Ikke startet', DNF: 'Fullførte ikke', DSQ: 'Diskvalifisert'
+    // Skammekroken (DNS/DNF/DSQ history). Shooters know the
+    // abbreviations; verbose Norwegian titles read as different
+    // terms (owner ruling 2026-11-26). The tab shows the raw
+    // abbreviations — chips and row badges, the same idiom the
+    // resultfile modal's status badges use — and carries one
+    // legend line expanding them: English expansion + Norwegian
+    // gloss.
+    var STATUS_LEGEND = {
+        DNS: 'Did Not Start (startet aldri runden)',
+        DNF: 'Did Not Finish (fullførte ikke runden)',
+        DSQ: 'Disqualified (diskvalifisert)'
     };
     var STATUS_ORDER = ['DNS', 'DNF', 'DSQ'];
 
@@ -869,7 +874,7 @@ var StandplassPersonModal = (function () {
         });
         return STATUS_ORDER.filter(function (k) { return counts[k] > 0; })
             .map(function (k) {
-                return { key: k, label: STATUS_TITLES[k], count: counts[k] };
+                return { key: k, label: k, count: counts[k] };
             });
     }
 
@@ -898,7 +903,7 @@ var StandplassPersonModal = (function () {
                 + esc(s.klasse) + '</span>');
         }
         parts.push('<span class="resultfile-status">'
-            + esc(STATUS_TITLES[s.status] || String(s.status)) + '</span>');
+            + esc(s.status) + '</span>');
         if (s.team != null) {
             parts.push('<span class="person-utfall-team">lag: '
                 + esc(s.team) + '</span>');
@@ -907,8 +912,9 @@ var StandplassPersonModal = (function () {
     }
 
     // The Skammekroken tab's whole body: chips per present status
-    // (fixed DNS/DNF/DSQ order), entries grouped per year (newest
-    // first), rows reading date — stevne — øvelse, kl. — status.
+    // (fixed DNS/DNF/DSQ order, raw abbreviations), a muted legend
+    // line expanding them, entries grouped per year (newest first),
+    // rows reading date — stevne — øvelse, kl. — status.
     // opts.compLinks renders comp titles as delegated link buttons
     // (hosts with a resultfile modal) instead of plain spans;
     // opts.branch (null = Alle) filters the entries.
@@ -956,7 +962,12 @@ var StandplassPersonModal = (function () {
                 + '</div>';
         }
         return toggle
-            + '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
+            + '<div class="person-meritt-chips">' + chipsHtml + '</div>'
+            + '<p class="person-utfall-legend">'
+            + STATUS_ORDER.map(function (k) {
+                return k + ' = ' + STATUS_LEGEND[k];
+            }).join(' · ') + '</p>'
+            + listHtml;
     }
 
     return {

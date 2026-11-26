@@ -1368,6 +1368,15 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .person-utfall-team { color: var(--text-muted); }
 .person-meritt-row .person-utfall-comp { align-self: center; }
 
+/* One muted sentence under the chips expanding DNS/DNF/DSQ —
+   English expansion plus Norwegian gloss; the chips and row
+   badges show the raw abbreviations. */
+.person-utfall-legend {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
 /* A tab with nothing to show greys out and goes inert (the JS sets
    the inert attribute) — the same 0.5 the filter-group--inactive
    idiom uses. */

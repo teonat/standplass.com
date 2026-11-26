@@ -713,9 +713,20 @@ assert.strictEqual(StandplassPersonModal.renderSkammekrokenBody([]),
 
 var skamBody = StandplassPersonModal.renderSkammekrokenBody(collected,
     { compLinks: true });
-assert.ok(skamBody.indexOf('Ikke startet ×1') !== -1, 'DNS chip');
-assert.ok(skamBody.indexOf('Fullførte ikke ×1') !== -1, 'DNF chip');
-assert.ok(skamBody.indexOf('Diskvalifisert ×1') !== -1, 'DSQ chip');
+assert.ok(skamBody.indexOf('DNS ×1') !== -1
+    && skamBody.indexOf('DNF ×1') !== -1
+    && skamBody.indexOf('DSQ ×1') !== -1,
+    'chips use the raw abbreviations shooters know');
+assert.ok(skamBody.indexOf('resultfile-status">DNS</span>') !== -1,
+    'row badges show the raw abbreviation, the resultfile-modal idiom');
+assert.ok(skamBody.indexOf('person-utfall-legend') !== -1,
+    'the body carries the legend line');
+assert.ok(skamBody.indexOf('DNS = Did Not Start (startet aldri runden)') !== -1
+    && skamBody.indexOf('DNF = Did Not Finish (fullførte ikke runden)') !== -1
+    && skamBody.indexOf('DSQ = Disqualified (diskvalifisert)') !== -1,
+    'the legend expands each abbreviation with a Norwegian gloss');
+assert.ok(skamBody.indexOf('Ikke startet') === -1,
+    'no verbose Norwegian status titles');
 assert.ok(skamBody.indexOf('2025') !== -1
     && skamBody.indexOf('2024') !== -1, 'per-year headings');
 assert.ok(skamBody.indexOf('person-utfall-comp') !== -1,
