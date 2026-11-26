@@ -22,6 +22,13 @@ var StandplassData = (function () {
             return fetchJson(dataBase + '/' + year + '-mestere', dataBase + '-' + year + '.json');
         }
 
+        // Utfall indexes (public/data/<branch>/utfall-<year>.json) —
+        // the person modal's DNS/DNF/DSQ history. Dashed filename,
+        // same cache discipline as the mestere indexes.
+        function fetchUtfall(dataBase, year) {
+            return fetchJson(dataBase + '/' + year + '-utfall', dataBase + '-' + year + '.json');
+        }
+
         function fetchJson(key, url) {
             var entry = cache[key];
             var now = Date.now();
@@ -44,7 +51,7 @@ var StandplassData = (function () {
             cache = {};
         }
 
-        return { fetchYear: fetchYear, fetchBirthyears: fetchBirthyears, fetchMestere: fetchMestere, clearCache: clearCache };
+        return { fetchYear: fetchYear, fetchBirthyears: fetchBirthyears, fetchMestere: fetchMestere, fetchUtfall: fetchUtfall, clearCache: clearCache };
     }
 
     function applyFilter(rows, filter) {
