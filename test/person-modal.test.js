@@ -555,6 +555,47 @@ assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture,
 assert.strictEqual(StandplassPersonModal.findEntryIndex(entryFixture, null), -1,
     'no spec is no match');
 
+// ── resolveResultfileEntry (resultfile member → the modal's entry) ────
+// The resultfile's parsed øvelse names and the API's discipline names
+// are different vocabularies, so a member click resolves through the
+// comp's own API rows: the printed sum (the API score) picks the
+// øvelse when the person shot several in one comp. Null when nothing
+// resolves — the modal then opens without a filter or activation.
+
+var rfYear = {
+    competitions: [
+        { id: 'c1', startDate: '2026-07-28T12:30:00', results: [
+            { personId: 'p1', name: 'A', discipline: 'Magnumfelt 1', class: 'Åpen',
+              position: 1, score: 87 },
+            { personId: 'p1', name: 'A', discipline: 'Magnumfelt 2', class: 'Åpen',
+              position: 4, score: 83 },
+            { personId: 'p2', name: 'B', discipline: 'Magnumfelt 1', class: 'Åpen',
+              position: 2, score: 90 }
+        ] },
+        { id: 'c2', startDate: '2026-08-02T00:00:00', results: [
+            { personId: 'p3', name: 'C', discipline: 'Grovfelt', class: 'Å',
+              position: 1, score: 95 }
+        ] }
+    ]
+};
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', '87'),
+    { date: '2026-07-28', competitionId: 'c1', discipline: 'Magnumfelt 1', class: 'Åpen' },
+    'a printed sum picks the right øvelse among several in one comp');
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', '83'),
+    { date: '2026-07-28', competitionId: 'c1', discipline: 'Magnumfelt 2', class: 'Åpen' },
+    'the other sum picks the other øvelse');
+assert.deepStrictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c2', 'p3', null),
+    { date: '2026-08-02', competitionId: 'c2', discipline: 'Grovfelt', class: 'Å' },
+    'a single row in the comp resolves without a sum');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'p1', null), null,
+    'several rows and no printed sum — ambiguous, no activation');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'c1', 'pX', '87'), null,
+    'a person with no API row (DNS/DNF/DSQ or unmatched) resolves nothing');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(rfYear, 'cX', 'p1', '87'), null,
+    'an unknown comp resolves nothing');
+assert.strictEqual(StandplassPersonModal.resolveResultfileEntry(null, 'c1', 'p1', '87'), null,
+    'no year data resolves nothing');
+
 assert.strictEqual(StandplassPersonModal.activationMetric(
     { rankingScore: null, score: 94 }, 'rankingScore'), 'score',
     'a rankless entry activates on the poeng graph instead');

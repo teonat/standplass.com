@@ -1090,16 +1090,44 @@ var StandplassStevnerPage = (function () {
         // Person buttons inside the modal route through the page's
         // existing person modal via cfg, so the module stays
         // decoupled.
+        // A member click in the resultfile modal opens the person modal
+        // the way the main table's row buttons do — on the comp's year,
+        // pre-filtered to the øvelse, with the entry activated (the
+        // activation picks the chart metric per entry: ranked felt gets
+        // the ranking graph, unranked and bane fall back to poeng). The
+        // parsed øvelse names and the API's disciplines are different
+        // vocabularies, so the entry resolves through the comp's own API
+        // rows — the year JSON is cached by the page's fetcher, and the
+        // comp's detailBase carries its branch so a cross-branch
+        // resultfile resolves its own data. Nothing resolves (DNS/DNF/
+        // DSQ, unmatched, fetch failed) → a plain open.
+        var hostDetailBase = String(config.dataBase || '').replace(/\/[^/]*$/, '/detaljer$&');
         var resultfileHost = StandplassResultfileModal.ensureDialog({
             idPrefix: config.idPrefix,
             root: root,
-            detailBase: String(config.dataBase || '').replace(/\/[^/]*$/, '/detaljer$&'),
-            onPerson: function (btn) {
-                personModal.open(btn, {
-                    personId: btn.dataset.personId,
-                    personName: btn.dataset.personName,
-                    initialDisc: btn.dataset.discipline || null
-                });
+            detailBase: hostDetailBase,
+            onPerson: function (btn, comp) {
+                function plainOpen() {
+                    personModal.open(btn, {
+                        personId: btn.dataset.personId,
+                        personName: btn.dataset.personName
+                    });
+                }
+                var year = comp && comp.year ? Number(comp.year) : null;
+                if (!comp || !comp.id || !year) { plainOpen(); return; }
+                fetcher.fetchYear(String(comp.detailBase || hostDetailBase).replace('/detaljer', ''), year)
+                    .then(function (yearData) {
+                        var spec = StandplassPersonModal.resolveResultfileEntry(yearData,
+                            comp.id, btn.dataset.personId,
+                            btn.dataset.sum != null ? btn.dataset.sum : null);
+                        personModal.open(btn, {
+                            personId: btn.dataset.personId,
+                            personName: btn.dataset.personName,
+                            initialDisc: spec ? spec.discipline : null,
+                            entry: spec,
+                            year: year
+                        });
+                    }, plainOpen);
             }
         });
 

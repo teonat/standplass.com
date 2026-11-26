@@ -618,15 +618,37 @@ var StandplassMesterskapPage = (function () {
         // parsed result file. Every open carries the row's branch via
         // comp.detailBase — the host default never matters here;
         // person buttons inside route through the page's person modal.
+        // A member click resolves the member's API entry in the comp
+        // (the year JSON is cached by the page's fetcher; every resultfile
+        // open here carries its branch as detailBase) and opens the
+        // person modal like the main tables do: the comp's year, the
+        // øvelse pre-filtered, the entry activated. Nothing resolves → a
+        // plain open.
         var resultfileHost = StandplassResultfileModal.ensureDialog({
             idPrefix: 'mesterskap',
             root: root,
-            onPerson: function (btn) {
-                personModal.open(btn, {
-                    personId: btn.dataset.personId,
-                    personName: btn.dataset.personName,
-                    initialDisc: btn.dataset.discipline || null
-                });
+            onPerson: function (btn, comp) {
+                function plainOpen() {
+                    personModal.open(btn, {
+                        personId: btn.dataset.personId,
+                        personName: btn.dataset.personName
+                    });
+                }
+                var year = comp && comp.year ? Number(comp.year) : null;
+                if (!comp || !comp.id || !year || !comp.detailBase) { plainOpen(); return; }
+                fetcher.fetchYear(String(comp.detailBase).replace('/detaljer', ''), year)
+                    .then(function (yearData) {
+                        var spec = StandplassPersonModal.resolveResultfileEntry(yearData,
+                            comp.id, btn.dataset.personId,
+                            btn.dataset.sum != null ? btn.dataset.sum : null);
+                        personModal.open(btn, {
+                            personId: btn.dataset.personId,
+                            personName: btn.dataset.personName,
+                            initialDisc: spec ? spec.discipline : null,
+                            entry: spec,
+                            year: year
+                        });
+                    }, plainOpen);
             }
         });
         contentEl.addEventListener('click', function (e) {

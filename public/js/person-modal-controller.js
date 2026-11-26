@@ -799,7 +799,10 @@ var StandplassPersonModalController = (function () {
 
         function open(triggerEl, opts) {
             modalOpener = triggerEl || null;
-            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, cfg.defaultYear));
+            // opts.year opens the modal on a specific year — a resultfile
+            // member click resolves its entry on the comp's year; without
+            // it every open starts on the page's default year.
+            cfg.urlState.setSearch(StandplassPersonModal.buildPersonUrl(cfg.urlState.getSearch(), opts.personId, opts.year || cfg.defaultYear));
             // opts.metric rides renderPersonModal's urlFilters slot — the
             // same path a p_metric deep link takes — so an entry point can
             // ask for a specific chart (a placements leaderboard opens
