@@ -611,7 +611,7 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 }
 .stevner-comp-links .stevner-resultfile-btn .nav-beta-tag {
     position: absolute;
-    top: -0.45rem;
+    top: -0.65rem;
     right: -0.15rem;
     margin: 0;
     background: var(--surface-card);
