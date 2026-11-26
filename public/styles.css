@@ -1397,9 +1397,12 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 }
 
 /* A tab with nothing to show greys out and goes inert (the JS sets
-   the inert attribute) — the same 0.5 the filter-group--inactive
-   idiom uses. */
-.person-modal-tab-btn--inactive { opacity: 0.5; }
+   the inert attribute). Inert also suppresses pointer events, so a
+   not-allowed cursor can never fire — the dim itself has to carry
+   the disabled signal, and 0.5 read as still-clickable next to
+   Resultater (owner QA find 2026-11-27); 0.35 is deliberately
+   deeper than the filter-group--inactive idiom. */
+.person-modal-tab-btn--inactive { opacity: 0.35; }
 
 
 /* ── Competition-detail modal (native <dialog>) ─ */

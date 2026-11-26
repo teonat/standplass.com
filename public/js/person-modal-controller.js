@@ -412,12 +412,15 @@ var StandplassPersonModalController = (function () {
             // The tab pair lives in the fixed header, not the scrollable
             // body: the open-from-row activation scrolls the chart into
             // view, which would push a body-mounted pair out of sight
-            // (owner QA). HeaderExtras slot on showModal.
+            // (owner QA). HeaderExtras slot on showModal. Meritter and
+            // Skammekroken carry the house beta tag (nav-beta-tag, the
+            // Mesterskap/Resultatfil convention) — it comes off when
+            // the tabs leave beta.
             function personModalTabsMarkup() {
                 return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
                     + '<button type="button" class="program-btn person-modal-tab-btn program-btn--active" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
-                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
-                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="skammekroken" aria-pressed="false">Skammekroken</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter <span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="skammekroken" aria-pressed="false">Skammekroken <span class="nav-beta-tag" aria-hidden="true">beta</span></button>'
                     + '</div>';
             }
 
