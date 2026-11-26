@@ -10,8 +10,10 @@ import tempfile
 import unittest
 
 from mestere_index import build_mestere_index, mestere_path
+from utfall_index import utfall_path
 from parse_result_files import (
     PARSER_VERSION,
+    _write_indexes,
     detail_path,
     run,
     run_sweep,
@@ -471,6 +473,71 @@ class MestereIndex(unittest.TestCase):
             self.assertEqual(summary['parsed'], 0)
             self.assertEqual(summary['indexes_written'], 0)
             self.assertFalse(os.path.exists(path))
+
+
+class UtfallIndex(unittest.TestCase):
+    """utfall (status) indexes ride the same regen as the mestere
+    indexes: written only on change, absent for years with no
+    statuses, emptied when the statuses vanish, and produced by the
+    indexes-only path. Synthetic detaljer + year JSONs — no PDFs."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write_fixtures(self, with_status=True):
+        comp = make_comp('c1', 'https://example.com/r.pdf')
+        comp['startDate'] = '2025-08-16T00:00:00'
+        write_year(self.root, 'felt', '2025', [comp])
+        ddir = os.path.join(self.root, 'public', 'data', 'detaljer',
+                            'felt', '2025')
+        os.makedirs(ddir, exist_ok=True)
+        rows = ([{'name': 'Kari', 'personId': 'p1', 'status': 'DNS'}]
+                if with_status else [])
+        with open(os.path.join(ddir, 'c1.json'), 'w') as f:
+            json.dump({'compId': 'c1', 'generator': 'plain-NO',
+                       'ovelser': [{'navn': 'Felt Fin', 'classes': [
+                           {'klasse': 'A', 'rows': rows}]}]}, f)
+
+    def regen(self):
+        summary = {}
+        _write_indexes([('felt', '2025', None)], summary,
+                        self.root, False)
+        return summary
+
+    def test_write_only_on_change(self):
+        self.write_fixtures()
+        self.assertEqual(self.regen().get('utfall_written', 0), 1)
+        self.assertTrue(os.path.exists(
+            utfall_path('felt', '2025', root=self.root)))
+        self.assertEqual(self.regen().get('utfall_written', 0), 0)
+
+    def test_empty_year_gets_no_file(self):
+        self.write_fixtures(with_status=False)
+        self.assertEqual(self.regen().get('utfall_written', 0), 0)
+        self.assertFalse(os.path.exists(
+            utfall_path('felt', '2025', root=self.root)))
+
+    def test_emptied_year_empties_existing_file(self):
+        self.write_fixtures()
+        self.regen()
+        self.write_fixtures(with_status=False)
+        self.assertEqual(self.regen().get('utfall_written', 0), 1)
+        with open(utfall_path('felt', '2025', root=self.root)) as f:
+            self.assertEqual(json.load(f),
+                             {'year': 2025, 'comps': {}, 'persons': {}})
+
+    def test_indexes_only_path_produces_files(self):
+        self.write_fixtures()
+        summary = run({'indexes_only': True, 'full_scan': False,
+                       'year': None, 'branch': None, 'dry_run': False},
+                      root=self.root)
+        self.assertTrue(os.path.exists(
+            utfall_path('felt', '2025', root=self.root)))
+        self.assertGreaterEqual(summary.get('utfall_written', 0), 1)
 
 
 class EtagSweep(unittest.TestCase):

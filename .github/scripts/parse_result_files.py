@@ -32,6 +32,7 @@ import pdfplumber
 logging.getLogger('pdfminer').setLevel(logging.ERROR)
 
 from mestere_index import build_mestere_index, mestere_path
+from utfall_index import build_utfall_index, utfall_path
 from result_file_parse import PARSER_VERSION, UnsupportedFormatError, parse_result
 from result_file_matching import attach_person_ids, match_stats
 
@@ -264,15 +265,31 @@ def _detaljer_scopes(opts, root='.'):
     return scopes
 
 
+def _write_index_file(path, published, empty, summary, counter):
+    """Write an index only when its content actually changes; a year
+    with nothing to publish gets no file unless one already exists,
+    in which case it is emptied rather than left stale."""
+    if empty and not os.path.exists(path):
+        return
+    existing = None
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            existing = json.load(f)
+    if existing != published:
+        write_detail(path, published)
+        summary[counter] += 1
+
+
 def _write_indexes(targets, summary, root, dry_run):
-    """Regenerate the per-year mestere indexes for every (branch,
-    year) the targets touched; write only when the content actually
-    changes so daily runs produce no churn. A year whose comps all
-    lost their championship sections has its index emptied rather
-    than left stale, but years that never had an index get no empty
-    file. Classification warnings surface as a count in the run
-    summary, not in the published file."""
+    """Regenerate the per-year mestere and utfall indexes for every
+    (branch, year) the targets touched; write only when the content
+    actually changes so daily runs produce no churn. A year whose
+    comps all lost their championship sections (or statuses) has its
+    index emptied rather than left stale, but years that never had an
+    index get no empty file. Classification warnings surface as a
+    count in the run summary, not in the published file."""
     summary['indexes_written'] = 0
+    summary['utfall_written'] = 0
     summary['mestere_warnings'] = 0
     if dry_run:
         return
@@ -280,17 +297,15 @@ def _write_indexes(targets, summary, root, dry_run):
     for branch, year in scopes:
         index = build_mestere_index(branch, year, root=root)
         summary['mestere_warnings'] += len(index['warnings'])
-        path = mestere_path(branch, year, root=root)
         published = {'year': index['year'], 'comps': index['comps']}
-        if not published['comps'] and not os.path.exists(path):
-            continue
-        existing = None
-        if os.path.exists(path):
-            with open(path, encoding='utf-8') as f:
-                existing = json.load(f)
-        if existing != published:
-            write_detail(path, published)
-            summary['indexes_written'] += 1
+        _write_index_file(mestere_path(branch, year, root=root),
+                          published, not published['comps'], summary,
+                          'indexes_written')
+
+        utfall = build_utfall_index(branch, year, root=root)
+        _write_index_file(utfall_path(branch, year, root=root),
+                          utfall, not utfall['persons'], summary,
+                          'utfall_written')
 
 
 def _new_summary():
