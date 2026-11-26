@@ -91,6 +91,21 @@ locs.forEach(function (loc) {
         path + ' must stay robots-allowed - pages fetch it while rendering');
 });
 
+// --- page titles: og:/twitter: must mirror <title> -------------------
+var htmlSpecial = { '/': 'index.html', '/mesterskap/': 'mesterskap/index.html' };
+locs.forEach(function (loc) {
+    var pathname = new URL(loc).pathname || '/';
+    var file = htmlSpecial[pathname] ||
+        pathname.replace(/^\//, '').replace(/\/$/, '') + '.html';
+    var html = fs.readFileSync(__dirname + '/../public/' + file, 'utf8');
+    var title = (/<title>([^<]*)<\/title>/.exec(html) || [])[1];
+    var og = (/property="og:title" content="([^"]*)"/.exec(html) || [])[1];
+    var twitter = (/name="twitter:title" content="([^"]*)"/.exec(html) || [])[1];
+    assert.ok(title, file + ' has a <title>');
+    assert.strictEqual(og, title, file + ': og:title must mirror <title>');
+    assert.strictEqual(twitter, title, file + ': twitter:title must mirror <title>');
+});
+
 // --- raw data must stay out of search results (not out of crawlers) --
 // The noindex lives in _headers, not robots.txt: it excludes /data/*
 // from indexing without blocking the fetches page rendering needs.
