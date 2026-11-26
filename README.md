@@ -72,8 +72,10 @@ the workflow retries itself up to three times.
 ### Result details
 
 `.github/workflows/parse-details.yml` parses the result PDFs behind
-each competition into `public/data/detaljer/` and a per-year
-championship index (`mestere-{year}.json` in each branch folder).
+each competition into `public/data/detaljer/`, a per-year
+championship index (`mestere-{year}.json` in each branch folder)
+and a per-year status index (`utfall-{year}.json`, each person's
+DNS/DNF/DSQ history — the person modal's Skammekroken tab).
 
 - **Daily 08:00 UTC** (after the scrapers) — parses new and updated
   competitions from the current and previous year files.

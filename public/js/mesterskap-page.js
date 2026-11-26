@@ -568,6 +568,19 @@ var StandplassMesterskapPage = (function () {
             onOpenComp: function (compId, compTitle) {
                 if (compModalHost) { compModalHost.open(compId, compTitle); }
             },
+            // Skammekroken rows open the resultfile modal (the parsed
+            // file is the evidence for a status); every open carries the
+            // row's branch as a per-comp detailBase — the same override
+            // the Arrangement links use (ruling 15).
+            onOpenResultfile: function (compId, year, title, branch, resultFileUrl) {
+                resultfileHost.open({
+                    id: compId,
+                    year: Number(year),
+                    title: title || '',
+                    resultFileUrl: resultFileUrl || null,
+                    detailBase: '/data/detaljer/' + branch
+                });
+            },
             fetchEntriesForYear: fetchEntriesForYear,
             defaultYear: ar,
             firstYear: FIRST_YEAR,

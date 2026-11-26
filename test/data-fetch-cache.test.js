@@ -62,7 +62,29 @@ Promise.all([fetcher.fetchYear('/data/felt', 2026), fetcher.fetchYear('/data/fel
                     assert.strictEqual(idx[0].url, '/data/felt/mestere-2025.json',
                         'mestere files live at {branch}/mestere-{year}.json');
 
-                    console.log('data-fetch-cache.test.js: all assertions passed');
+                    // fetchUtfall: the person modal's per-year status
+                    // index — same dashed {base}-{year}.json shape as
+                    // the mestere indexes, same cache discipline.
+                    var utfallCallCount = 0;
+                    function fakeUtfallFetch(url) {
+                        utfallCallCount++;
+                        return Promise.resolve({
+                            ok: true,
+                            json: function () { return Promise.resolve({ url: url }); }
+                        });
+                    }
+                    var utfallFetcher = StandplassData.createFetcher(fakeUtfallFetch, 60000);
+                    return Promise.all([
+                        utfallFetcher.fetchUtfall('/data/felt/utfall', 2025),
+                        utfallFetcher.fetchUtfall('/data/felt/utfall', 2025)
+                    ]).then(function (idx2) {
+                        assert.strictEqual(utfallCallCount, 1,
+                            'second utfall call served from cache');
+                        assert.strictEqual(idx2[0].url, '/data/felt/utfall-2025.json',
+                            'utfall files live at {branch}/utfall-{year}.json');
+
+                        console.log('data-fetch-cache.test.js: all assertions passed');
+                    });
                 });
             });
     })

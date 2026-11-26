@@ -1361,6 +1361,46 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .person-meritt-team,
 .person-meritt-region { color: var(--text-muted); }
 
+/* ── Person modal — Skammekroken tab ── */
+/* Rows ride the meritt row chrome; the date and the lag sub-line
+   read muted like the meritt scope/team spans. */
+.person-utfall-date,
+.person-utfall-team { color: var(--text-muted); }
+.person-meritt-row .person-utfall-comp { align-self: center; }
+
+/* The count sub-pills inside the status chips: the numbers sit in
+   their own small rounded pills, so the word/badge contrast splits
+   the individual and lag segments — no literal separator character.
+   The muted-badge recipe .comp-modal-badge--no uses; every var here
+   is redefined per [data-mode="dark"] in themes.css, so no dark
+   override rule is needed. */
+.person-utfall-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: 9999px;
+    background: var(--border-faint);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
+
+/* One muted sentence under the chips expanding DNS/DNF/DSQ —
+   English expansion plus Norwegian gloss; the chips and row
+   badges show the raw abbreviations. */
+.person-utfall-legend {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+/* A tab with nothing to show greys out and goes inert (the JS sets
+   the inert attribute) — the same 0.5 the filter-group--inactive
+   idiom uses. */
+.person-modal-tab-btn--inactive { opacity: 0.5; }
+
 
 /* ── Competition-detail modal (native <dialog>) ─ */
 /* A native <dialog>'s UA default is background:white/color:black -- unlike

@@ -1017,6 +1017,8 @@ var StandplassStevnerPage = (function () {
         // modal's detailBase; the felt/bane segment swaps for the
         // sibling branch.
         var mestereOrigin = String(config.dataBase || '').replace(/\/(felt|bane)$/, '');
+        var ownBranch = view === 'bane' ? 'bane' : 'felt';
+        var otherBranch = view === 'bane' ? 'felt' : 'bane';
         var personModalCfg = {
             idPrefix: config.idPrefix,
             root: root,
@@ -1040,11 +1042,34 @@ var StandplassStevnerPage = (function () {
                 { branch: view === 'bane' ? 'felt' : 'bane',
                   base: mestereOrigin + '/' + (view === 'bane' ? 'felt' : 'bane') + '/mestere' }
             ],
+            // The Skammekroken tab's data, same origin derivation as
+            // the mestere bases (absolute in embeds, site-relative
+            // on standplass.com).
+            utfallBases: [
+                { branch: ownBranch,
+                  base: mestereOrigin + '/' + ownBranch + '/utfall' },
+                { branch: otherBranch,
+                  base: mestereOrigin + '/' + otherBranch + '/utfall' }
+            ],
             // Comp titles in the Meritter tab open the page's comp
             // modal; hosts without one (klubb, nasjonalt, ...) pass no
             // callback and get plain text instead.
             onOpenComp: function (compId, compTitle) {
                 compModalHost.open(compId, compTitle);
+            },
+            // Skammekroken rows open the resultfile modal instead — the
+            // parsed file is the evidence for a status. The row's branch
+            // rides along as a per-comp detailBase so a cross-branch row
+            // resolves its own detaljer base (the same override the
+            // unified mesterskap page uses).
+            onOpenResultfile: function (compId, year, title, branch, resultFileUrl) {
+                resultfileHost.open({
+                    id: compId,
+                    year: Number(year),
+                    title: title || '',
+                    resultFileUrl: resultFileUrl || null,
+                    detailBase: mestereOrigin + '/detaljer/' + branch
+                });
             }
         };
         var personModal = StandplassPersonModalController.create(personModalCfg);

@@ -64,8 +64,9 @@ var StandplassPersonModal = (function () {
     // reads these, it always starts from defaults. For p_type/p_disc/
     // p_class, an absent param and an empty list are the same thing --
     // unfiltered -- so the caller normalizes both to [] at init.
-    // p_tab/p_branch deep-link the Meritter tab and its branch filter;
-    // unknown values fall back to the defaults (Resultater / Alle).
+    // p_tab/p_branch deep-link the Meritter and Skammekroken tabs and
+    // their shared branch filter; unknown values fall back to the
+    // defaults (Resultater / Alle).
     function parsePersonFilterParams(search) {
         var params = new URLSearchParams(search);
         function splitList(key) {
@@ -83,7 +84,8 @@ var StandplassPersonModal = (function () {
             discs: splitList('p_disc'),
             classes: splitList('p_class'),
             metric: params.get('p_metric') || null,
-            tab: params.get('p_tab') === 'meritter' ? 'meritter' : null,
+            tab: params.get('p_tab') === 'meritter' ? 'meritter'
+                : params.get('p_tab') === 'skammekroken' ? 'skammekroken' : null,
             branch: branch === 'felt' || branch === 'bane' ? branch : null,
             entry: parseEntryParam(params.get('p_entry'))
         };
@@ -96,7 +98,8 @@ var StandplassPersonModal = (function () {
     // exactly that until something's actually changed inside the
     // modal). state: { selectedYears, activeYear, types, discs,
     // classes, metric, defaultMetric, tab?, branch? } -- tab is
-    // 'meritter' or null, branch 'felt'/'bane' or null (Alle).
+    // 'meritter'/'skammekroken' or null, branch 'felt'/'bane' or null
+    // (Alle).
     function buildPersonFilterParams(state) {
         var isDefaultYears = state.selectedYears.length === 1 && state.selectedYears[0] === state.activeYear;
         // Empty filter list = unfiltered, so it writes no param (same as
@@ -111,7 +114,8 @@ var StandplassPersonModal = (function () {
             p_disc: list(state.discs),
             p_class: list(state.classes),
             p_metric: (state.metric && state.metric !== state.defaultMetric) ? state.metric : null,
-            p_tab: state.tab === 'meritter' ? 'meritter' : null,
+            p_tab: state.tab === 'meritter' || state.tab === 'skammekroken'
+                ? state.tab : null,
             p_branch: branch,
             p_entry: formatEntryParam(state.entry)
         };
@@ -770,8 +774,15 @@ var StandplassPersonModal = (function () {
         var branches = BRANCH_ORDER.filter(function (b) {
             return merits.some(function (m) { return m.branch === b; });
         });
-        var shown = opts.branch
-            ? merits.filter(function (m) { return m.branch === opts.branch; })
+        // The shared branch filter (ruling 7) can point at a branch
+        // this person has nothing in on this tab — carried from the
+        // other tab's switcher, or a stale p_branch deep link. A
+        // filter that matches nothing falls back to unfiltered rather
+        // than a blank, switcher-less panel.
+        var branch = opts.branch && branches.indexOf(opts.branch) !== -1
+            ? opts.branch : null;
+        var shown = branch
+            ? merits.filter(function (m) { return m.branch === branch; })
             : merits;
         var chipsHtml = meritterChips(shown).map(function (c) {
             var counts = MERITT_MEDALS.filter(function (md) { return c.counts[md.name] > 0; })
@@ -797,15 +808,198 @@ var StandplassPersonModal = (function () {
         var toggle = '';
         if (branches.length > 1) {
             toggle = '<div class="program-toggle person-meritt-branch-toggle" role="group" aria-label="Gren">'
-                + branchBtnHtml('', 'Alle', !opts.branch)
+                + branchBtnHtml('', 'Alle', !branch)
                 + branches.map(function (b) {
                     return branchBtnHtml(b, b.charAt(0).toUpperCase() + b.slice(1),
-                        opts.branch === b);
+                        branch === b);
                 }).join('')
                 + '</div>';
         }
         return toggle
             + '<div class="person-meritt-chips">' + chipsHtml + '</div>' + listHtml;
+    }
+
+    // Skammekroken (DNS/DNF/DSQ history). Shooters know the
+    // abbreviations; verbose Norwegian titles read as different
+    // terms (owner ruling 2026-11-26). The tab shows the raw
+    // abbreviations — chips and row badges, the same idiom the
+    // resultfile modal's status badges use — and carries one
+    // legend line expanding them: English expansion + Norwegian
+    // gloss.
+    var STATUS_LEGEND = {
+        DNS: 'Did Not Start (startet aldri runden)',
+        DNF: 'Did Not Finish (fullførte ikke runden)',
+        DSQ: 'Disqualified (diskvalifisert)'
+    };
+    var STATUS_ORDER = ['DNS', 'DNF', 'DSQ'];
+
+    // The controller's loaded utfall indexes ([{year, branch,
+    // index}]) → the person's entries joined with their comps
+    // metadata, newest year first, date desc within a year. Years
+    // whose fetch failed are simply absent from the input; a person
+    // with no statuses collects nothing.
+    function collectStatusEntries(indexEntries, personId) {
+        var out = [];
+        (indexEntries || []).forEach(function (loaded) {
+            var index = loaded && loaded.index;
+            var entries = index && index.persons
+                && index.persons[personId];
+            (entries || []).forEach(function (e) {
+                var comp = (index.comps || {})[e.compId] || {};
+                out.push({
+                    year: loaded.year,
+                    branch: loaded.branch,
+                    compId: e.compId,
+                    date: comp.date != null ? comp.date : null,
+                    title: comp.title != null ? comp.title : null,
+                    resultFileUrl: comp.resultFileUrl != null
+                        ? comp.resultFileUrl : null,
+                    ovelse: e.ovelse,
+                    klasse: e.klasse != null ? e.klasse : null,
+                    status: e.status,
+                    lag: e.lag === true,
+                    team: e.team != null ? e.team : null
+                });
+            });
+        });
+        out.sort(function (a, b) {
+            if (a.year !== b.year) { return b.year - a.year; }
+            if (a.date !== b.date) { return a.date < b.date ? 1 : -1; }
+            if (a.compId !== b.compId) {
+                return a.compId < b.compId ? -1 : 1;
+            }
+            return a.ovelse < b.ovelse ? -1
+                : (a.ovelse > b.ovelse ? 1 : 0);
+        });
+        return out;
+    }
+
+    function skammekrokenChips(statuses) {
+        // One chip per status definition (owner ruling 2026-11-26):
+        // "DSQ: 1 | Lag: 1" — the individual count, then the lag
+        // count in the same pill, shown only when the person has lag
+        // starts with that status. The two classifications of one
+        // start never sum into one number; a lag-only status keeps
+        // its pill with a zero individual count. Unknown statuses
+        // stay uncounted.
+        var counts = {};
+        statuses.forEach(function (s) {
+            if (STATUS_ORDER.indexOf(s.status) === -1) { return; }
+            var c = counts[s.status];
+            if (!c) { c = counts[s.status] = { ind: 0, lag: 0 }; }
+            if (s.lag) { c.lag += 1; } else { c.ind += 1; }
+        });
+        return STATUS_ORDER.filter(function (k) { return counts[k]; })
+            .map(function (k) {
+                return { key: k, count: counts[k].ind, lagCount: counts[k].lag };
+            });
+    }
+
+    // The count sub-pills inside a skammekroken chip (owner ruling
+    // 2026-11-26): the numbers sit in their own small pills — the
+    // word/badge contrast splits the segments, no literal separator
+    // character.
+    function utfallCountBadge(n) {
+        return '<span class="person-utfall-count">' + n + '</span>';
+    }
+
+    function skammekrokenRowHtml(s, compLinks) {
+        var parts = ['<span class="person-utfall-date">'
+            + (s.date ? esc(shortDate(s.date)) : '') + '</span>'];
+        var title = s.title == null ? '' : esc(s.title);
+        if (compLinks && s.compId != null) {
+            var attrs = ' data-comp-id="' + esc(s.compId) + '"'
+                + ' data-comp-year="' + esc(String(s.year)) + '"'
+                + ' data-comp-title="' + title + '"'
+                + ' data-comp-branch="' + esc(s.branch) + '"';
+            if (s.resultFileUrl) {
+                attrs += ' data-comp-file="' + esc(s.resultFileUrl) + '"';
+            }
+            parts.push('<button type="button"'
+                + ' class="stevner-person-btn link-btn person-utfall-comp"'
+                + attrs + '>' + title + '</button>');
+        } else {
+            parts.push('<span class="person-utfall-comp">' + title + '</span>');
+        }
+        parts.push('<span class="person-meritt-ovelse">'
+            + esc(s.ovelse) + '</span>');
+        if (s.klasse != null) {
+            parts.push('<span class="person-meritt-klasse">kl. '
+                + esc(s.klasse) + '</span>');
+        }
+        parts.push('<span class="resultfile-status">'
+            + esc(s.status) + '</span>');
+        if (s.team != null) {
+            parts.push('<span class="person-utfall-team">lag: '
+                + esc(s.team) + '</span>');
+        }
+        return '<div class="person-meritt-row">' + parts.join('') + '</div>';
+    }
+
+    // The Skammekroken tab's whole body: chips per present status
+    // (fixed DNS/DNF/DSQ order, raw abbreviations), a muted legend
+    // line expanding them, entries grouped per year (newest first),
+    // rows reading date — stevne — øvelse, kl. — status.
+    // opts.compLinks renders comp titles as delegated link buttons
+    // (hosts with a resultfile modal) instead of plain spans;
+    // opts.branch (null = Alle) filters the entries.
+    function renderSkammekrokenBody(statuses, opts) {
+        if (!statuses || !statuses.length) {
+            return '<p class="ranking-status-msg">Ingen registrerte utfall.</p>';
+        }
+        opts = opts || {};
+        var branches = BRANCH_ORDER.filter(function (b) {
+            return statuses.some(function (s) { return s.branch === b; });
+        });
+        // Same fallback as renderMeritterBody: a shared branch filter
+        // that matches nothing here renders unfiltered, never a
+        // blank panel.
+        var branch = opts.branch && branches.indexOf(opts.branch) !== -1
+            ? opts.branch : null;
+        var shown = branch
+            ? statuses.filter(function (s) { return s.branch === branch; })
+            : statuses;
+        var chipsHtml = skammekrokenChips(shown).map(function (c) {
+            var inner = c.key + utfallCountBadge(c.count);
+            if (c.lagCount) { inner += 'Lag' + utfallCountBadge(c.lagCount); }
+            return '<span class="person-meritt-chip" data-kind="'
+                + esc(c.key) + '">' + inner + '</span>';
+        }).join('');
+        var years = [];
+        var byYear = {};
+        shown.forEach(function (s) {
+            if (!Object.prototype.hasOwnProperty.call(byYear, s.year)) {
+                byYear[s.year] = [];
+                years.push(s.year);
+            }
+            byYear[s.year].push(s);
+        });
+        years.sort(function (a, b) { return b - a; });
+        var listHtml = years.map(function (y) {
+            return '<h3 class="person-meritt-year">' + esc(String(y)) + '</h3>'
+                + byYear[y].map(function (s) {
+                    return skammekrokenRowHtml(s, !!opts.compLinks);
+                }).join('');
+        }).join('');
+        var toggle = '';
+        if (branches.length > 1) {
+            toggle = '<div class="program-toggle person-meritt-branch-toggle"'
+                + ' role="group" aria-label="Gren">'
+                + branchBtnHtml('', 'Alle', !branch)
+                + branches.map(function (b) {
+                    return branchBtnHtml(b,
+                        b.charAt(0).toUpperCase() + b.slice(1),
+                        branch === b);
+                }).join('')
+                + '</div>';
+        }
+        return toggle
+            + '<div class="person-meritt-chips">' + chipsHtml + '</div>'
+            + '<p class="person-utfall-legend">'
+            + STATUS_ORDER.map(function (k) {
+                return k + ' = ' + STATUS_LEGEND[k];
+            }).join(' · ') + '</p>'
+            + listHtml;
     }
 
     return {
@@ -816,6 +1010,8 @@ var StandplassPersonModal = (function () {
         resultsTableColumns: resultsTableColumns,
         meritterChips: meritterChips,
         renderMeritterBody: renderMeritterBody,
+        collectStatusEntries: collectStatusEntries,
+        renderSkammekrokenBody: renderSkammekrokenBody,
         chartPoints: chartPoints,
         dotColor: dotColor,
         computeOverlapCounts: computeOverlapCounts,
