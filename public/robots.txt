@@ -1,22 +1,4 @@
 User-agent: *
-Allow: /$
-Allow: /felt
-Allow: /bane
-Allow: /klubb
-Allow: /nasjonalt
-Allow: /terminliste
-Allow: /norgesfelt
-Allow: /klubbstatistikk
-Allow: /styles.css
-Allow: /themes.css
-Allow: /js/
-Allow: /img/
-Allow: /favicon.ico
-Allow: /sitemap.xml
-Allow: /manifest.webmanifest
-Allow: /llms.txt
-Allow: /.well-known/
-Allow: /embed.js
-Disallow: /
+Allow: /
 
 Sitemap: https://standplass.com/sitemap.xml
