@@ -323,9 +323,15 @@ var StandplassResultfileModal = (function () {
             if (e.target === dlg) { dlg.close(); }
         });
         if (onPerson) {
+            // A person modal opened from inside the dialog renders in the
+            // page layer, which the dialog's top layer always covers —
+            // a div overlay can never stack above a showModal() dialog,
+            // whatever its z-index. So the dialog closes as the person
+            // modal opens; the person modal's comp links (or the table's
+            // Resultatfil button) can reopen it.
             dlg.addEventListener('click', function (e) {
                 var btn = e.target.closest('.stevner-person-btn');
-                if (btn) { onPerson(btn); }
+                if (btn) { dlg.close(); onPerson(btn); }
             });
         }
 
