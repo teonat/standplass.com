@@ -629,6 +629,15 @@ var StandplassMesterskapPage = (function () {
             root: root,
             onPerson: function (btn, comp) {
                 var year = comp && comp.year ? Number(comp.year) : null;
+                // The stevne's branch decides the opening chart (the
+                // bane/unranked-vs-ranked-felt rule): a person clicked in
+                // a banestevne's resultfile opens on poeng, even when
+                // nothing resolves. Every resultfile open here carries
+                // its branch as detailBase; an unknown comp falls back to
+                // the page's gren-based default.
+                var compMetric = comp && comp.detailBase
+                    ? (String(comp.detailBase).indexOf('/bane') >= 0 ? 'score' : 'rankingScore')
+                    : null;
                 function plainOpen() {
                     // Unresolved clicks still open on the comp's year —
                     // the member's context; the page default only when the
@@ -636,7 +645,8 @@ var StandplassMesterskapPage = (function () {
                     personModal.open(btn, {
                         personId: btn.dataset.personId,
                         personName: btn.dataset.personName,
-                        year: year
+                        year: year,
+                        metric: compMetric
                     });
                 }
                 if (!comp || !comp.id || !year || !comp.detailBase) { plainOpen(); return; }
@@ -650,7 +660,8 @@ var StandplassMesterskapPage = (function () {
                             personName: btn.dataset.personName,
                             initialDisc: spec ? spec.discipline : null,
                             entry: spec,
-                            year: year
+                            year: year,
+                            metric: compMetric
                         });
                     }, plainOpen);
             }

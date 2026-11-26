@@ -676,7 +676,10 @@ var StandplassPersonModalController = (function () {
                 for (var i = 0; i < selectedYears.length && !resolvedName; i++) {
                     resolvedName = ((entriesByYear[selectedYears[i]] || [])[0] || {}).name;
                 }
-                if (!urlFilters) {
+                // initialDisc applies on direct opens even when open()
+                // passed a metric-only urlFilters (an entry point's chart
+                // request); a p_disc deep link is the only override.
+                if (!urlFilters || !urlFilters.discs) {
                     filters.discs = StandplassPersonModal.resolveInitialFilter(initialDisc, knownValues('discipline'));
                 }
                 modalDisplayName = resolvedName || modalDisplayName;

@@ -1027,14 +1027,25 @@ var StandplassStevnerPage = (function () {
             idPrefix: config.idPrefix,
             root: root,
             urlState: urlState,
+            // Cross-branch like the mesterskap page's gren=alle (owner
+            // ruling 2026-11-27): resultfile links cross branches freely
+            // (a felt page opens a bane comp's file via Skammekroken, and
+            // vice versa), so Resultater shows the person's rows from
+            // both branches, the page's own first. A branch that fails to
+            // load degrades to the other's rows.
             fetchEntriesForYear: function (personId, year) {
-                return fetcher.fetchYear(dataBase, year).then(function (yearData) {
-                    return flattenRows(yearData).filter(function (r) { return r.personId === personId; })
-                        .map(function (r) {
-                            return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
-                                competition: r.competition, competitionId: r.competitionId, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
-                        });
-                });
+                function fromBase(base) {
+                    return fetcher.fetchYear(base, year).then(function (yearData) {
+                        return flattenRows(yearData).filter(function (r) { return r.personId === personId; })
+                            .map(function (r) {
+                                return { date: r.date, discipline: r.discipline, class: r.class, competitionType: r.competitionType,
+                                    competition: r.competition, competitionId: r.competitionId, position: r.position, score: r.score, rankingScore: r.rankingScore, name: r.name };
+                            });
+                    }).catch(function () { return []; });
+                }
+                var otherBase = dataBase.replace(/(felt|bane)$/, function (b) { return b === 'bane' ? 'felt' : 'bane'; });
+                return Promise.all([fromBase(dataBase), fromBase(otherBase)])
+                    .then(function (pair) { return pair[0].concat(pair[1]); });
             },
             defaultYear: activeYear,
             firstYear: FIRST_YEAR,
@@ -1112,6 +1123,14 @@ var StandplassStevnerPage = (function () {
             detailBase: hostDetailBase,
             onPerson: function (btn, comp) {
                 var year = comp && comp.year ? Number(comp.year) : null;
+                // The stevne's branch decides the opening chart (the
+                // bane/unranked-vs-ranked-felt rule): a person clicked in
+                // a banestevne's resultfile opens on poeng, even when
+                // nothing resolves. The comp's detailBase carries its
+                // branch; a main-table resultfile carries none and falls
+                // back to the page's own.
+                var compMetric = String(comp && comp.detailBase || hostDetailBase).indexOf('/bane') >= 0
+                    ? 'score' : 'rankingScore';
                 function plainOpen() {
                     // Unresolved clicks still open on the comp's year —
                     // the member's context; the page default only when the
@@ -1119,7 +1138,8 @@ var StandplassStevnerPage = (function () {
                     personModal.open(btn, {
                         personId: btn.dataset.personId,
                         personName: btn.dataset.personName,
-                        year: year
+                        year: year,
+                        metric: compMetric
                     });
                 }
                 if (!comp || !comp.id || !year) { plainOpen(); return; }
@@ -1133,7 +1153,8 @@ var StandplassStevnerPage = (function () {
                             personName: btn.dataset.personName,
                             initialDisc: spec ? spec.discipline : null,
                             entry: spec,
-                            year: year
+                            year: year,
+                            metric: compMetric
                         });
                     }, plainOpen);
             }
