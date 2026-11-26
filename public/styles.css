@@ -1361,6 +1361,18 @@ tr[data-status="2"] .comp-detail-btn, tr[data-status="3"] .comp-detail-btn { bor
 .person-meritt-team,
 .person-meritt-region { color: var(--text-muted); }
 
+/* ── Person modal — Skammekroken tab ── */
+/* Rows ride the meritt row chrome; the date and the lag sub-line
+   read muted like the meritt scope/team spans. */
+.person-utfall-date,
+.person-utfall-team { color: var(--text-muted); }
+.person-meritt-row .person-utfall-comp { align-self: center; }
+
+/* A tab with nothing to show greys out and goes inert (the JS sets
+   the inert attribute) — the same 0.5 the filter-group--inactive
+   idiom uses. */
+.person-modal-tab-btn--inactive { opacity: 0.5; }
+
 
 /* ── Competition-detail modal (native <dialog>) ─ */
 /* A native <dialog>'s UA default is background:white/color:black -- unlike

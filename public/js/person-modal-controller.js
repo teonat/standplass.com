@@ -215,6 +215,53 @@ var StandplassPersonModalController = (function () {
             return mestereEntriesPromise;
         }
 
+        // The Skammekroken tab's data: both branches' utfall indexes,
+        // every year, fetched once per widget instance — the
+        // ensureMestereEntries pattern (per-year fetch failures are
+        // skipped years, not a broken tab; only every-fetch-failed
+        // surfaces an error in the panel). cfg.utfallBases defaults to
+        // the site-relative bases every standplass.com-hosted page can
+        // use; only the embeddable pages pass origin-absolute bases.
+        var statusEntriesPromise = null;
+        function ensureStatusEntries() {
+            if (!statusEntriesPromise) {
+                var fetcher = StandplassData.createFetcher(
+                    cfg.fetchImpl || window.fetch.bind(window));
+                var bases = cfg.utfallBases || [
+                    { branch: 'felt', base: '/data/felt/utfall' },
+                    { branch: 'bane', base: '/data/bane/utfall' }
+                ];
+                var years = [];
+                for (var y = cfg.firstYear; y <= cfg.currentYear; y++) { years.push(y); }
+                var jobs = [];
+                years.forEach(function (year) {
+                    bases.forEach(function (b) {
+                        jobs.push(fetcher.fetchUtfall(b.base, year).then(function (index) {
+                            return { year: year, branch: b.branch, index: index };
+                        }));
+                    });
+                });
+                statusEntriesPromise = Promise.all(jobs.map(function (job) {
+                    return job.catch(function () { return null; });
+                })).then(function (entries) {
+                    return entries.filter(Boolean);
+                });
+            }
+            return statusEntriesPromise;
+        }
+
+        // Ruling 4 (skammekroken design): a tab with nothing to show
+        // greys out and goes inert — never disappears, reactivates
+        // when the view again carries data (the mesterskap filter
+        // idiom). inert blocks clicks and keyboard only; programmatic
+        // switches (deep links) still work.
+        function setTabAvailable(btn, available) {
+            if (!btn) { return; }
+            btn.classList.toggle('person-modal-tab-btn--inactive', !available);
+            if (available) { btn.removeAttribute('inert'); }
+            else { btn.setAttribute('inert', ''); }
+        }
+
         var METRICS = [
             { key: 'rankingScore', label: 'Ranking' },
             { key: 'score', label: 'Poeng', title: 'Poengsum varierer med stevnets maks-score — ikke direkte sammenlignbar på tvers av stevner' },
@@ -243,8 +290,9 @@ var StandplassPersonModalController = (function () {
             // opts.metric.
             modalMetric = (urlFilters && urlFilters.metric)
                 || cfg.initialMetric || 'rankingScore';
-            // Deep-link state for the Meritter tab (p_tab/p_branch);
-            // plain row opens never carry it — Resultater/Alle.
+            // Deep-link state for the Meritter/Skammekroken tabs and
+            // their shared branch filter (p_tab/p_branch); plain row
+            // opens never carry it — Resultater/Alle.
             var personTab = (urlFilters && urlFilters.tab) || null;
             var merittBranch = (urlFilters && urlFilters.branch) || null;
             // A fresh open starts unactivated; a p_entry deep link
@@ -369,6 +417,7 @@ var StandplassPersonModalController = (function () {
                 return '<div class="program-toggle person-modal-tabs" role="group" aria-label="Visning">'
                     + '<button type="button" class="program-btn person-modal-tab-btn program-btn--active" data-person-tab="resultater" aria-pressed="true">Resultater</button>'
                     + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="meritter" aria-pressed="false">Meritter</button>'
+                    + '<button type="button" class="program-btn person-modal-tab-btn" data-person-tab="skammekroken" aria-pressed="false">Skammekroken</button>'
                     + '</div>';
             }
 
@@ -389,19 +438,34 @@ var StandplassPersonModalController = (function () {
                     + '<div id="' + cfg.idPrefix + '-person-chart"></div>'
                     + '<div class="person-table-scroll" id="' + cfg.idPrefix + '-person-table"></div>'
                     + '</div>'
-                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-meritter" hidden></div>';
+                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-meritter" hidden></div>'
+                    + '<div class="person-modal-tab-panel" id="' + cfg.idPrefix + '-person-tab-skammekroken" hidden></div>';
             }
 
-            // The Resultater/Meritter tab pair. The buttons are fresh
-            // per open (showModal replaces the body), so they're wired
-            // per open too; the active tab lives in the DOM (button
-            // classes + panel hidden), every fresh open starts on
-            // Resultater by markup default — unless the URL deep-links
-            // the Meritter tab, which the open flow handles with the
-            // returned switcher. Both the tab and the branch filter
-            // sync to p_tab/p_branch (non-default only).
+            // The Resultater/Meritter/Skammekroken tabs. The buttons
+            // are fresh per open (showModal replaces the body), so
+            // they're wired per open too; the active tab lives in the
+            // DOM (button classes + panel hidden), every fresh open
+            // starts on Resultater by markup default — unless the URL
+            // deep-links another tab, which the open flow handles with
+            // the returned switcher. Tab, and the shared branch filter
+            // (ruling 7), sync to p_tab/p_branch (non-default only).
+            // Panels re-render on every activation: the data is
+            // instance-cached (no refetch), and a render-once panel
+            // would go stale when the other tab's switcher moved the
+            // shared branch state.
             function wirePersonTabs() {
-                var meritterShown = false;
+                function wireBranchToggle(panel, rerender) {
+                    Array.prototype.forEach.call(
+                        panel.querySelectorAll('.person-meritt-branch-btn'),
+                        function (btn) {
+                            btn.addEventListener('click', function () {
+                                merittBranch = btn.getAttribute('data-branch') || null;
+                                rerender();
+                                syncCurrentPersonModalUrl();
+                            });
+                        });
+                }
                 function renderMerittPanel(panel) {
                     panel.innerHTML = '<p class="ranking-status-msg">Laster mesterskapsdata…</p>';
                     ensureMestereEntries().then(function (entries) {
@@ -417,15 +481,23 @@ var StandplassPersonModalController = (function () {
                         });
                         // The switcher buttons re-render the panel from
                         // the instance-cached entries — no refetch.
-                        Array.prototype.forEach.call(
-                            panel.querySelectorAll('.person-meritt-branch-btn'),
-                            function (btn) {
-                                btn.addEventListener('click', function () {
-                                    merittBranch = btn.getAttribute('data-branch') || null;
-                                    renderMerittPanel(panel);
-                                    syncCurrentPersonModalUrl();
-                                });
-                            });
+                        wireBranchToggle(panel, function () { renderMerittPanel(panel); });
+                    });
+                }
+                function renderSkammekrokenPanel(panel) {
+                    panel.innerHTML = '<p class="ranking-status-msg">Laster utfall…</p>';
+                    ensureStatusEntries().then(function (entries) {
+                        if (mySeq !== personOpenSeq) { return; }
+                        if (!entries.length) {
+                            panel.innerHTML = '<p class="ranking-status-msg ranking-error">Kunne ikke laste utfall.</p>';
+                            return;
+                        }
+                        var statuses = StandplassPersonModal.collectStatusEntries(entries, personId);
+                        panel.innerHTML = StandplassPersonModal.renderSkammekrokenBody(statuses, {
+                            compLinks: !!cfg.onOpenResultfile,
+                            branch: merittBranch
+                        });
+                        wireBranchToggle(panel, function () { renderSkammekrokenPanel(panel); });
                     });
                 }
                 function switchTab(tab) {
@@ -438,12 +510,12 @@ var StandplassPersonModalController = (function () {
                             b.setAttribute('aria-pressed', String(active));
                         });
                     id('-person-tab-resultater').hidden = tab !== 'resultater';
-                    var panel = id('-person-tab-meritter');
-                    panel.hidden = tab !== 'meritter';
-                    if (tab === 'meritter' && !meritterShown) {
-                        meritterShown = true;
-                        renderMerittPanel(panel);
-                    }
+                    var merittPanel = id('-person-tab-meritter');
+                    merittPanel.hidden = tab !== 'meritter';
+                    var skamPanel = id('-person-tab-skammekroken');
+                    skamPanel.hidden = tab !== 'skammekroken';
+                    if (tab === 'meritter') { renderMerittPanel(merittPanel); }
+                    if (tab === 'skammekroken') { renderSkammekrokenPanel(skamPanel); }
                     syncCurrentPersonModalUrl();
                 }
                 Array.prototype.forEach.call(
@@ -605,6 +677,28 @@ var StandplassPersonModalController = (function () {
                 wirePersonModalFilters();
                 var switchTab = wirePersonTabs();
                 if (personTab === 'meritter') { switchTab('meritter'); }
+                if (personTab === 'skammekroken') { switchTab('skammekroken'); }
+                // Ruling 4 (skammekroken design): Meritter and Skammekroken
+                // grey out and go inert when this person has nothing for
+                // them. Emptiness is only known once the indexes load, so
+                // the grey-out lands a beat after open; deep links still
+                // switch programmatically (inert blocks user events only).
+                ensureMestereEntries().then(function (entries) {
+                    if (mySeq !== personOpenSeq) { return; }
+                    var merits = entries.length
+                        ? StandplassMestereData.meritterForPerson(entries, personId) : [];
+                    setTabAvailable(
+                        modalEl.querySelector('.person-modal-tab-btn[data-person-tab="meritter"]'),
+                        merits.length > 0);
+                });
+                ensureStatusEntries().then(function (entries) {
+                    if (mySeq !== personOpenSeq) { return; }
+                    var statuses = entries.length
+                        ? StandplassPersonModal.collectStatusEntries(entries, personId) : [];
+                    setTabAvailable(
+                        modalEl.querySelector('.person-modal-tab-btn[data-person-tab="skammekroken"]'),
+                        statuses.length > 0);
+                });
                 refresh();
                 if (initialEntry) { activateInitialEntry(initialEntry); }
             }, function () { showModal('Feil', '<p>Kunne ikke laste resultater.</p>'); });
@@ -621,6 +715,20 @@ var StandplassPersonModalController = (function () {
             var btn = e.target.closest('.person-meritt-comp');
             if (!btn || !cfg.onOpenComp) { return; }
             cfg.onOpenComp(btn.getAttribute('data-comp-id'), btn.getAttribute('data-comp-title'));
+        });
+        // Skammekroken-tab comp links (delegated once on the persistent
+        // modal element, same guard pattern): the host's resultfile
+        // modal opens with everything it needs — the resultFileUrl
+        // feeds its PDF fallback, and data-comp-branch lets a
+        // cross-branch row resolve its detaljer base.
+        modalEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('.person-utfall-comp');
+            if (!btn || !cfg.onOpenResultfile) { return; }
+            cfg.onOpenResultfile(btn.getAttribute('data-comp-id'),
+                btn.getAttribute('data-comp-year'),
+                btn.getAttribute('data-comp-title'),
+                btn.getAttribute('data-comp-branch'),
+                btn.getAttribute('data-comp-file'));
         });
         modalEl.addEventListener('click', function (e) {
             var btn = e.target.closest('.person-chart-toggle');
